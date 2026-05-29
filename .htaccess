@@ -9,9 +9,7 @@ RewriteCond %{HTTPS} off
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 
 # Let Let's Encrypt ACME challenges pass through untouched
-RewriteCond %{REQUEST_URI} ^/.well-known/ [L]
-
-# Serve real files and directories directly (CSS, JS, images, uploads)
+RewriteCond %{REQUEST_URI} ^/.well-known/ [OR]
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
@@ -25,12 +23,4 @@ RewriteRule ^ index.php [L]
     Header always set X-Frame-Options "SAMEORIGIN"
     Header always set X-XSS-Protection "1; mode=block"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
-</IfModule>
-
-# PHP settings for this site
-<IfModule mod_php.c>
-    php_flag display_errors Off
-    php_flag log_errors On
-    php_value upload_max_filesize 10M
-    php_value post_max_size 12M
 </IfModule>
