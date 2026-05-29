@@ -1,0 +1,683 @@
+/**
+ * admin.css — Perla's Flowers admin dashboard stylesheet.
+ *
+ * Completely separate layout from the public site. Admin pages load
+ * <body class="admin-body"> and render inside .admin-layout.
+ *
+ * CSS custom properties (--color-*) are still injected by the PHP layout
+ * from .env values — never hardcode colors here.
+ *
+ * Fonts loaded by admin layout <head>:
+ *   Cormorant Garamond  — page titles
+ *   Montserrat          — nav labels, table headers, badges
+ *   Lato                — body text
+ */
+
+/* ============================================================
+   RESET (shared with public site where admin has its own <head>)
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* ============================================================
+   BASE / BODY
+   ============================================================ */
+
+/**
+ * Admin body — neutral light grey background differentiates the
+ * admin from the dark-luxury public site at a glance.
+ */
+body.admin-body {
+  font-family: 'Lato', sans-serif;
+  background-color: #f4f6f9;
+  color: #333;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+
+/**
+ * Two-column admin layout: fixed sidebar + scrollable main content area.
+ */
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+
+/**
+ * Fixed sidebar — dark navy gives authority while staying distinct
+ * from the public site's near-black (#0D0D0D) background.
+ */
+.admin-sidebar {
+  width: 260px;
+  background-color: #1a1a2e;
+  color: #eee;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding-bottom: 2rem;
+  z-index: 200;
+  transition: transform 0.25s ease;
+}
+
+.admin-sidebar-logo {
+  padding: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-sidebar-logo img {
+  height: 40px;
+  width: auto;
+}
+
+/* ============================================================
+   SIDEBAR NAVIGATION
+   ============================================================ */
+
+.admin-nav {
+  padding: 1rem 0;
+}
+
+/**
+ * Section label — separates nav groups (e.g. "Content", "Settings").
+ */
+.admin-nav-section {
+  padding: 0.5rem 1.5rem;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+  margin-top: 1rem;
+}
+
+.admin-nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  border-left: 3px solid transparent;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-nav a:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  border-left-color: var(--color-primary);
+}
+
+/**
+ * Active nav link — primary colour accent bar and tinted background
+ * make the current page obvious without heavy decoration.
+ */
+.admin-nav a.active {
+  background-color: rgba(181, 90, 160, 0.15);
+  color: #fff;
+  border-left-color: var(--color-accent);
+}
+
+.admin-nav a svg,
+.admin-nav a .nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.admin-nav a:hover svg,
+.admin-nav a.active svg,
+.admin-nav a:hover .nav-icon,
+.admin-nav a.active .nav-icon {
+  opacity: 1;
+}
+
+/* Sidebar overlay backdrop (mobile) */
+.admin-sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 199;
+}
+
+/* ============================================================
+   MAIN CONTENT AREA
+   ============================================================ */
+
+/**
+ * Left margin matches sidebar width so content never sits under it.
+ */
+.admin-main {
+  margin-left: 260px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ============================================================
+   TOP BAR
+   ============================================================ */
+
+/**
+ * Sticky top bar shows the current page title and user actions.
+ * White background clearly separates it from the grey content area.
+ */
+.admin-topbar {
+  background-color: #fff;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #e8e8e8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.admin-topbar-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.admin-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* Hamburger for mobile sidebar toggle */
+.admin-menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #555;
+}
+
+.admin-menu-toggle svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ============================================================
+   CONTENT AREA
+   ============================================================ */
+
+.admin-content {
+  padding: 2rem;
+  flex: 1;
+}
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+
+/**
+ * Admin card — white panel with subtle shadow; the primary container
+ * for all admin content blocks (tables, forms, charts).
+ */
+.admin-card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.admin-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.admin-card-title {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #666;
+  font-weight: 600;
+}
+
+/* ============================================================
+   STAT CARDS
+   ============================================================ */
+
+/**
+ * Dashboard KPI grid — auto-fills based on available width so the
+ * grid adapts to different screen sizes without breakpoints.
+ *
+ * @example
+ *   <div class="stat-grid">
+ *     <div class="stat-card">
+ *       <div class="stat-value" data-target="42">0</div>
+ *       <div class="stat-label">Active Quotes</div>
+ *     </div>
+ *   </div>
+ */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border-left: 4px solid var(--color-primary);
+}
+
+.stat-card.accent {
+  border-left-color: var(--color-accent);
+}
+
+.stat-value {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 2.5rem;
+  color: var(--color-primary);
+  line-height: 1;
+  font-weight: 600;
+}
+
+.stat-label {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #999;
+  margin-top: 0.5rem;
+}
+
+/* ============================================================
+   ADMIN TABLES
+   ============================================================ */
+
+/**
+ * Full-width data table for lists (orders, quotes, campaigns, etc.).
+ * Hover row highlight aids row tracking across wide columns.
+ */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.admin-table th {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #666;
+  padding: 0.75rem;
+  border-bottom: 2px solid #f0f0f0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.admin-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #f9f9f9;
+  color: #444;
+  vertical-align: middle;
+}
+
+.admin-table tr:hover td {
+  background-color: #fafafa;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Scrollable table wrapper for narrow viewports */
+.admin-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ============================================================
+   STATUS BADGES
+   ============================================================ */
+
+/**
+ * Inline status pill — colour-coded by workflow stage so staff can
+ * scan a list and assess status at a glance without reading each cell.
+ */
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 100px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-draft           { background-color: #f0f0f0; color: #666; }
+.badge-active          { background-color: #e6f4ea; color: #2e7d32; }
+.badge-sent            { background-color: #e3f2fd; color: #1565c0; }
+.badge-accepted        { background-color: #f3e5f5; color: #7b1fa2; }
+.badge-deposit_confirmed { background-color: #fff3e0; color: #e65100; }
+.badge-completed       { background-color: #e8f5e9; color: #1b5e20; }
+.badge-cancelled       { background-color: #ffebee; color: #b71c1c; }
+.badge-pending         { background-color: #fff8e1; color: #f57f17; }
+
+/* ============================================================
+   ADMIN FORMS
+   ============================================================ */
+
+/**
+ * Admin form fields — lighter than the public site's rose-tinted
+ * focus ring but same structural pattern.
+ */
+.admin-form-group {
+  margin-bottom: 1.25rem;
+}
+
+.admin-form-group label {
+  display: block;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+}
+
+.admin-form-group input[type="text"],
+.admin-form-group input[type="email"],
+.admin-form-group input[type="tel"],
+.admin-form-group input[type="date"],
+.admin-form-group input[type="number"],
+.admin-form-group input[type="password"],
+.admin-form-group input[type="url"],
+.admin-form-group textarea,
+.admin-form-group select {
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  border: 1.5px solid #dde1e7;
+  border-radius: 4px;
+  font-family: 'Lato', sans-serif;
+  font-size: 0.95rem;
+  color: #333;
+  background-color: #fff;
+  transition: border-color 0.2s ease;
+  appearance: none;
+}
+
+.admin-form-group input:focus,
+.admin-form-group textarea:focus,
+.admin-form-group select:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.admin-form-group textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.admin-form-group select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23999' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  padding-right: 2.25rem;
+}
+
+.admin-form-error {
+  color: #e53e3e;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+/* Character counter (SMS compose) */
+.char-counter {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.7rem;
+  text-align: right;
+  color: #999;
+  margin-top: 0.25rem;
+  letter-spacing: 0.04em;
+}
+
+.char-counter.over-limit {
+  color: #e53e3e;
+  font-weight: 700;
+}
+
+/* Admin buttons (reuse public btn pattern with tighter sizing) */
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.25rem;
+  border-radius: 4px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.admin-btn-primary {
+  background-color: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.admin-btn-primary:hover {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.admin-btn-danger {
+  background-color: #fff;
+  color: #e53e3e;
+  border-color: #e53e3e;
+}
+
+.admin-btn-danger:hover {
+  background-color: #e53e3e;
+  color: #fff;
+}
+
+.admin-btn-ghost {
+  background-color: transparent;
+  color: #666;
+  border-color: #dde1e7;
+}
+
+.admin-btn-ghost:hover {
+  background-color: #f4f6f9;
+  color: #333;
+}
+
+/* ============================================================
+   IMAGE UPLOAD PREVIEW
+   ============================================================ */
+
+/**
+ * Preview thumbnail that appears immediately after a file is chosen,
+ * before the form is submitted.
+ */
+.img-preview-wrap {
+  margin-top: 0.75rem;
+}
+
+.img-preview {
+  width: 120px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1.5px solid #dde1e7;
+  display: none;
+}
+
+.img-preview.is-visible {
+  display: block;
+}
+
+/* ============================================================
+   A/B CAMPAIGN COMPARE
+   ============================================================ */
+
+/**
+ * Side-by-side variant comparison block.
+ * The JS admin.js adds .is-winner to highlight the winning variant.
+ */
+.ab-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.ab-variant {
+  border: 2px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 1.25rem;
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.ab-variant.is-winner {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 4px rgba(212, 64, 154, 0.12);
+}
+
+.ab-variant-label {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #999;
+  margin-bottom: 0.5rem;
+}
+
+.ab-variant.is-winner .ab-variant-label {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.ab-variant-stat {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 2rem;
+  color: #333;
+  line-height: 1;
+}
+
+.ab-variant.is-winner .ab-variant-stat {
+  color: var(--color-accent);
+}
+
+/* ============================================================
+   RESPONSIVE — MOBILE
+   ============================================================ */
+
+/**
+ * On narrow viewports the sidebar hides off-screen.
+ * .is-open (toggled by JS) slides it in as an overlay drawer.
+ */
+@media (max-width: 768px) {
+  .admin-sidebar {
+    transform: translateX(-100%);
+  }
+
+  .admin-sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .admin-sidebar-overlay.is-visible {
+    display: block;
+  }
+
+  .admin-main {
+    margin-left: 0;
+  }
+
+  .admin-topbar {
+    padding: 0.875rem 1rem;
+  }
+
+  .admin-menu-toggle {
+    display: block;
+  }
+
+  .admin-content {
+    padding: 1rem;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ab-compare {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-card {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}

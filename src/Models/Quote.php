@@ -1,0 +1,341 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Models;
+
+use App\Core\Database;
+
+/**
+ * Represents a custom-quote record in the `quotes` table.
+ *
+ * Quotes move through a defined status lifecycle: draft → sent → accepted →
+ * deposit_confirmed → completed, with a `cancelled` escape hatch from most
+ * states. Each status transition writes a matching timestamp column so the
+ * admin can audit the full history.
+ *
+ * All reads use {@see Database::ro()}; all writes use {@see Database::rw()}.
+ *
+ * @see \App\Models\Customer::refreshLifetimeSpend()
+ */
+final class Quote
+{
+    /**
+     * Ordered list of valid quote statuses.
+     *
+     * Only the transitions defined in {@see transition()} are allowed;
+     * skipping steps raises a RuntimeException.
+     */
+    public const STATUSES = [
+        'draft',
+        'sent',
+        'accepted',
+        'deposit_confirmed',
+        'completed',
+        'cancelled',
+    ];
+
+    /**
+     * Allowed forward transitions: status → next allowed status.
+     *
+     * 'cancelled' is handled separately (any non-completed quote may cancel).
+     *
+     * @var array<string, string>
+     */
+    private const TRANSITIONS = [
+        'draft'             => 'sent',
+        'sent'              => 'accepted',
+        'accepted'          => 'deposit_confirmed',
+        'deposit_confirmed' => 'completed',
+    ];
+
+    /**
+     * Status → timestamp column written on transition.
+     *
+     * Columns not listed here get no automatic timestamp update.
+     *
+     * @var array<string, string>
+     */
+    private const STATUS_TIMESTAMPS = [
+        'sent'              => 'sent_at',
+        'accepted'          => 'accepted_at',
+        'deposit_confirmed' => 'deposit_confirmed_at',
+    ];
+
+    /**
+     * Creates a new quote and returns its auto-increment ID.
+     *
+     * Generates a 64-character hex token for the public share URL. Computes
+     * `subtotal` from the item list and derives `deposit_amount` from
+     * `deposit_pct`. Stores items as a JSON blob. Sets `valid_until` to
+     * today + `valid_days` days.
+     *
+     * @param array<string, mixed> $data Recognised keys:
+     *        - customer_id (int|null): linked customer; may be null for drafts.
+     *        - event_date (string|null): ISO date of the event, e.g. '2026-09-01'.
+     *        - items (array): each element has keys description, qty, unit_price.
+     *        - deposit_pct (int): percentage of subtotal required as deposit; default 50.
+     *        - notes (string|null): freeform note shown on the quote.
+     *        - valid_days (int): days until the quote expires; default 14.
+     *
+     * @return int The newly created quote ID.
+     *
+     * @example
+     *   $id = Quote::create([
+     *       'customer_id' => 7,
+     *       'event_date'  => '2026-09-01',
+     *       'items'       => [
+     *           ['description' => 'Bouquet de rosas', 'qty' => 2, 'unit_price' => 75.00],
+     *       ],
+     *       'deposit_pct' => 50,
+     *       'notes'       => 'Pink and white only.',
+     *       'valid_days'  => 14,
+     *   ]);
+     */
+    public static function create(array $data): int
+    {
+        $token      = bin2hex(random_bytes(32));
+        $depositPct = (int) ($data['deposit_pct'] ?? 50);
+        $validDays  = (int) ($data['valid_days']  ?? 14);
+        $items      = $data['items'] ?? [];
+
+        $subtotal = array_reduce(
+            $items,
+            static fn (float $carry, array $item): float =>
+                $carry + ((float) $item['unit_price'] * (int) $item['qty']),
+            0.0
+        );
+
+        $depositAmount = $subtotal * ($depositPct / 100);
+        $validUntil    = date('Y-m-d', strtotime("+{$validDays} days"));
+
+        $stmt = Database::rw()->prepare(
+            'INSERT INTO quotes
+                (token, customer_id, event_date, items_json, subtotal,
+                 deposit_pct, deposit_amount, notes, valid_until, status)
+             VALUES
+                (:token, :customer_id, :event_date, :items_json, :subtotal,
+                 :deposit_pct, :deposit_amount, :notes, :valid_until, :status)'
+        );
+
+        $stmt->execute([
+            ':token'          => $token,
+            ':customer_id'    => $data['customer_id'] ?? null,
+            ':event_date'     => $data['event_date']  ?? null,
+            ':items_json'     => json_encode($items, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            ':subtotal'       => $subtotal,
+            ':deposit_pct'    => $depositPct,
+            ':deposit_amount' => $depositAmount,
+            ':notes'          => $data['notes'] ?? null,
+            ':valid_until'    => $validUntil,
+            ':status'         => 'draft',
+        ]);
+
+        return (int) Database::rw()->lastInsertId();
+    }
+
+    /**
+     * Finds a quote by its public share token.
+     *
+     * Joins to the customers table so the caller has access to the linked
+     * customer's name, email, and phone without a second query. Returns null
+     * when no matching token exists or when the quote is cancelled.
+     *
+     * @param string $token The 64-character hex token from the share URL.
+     *
+     * @return array<string, mixed>|null The quote row (with customer columns),
+     *         or null when not found or cancelled.
+     *
+     * @example
+     *   $quote = Quote::findByToken($params['token']);
+     *   if ($quote === null) { return Response::notFound(); }
+     */
+    public static function findByToken(string $token): ?array
+    {
+        $stmt = Database::ro()->prepare(
+            'SELECT q.*,
+                    c.name  AS customer_name,
+                    c.email AS customer_email,
+                    c.phone AS customer_phone
+             FROM quotes q
+             LEFT JOIN customers c ON c.id = q.customer_id
+             WHERE q.token = ?
+               AND q.status != \'cancelled\'
+             LIMIT 1'
+        );
+        $stmt->execute([$token]);
+        $row = $stmt->fetch();
+
+        return $row !== false ? $row : null;
+    }
+
+    /**
+     * Returns all quotes with the linked customer's name, newest first.
+     *
+     * Quotes without a linked customer are still included (customer_name is null).
+     *
+     * @return array<int, array<string, mixed>> All quote rows.
+     *
+     * @example
+     *   $quotes = Quote::all();
+     *   foreach ($quotes as $q) { echo $q['customer_name']; }
+     */
+    public static function all(): array
+    {
+        $stmt = Database::ro()->query(
+            'SELECT q.*,
+                    c.name AS customer_name
+             FROM quotes q
+             LEFT JOIN customers c ON c.id = q.customer_id
+             ORDER BY q.created_at DESC'
+        );
+
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Returns a single quote by primary key with the linked customer's name.
+     *
+     * @param int $id The quote ID.
+     *
+     * @return array<string, mixed>|null The quote row (with customer columns),
+     *         or null when not found.
+     *
+     * @example
+     *   $quote = Quote::find(12);
+     */
+    public static function find(int $id): ?array
+    {
+        $stmt = Database::ro()->prepare(
+            'SELECT q.*,
+                    c.name  AS customer_name,
+                    c.email AS customer_email,
+                    c.phone AS customer_phone
+             FROM quotes q
+             LEFT JOIN customers c ON c.id = q.customer_id
+             WHERE q.id = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row !== false ? $row : null;
+    }
+
+    /**
+     * Transitions a quote to a new status and records the event timestamp.
+     *
+     * Allowed forward transitions:
+     *   draft → sent
+     *   sent → accepted
+     *   accepted → deposit_confirmed
+     *   deposit_confirmed → completed
+     *
+     * Any non-completed quote may also transition to `cancelled`.
+     *
+     * After a successful transition to `deposit_confirmed` or `completed`,
+     * the linked customer's lifetime spend is recalculated via
+     * {@see Customer::refreshLifetimeSpend()}.
+     *
+     * @param int    $id        The quote ID.
+     * @param string $newStatus One of {@see self::STATUSES}.
+     *
+     * @return void
+     *
+     * @throws \RuntimeException When the transition is not allowed.
+     *
+     * @example
+     *   Quote::transition(12, 'sent');
+     *   Quote::transition(12, 'accepted');
+     */
+    public static function transition(int $id, string $newStatus): void
+    {
+        $quote = self::find($id);
+        if ($quote === null) {
+            throw new \RuntimeException("Quote #{$id} not found.");
+        }
+
+        $current = (string) $quote['status'];
+
+        self::assertTransitionAllowed($current, $newStatus);
+
+        // Build the SET clause — always update status; add a timestamp if mapped.
+        $sets   = ['status = ?'];
+        $params = [$newStatus];
+
+        if (isset(self::STATUS_TIMESTAMPS[$newStatus])) {
+            $col    = self::STATUS_TIMESTAMPS[$newStatus];
+            $sets[] = "{$col} = NOW()";
+        }
+
+        $params[] = $id;
+        $sql = 'UPDATE quotes SET ' . implode(', ', $sets) . ' WHERE id = ?';
+        Database::rw()->prepare($sql)->execute($params);
+
+        // Refresh customer lifetime spend after money-relevant transitions.
+        if (
+            in_array($newStatus, ['deposit_confirmed', 'completed'], true)
+            && !empty($quote['customer_id'])
+        ) {
+            Customer::refreshLifetimeSpend((int) $quote['customer_id']);
+        }
+    }
+
+    /**
+     * Updates the `sent_at` timestamp and sets status to `sent`.
+     *
+     * Convenience wrapper used when the admin sends a quote link to a customer.
+     * Equivalent to calling {@see transition()} with `'sent'`.
+     *
+     * @param int $id The quote ID.
+     *
+     * @return void
+     *
+     * @throws \RuntimeException When the transition from the current status is
+     *         not allowed (i.e., the quote is not in `draft` status).
+     *
+     * @example
+     *   Quote::markSent(12);
+     */
+    public static function markSent(int $id): void
+    {
+        self::transition($id, 'sent');
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Validates that moving from $current to $newStatus is permitted.
+     *
+     * Throws a RuntimeException with a human-readable message when the
+     * transition is illegal, so callers do not need to repeat this logic.
+     *
+     * @param string $current   The quote's present status.
+     * @param string $newStatus The desired target status.
+     *
+     * @return void
+     *
+     * @throws \RuntimeException On an illegal transition.
+     */
+    private static function assertTransitionAllowed(string $current, string $newStatus): void
+    {
+        // Cancellation from any status except completed is always valid.
+        if ($newStatus === 'cancelled') {
+            if ($current === 'completed') {
+                throw new \RuntimeException(
+                    "Cannot cancel a completed quote (current: {$current})."
+                );
+            }
+            return;
+        }
+
+        $allowed = self::TRANSITIONS[$current] ?? null;
+        if ($allowed !== $newStatus) {
+            throw new \RuntimeException(
+                "Invalid status transition: '{$current}' → '{$newStatus}'."
+            );
+        }
+    }
+}

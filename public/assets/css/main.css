@@ -1,0 +1,1227 @@
+/**
+ * main.css — Perla's Flowers public site stylesheet.
+ *
+ * Color custom properties are injected into <head> by the PHP layout template
+ * from .env values. Never hardcode color values here — always use var(--color-*).
+ *
+ * Fonts loaded by layout <head>:
+ *   Cormorant Garamond  — headings
+ *   Montserrat          — nav, labels, caps text
+ *   Lato                — body text
+ */
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+
+/**
+ * Universal box-sizing reset.
+ * Ensures padding and border are included in element dimensions,
+ * preventing overflow surprises on every layout component.
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/**
+ * Document root.
+ * Sets the design system's light background and readable body type.
+ */
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: 'Lato', sans-serif;
+  color: var(--color-text-dark);
+  background-color: var(--color-bg-light);
+  line-height: 1.6;
+  padding-top: 72px; /* offset for fixed nav */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/**
+ * Keyboard-focus ring using the brand primary colour.
+ * Preserves full accessibility while matching the design.
+ */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+
+/**
+ * Heading scale — Cormorant Garamond throughout.
+ * Fluid sizing via clamp() avoids hard breakpoints for headings.
+ */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  color: inherit;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+h1 { font-size: clamp(2.5rem, 5vw, 4rem); }
+h2 { font-size: clamp(1.8rem, 3vw, 2.8rem); }
+h3 { font-size: clamp(1.4rem, 2.5vw, 2rem); }
+h4 { font-size: clamp(1.15rem, 2vw, 1.5rem); }
+h5 { font-size: 1.125rem; }
+h6 { font-size: 1rem; }
+
+/**
+ * Eyebrow / label — small-caps Montserrat label placed above headings
+ * or over product categories to create visual hierarchy.
+ */
+.label,
+.eyebrow {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  display: block;
+}
+
+p {
+  margin-bottom: 1rem;
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--color-accent);
+}
+
+strong,
+b {
+  font-weight: 700;
+}
+
+em,
+i {
+  font-style: italic;
+}
+
+/* ============================================================
+   LAYOUT UTILITIES
+   ============================================================ */
+
+/**
+ * .container — max-width centred wrapper used on every section.
+ * 1.5rem side padding keeps content from touching viewport edges on mobile.
+ */
+.container {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+/**
+ * .section — vertical breathing room between page sections.
+ */
+.section {
+  padding: 5rem 0;
+}
+
+.section--dark {
+  background-color: var(--color-bg-dark);
+  color: var(--color-text-light);
+}
+
+.section--light {
+  background-color: var(--color-bg-light);
+  color: var(--color-text-dark);
+}
+
+/* Responsive CSS grid helpers */
+.grid-2,
+.grid-3,
+.grid-4 {
+  display: grid;
+  gap: 2rem;
+}
+
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* Text alignment */
+.text-center { text-align: center; }
+.text-left   { text-align: left; }
+.text-right  { text-align: right; }
+
+/* Section heading block — centred above grid content */
+.section-heading {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.section-heading .eyebrow {
+  margin-bottom: 0.75rem;
+}
+
+.section-heading h2 {
+  margin-bottom: 1rem;
+}
+
+.section-heading p {
+  color: var(--color-muted);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 0;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+
+/**
+ * Base button — flex container so icons and text align correctly.
+ * All variants extend this class rather than re-declaring shared properties.
+ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem;
+  border-radius: 4px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, filter 0.2s ease;
+  border: 2px solid transparent;
+  text-decoration: none;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+/* Primary — mauve fill */
+.btn-primary {
+  background-color: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+/* Accent — bright rose fill (CTAs) */
+.btn-accent {
+  background-color: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+.btn-accent:hover {
+  filter: brightness(1.1);
+  color: #fff;
+}
+
+/* Outline — transparent with primary border */
+.btn-outline {
+  background-color: transparent;
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.btn-outline:hover {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+/* Outline Light — white variant for use on dark backgrounds */
+.btn-outline-light {
+  background-color: transparent;
+  color: #fff;
+  border-color: #fff;
+}
+
+.btn-outline-light:hover {
+  background-color: #fff;
+  color: var(--color-primary);
+}
+
+/* Size modifiers */
+.btn-lg {
+  padding: 1rem 2.5rem;
+  font-size: 1rem;
+}
+
+.btn-sm {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.75rem;
+}
+
+/* Full-width modifier */
+.btn-block {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
+
+/**
+ * Fixed top navigation bar.
+ * z-index 1000 keeps it above hero images and modals (which use lower z values).
+ */
+nav.site-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background-color: var(--color-bg-dark);
+  z-index: 1000;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  transition: background-color 0.3s ease;
+}
+
+/* Slightly translucent when user has scrolled — JS adds .scrolled */
+nav.site-nav.scrolled {
+  background-color: rgba(13, 13, 13, 0.92);
+  backdrop-filter: blur(6px);
+}
+
+.nav-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.nav-logo img {
+  height: 48px;
+  width: auto;
+}
+
+.nav-links {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+.nav-links a {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-light);
+  opacity: 0.85;
+  transition: opacity 0.2s ease, color 0.2s ease;
+  text-decoration: none;
+}
+
+.nav-links a:hover,
+.nav-links a[aria-current="page"] {
+  opacity: 1;
+  color: var(--color-accent);
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/**
+ * Language toggle — switches locale; styled as a subtle text control
+ * rather than a button to keep the nav uncluttered.
+ */
+.lang-toggle {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 0.125rem 0;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.lang-toggle:hover {
+  color: var(--color-text-light);
+  border-bottom-color: var(--color-accent);
+}
+
+/* Hamburger toggle — hidden on desktop */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  width: 36px;
+  height: 36px;
+}
+
+.nav-toggle span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background-color: var(--color-text-light);
+  border-radius: 2px;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+/* Animate hamburger into X when open */
+.nav-toggle[aria-expanded="true"] span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.nav-toggle[aria-expanded="true"] span:nth-child(2) {
+  opacity: 0;
+}
+
+.nav-toggle[aria-expanded="true"] span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+/**
+ * Mobile nav drawer — hidden by default, slides down when .is-open is added by JS.
+ */
+.nav-mobile {
+  display: none;
+  position: fixed;
+  top: 72px;
+  left: 0;
+  width: 100%;
+  background-color: var(--color-bg-dark);
+  z-index: 999;
+  padding: 1rem 0 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  transform: translateY(-10px);
+  opacity: 0;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.nav-mobile.is-open {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.nav-mobile-links {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-mobile-links a {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-light);
+  opacity: 0.85;
+  padding: 0.875rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: opacity 0.2s ease, color 0.2s ease;
+  text-decoration: none;
+}
+
+.nav-mobile-links a:hover {
+  opacity: 1;
+  color: var(--color-accent);
+}
+
+/* ============================================================
+   HERO
+   ============================================================ */
+
+/**
+ * Full-viewport hero section.
+ * The .hero-bg overlay dims the background photo so headings
+ * remain legible over any image.
+ */
+.hero {
+  min-height: calc(100vh - 72px);
+  position: relative;
+  display: flex;
+  align-items: center;
+  background-color: var(--color-bg-dark);
+  overflow: hidden;
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.35;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  color: var(--color-text-light);
+  padding: 4rem 1.5rem;
+  width: 100%;
+}
+
+.hero h1 {
+  color: var(--color-text-light);
+  margin-bottom: 1.5rem;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+}
+
+.hero-subtitle {
+  font-size: 1.25rem;
+  color: rgba(255, 255, 255, 0.8);
+  max-width: 600px;
+  margin: 0 auto 2.5rem;
+  line-height: 1.7;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+}
+
+/* ============================================================
+   PRODUCT CARDS
+   ============================================================ */
+
+/**
+ * Auto-filling product grid — cards grow to fill available space,
+ * never narrower than 280px, so the grid adapts without breakpoints.
+ */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 2rem;
+}
+
+/**
+ * Individual product card.
+ * Hover lift + shadow pulse uses the brand primary colour at low opacity
+ * to tie the interaction to the design system.
+ */
+.product-card {
+  background-color: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.25s ease;
+  border: 1px solid var(--color-border);
+}
+
+.product-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(181, 90, 160, 0.15);
+}
+
+/* Invisible card state used by JS category filter */
+.product-card.is-hidden {
+  display: none;
+}
+
+.product-card-img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.product-card-body {
+  padding: 1.25rem;
+}
+
+.product-card-category {
+  /* inherits .label / .eyebrow style */
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.product-card-name {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.4rem;
+  color: var(--color-text-dark);
+  margin-bottom: 0.5rem;
+  line-height: 1.25;
+}
+
+.product-card-price {
+  color: var(--color-primary);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.product-card-cta {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ============================================================
+   CATEGORY FILTER BAR
+   ============================================================ */
+
+/**
+ * Pill-style filter buttons above product grids.
+ * .active state filled with primary colour; inactive pills use
+ * the border colour to remain visible without competing with products.
+ */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 3rem;
+  justify-content: center;
+}
+
+.filter-btn {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.5rem 1.25rem;
+  border-radius: 100px;
+  border: 1.5px solid var(--color-border);
+  background-color: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;
+}
+
+.filter-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.filter-btn.active {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+/* ============================================================
+   FORMS
+   ============================================================ */
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+/**
+ * Form labels — small-caps Montserrat to visually separate them
+ * from the input values below.
+ */
+label {
+  display: block;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 0.5rem;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="tel"],
+input[type="date"],
+input[type="number"],
+input[type="password"],
+input[type="search"],
+input[type="url"],
+textarea,
+select {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: 4px;
+  font-family: 'Lato', sans-serif;
+  font-size: 1rem;
+  color: var(--color-text-dark);
+  background-color: #fff;
+  transition: border-color 0.2s ease;
+  appearance: none;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="tel"]:focus,
+input[type="date"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus,
+input[type="search"]:focus,
+input[type="url"]:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23999' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  padding-right: 2.5rem;
+}
+
+.form-error {
+  color: #e53e3e;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.form-success {
+  color: #38a169;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.875rem;
+  padding: 1rem;
+  background-color: #f0fff4;
+  border-radius: 4px;
+  border-left: 4px solid #38a169;
+  margin-top: 0.75rem;
+}
+
+/**
+ * Checkbox row — flex layout prevents the label from wrapping under
+ * the checkbox when the text is long.
+ */
+.form-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.form-check input[type="checkbox"] {
+  width: auto;
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+}
+
+.form-check label {
+  font-size: 0.875rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text-dark);
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+/* ============================================================
+   PROMOTION STRIP
+   ============================================================ */
+
+/**
+ * Full-width dark gradient band — typically used for seasonal offers
+ * or newsletter sign-ups that need to stand out from adjacent sections.
+ */
+.promo-strip {
+  background: linear-gradient(135deg, var(--color-bg-dark), #1a0a14);
+  padding: 4rem 0;
+  text-align: center;
+  color: var(--color-text-light);
+}
+
+.promo-strip h2 {
+  margin-bottom: 0.75rem;
+}
+
+.promo-strip p {
+  color: rgba(255, 255, 255, 0.7);
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 2rem;
+}
+
+/* ============================================================
+   QUOTE ACCEPTANCE PAGE
+   ============================================================ */
+
+/**
+ * Quote card — used on the customer-facing quote review and acceptance page.
+ * Centred, card-style layout with a dark header matching the nav.
+ */
+.quote-card {
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  background-color: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+.quote-header {
+  background-color: var(--color-bg-dark);
+  padding: 2.5rem;
+  text-align: center;
+  color: var(--color-text-light);
+}
+
+.quote-header h1,
+.quote-header h2 {
+  color: var(--color-text-light);
+  margin-bottom: 0.5rem;
+}
+
+.quote-body {
+  padding: 2.5rem;
+}
+
+.quote-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+}
+
+.quote-table th {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-muted);
+  padding: 0.75rem;
+  border-bottom: 2px solid var(--color-border);
+  text-align: left;
+}
+
+.quote-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.95rem;
+}
+
+.quote-total-row td {
+  font-weight: 700;
+  color: var(--color-primary);
+  font-size: 1.1rem;
+  border-bottom: 2px solid var(--color-primary);
+}
+
+/**
+ * Deposit box — dark panel summarising the deposit amount and
+ * available payment methods.
+ */
+.quote-deposit-box {
+  background-color: var(--color-bg-dark);
+  color: var(--color-text-light);
+  border-radius: 8px;
+  padding: 2rem;
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.quote-deposit-box h3 {
+  color: var(--color-text-light);
+  margin-bottom: 0.5rem;
+}
+
+.payment-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.payment-option {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.payment-option .label {
+  color: var(--color-muted);
+  margin-bottom: 0;
+}
+
+.payment-option .value {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  margin-top: 0.5rem;
+  display: block;
+}
+
+/* ============================================================
+   WHATSAPP / CHAT FLOATING BUTTON
+   ============================================================ */
+
+/**
+ * Persistent floating WhatsApp button.
+ * z-index 999 keeps it above all content but below nav (1000).
+ */
+.whatsapp-btn {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #25D366;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+}
+
+.whatsapp-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(37, 211, 102, 0.5);
+  color: #fff;
+}
+
+.whatsapp-btn svg {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+
+/**
+ * Dark footer matches nav — creates a visual bookend to each page.
+ */
+footer.site-footer {
+  background-color: var(--color-bg-dark);
+  color: var(--color-text-light);
+  padding: 4rem 0 2rem;
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 3rem;
+  margin-bottom: 3rem;
+}
+
+.footer-logo img {
+  height: 60px;
+  width: auto;
+  margin-bottom: 1rem;
+}
+
+.footer-tagline {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.footer-heading {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 1rem;
+}
+
+.footer-links li {
+  margin-bottom: 0.5rem;
+}
+
+.footer-links a {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.footer-links a:hover {
+  color: var(--color-accent);
+}
+
+.footer-social {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.footer-social a {
+  color: rgba(255, 255, 255, 0.7);
+  transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+}
+
+.footer-social a:hover {
+  color: var(--color-accent);
+}
+
+.footer-social svg {
+  width: 20px;
+  height: 20px;
+}
+
+.footer-bottom {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 2rem;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+/* ============================================================
+   NOTIFICATION TOAST
+   ============================================================ */
+
+/**
+ * Auto-dismissing toast notification created by JS showToast().
+ * Sits above the WhatsApp button (z-index 1100).
+ */
+.toast-container {
+  position: fixed;
+  bottom: 5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  padding: 0.75rem 1.5rem;
+  border-radius: 100px;
+  pointer-events: auto;
+  animation: toast-in 0.25s ease forwards;
+  max-width: 360px;
+  text-align: center;
+}
+
+.toast-success {
+  background-color: #1a1a1a;
+  color: #fff;
+  border-left: 4px solid #38a169;
+  border-radius: 4px;
+}
+
+.toast-error {
+  background-color: #1a1a1a;
+  color: #fff;
+  border-left: 4px solid #e53e3e;
+  border-radius: 4px;
+}
+
+.toast-info {
+  background-color: #1a1a1a;
+  color: #fff;
+  border-left: 4px solid var(--color-primary);
+  border-radius: 4px;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(8px); }
+}
+
+.toast.is-leaving {
+  animation: toast-out 0.25s ease forwards;
+}
+
+/* ============================================================
+   UTILITY CLASSES
+   ============================================================ */
+
+/** Screen-reader-only — visually hidden but announced by assistive tech. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Margin top */
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mt-3 { margin-top: 2rem; }
+.mt-4 { margin-top: 3rem; }
+
+/* Margin bottom */
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mb-3 { margin-bottom: 2rem; }
+.mb-4 { margin-bottom: 3rem; }
+
+/* Display */
+.d-none  { display: none; }
+.d-flex  { display: flex; }
+.d-block { display: block; }
+
+/* Gap */
+.gap-1 { gap: 0.5rem; }
+.gap-2 { gap: 1rem; }
+.gap-3 { gap: 2rem; }
+
+/* Misc */
+.rounded { border-radius: 8px; }
+.shadow  { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08); }
+
+/* ============================================================
+   RESPONSIVE BREAKPOINTS
+   ============================================================ */
+
+/**
+ * Mobile-first overrides at 768px.
+ * Grids collapse to single column; nav switches to hamburger mode.
+ */
+@media (max-width: 768px) {
+  body {
+    padding-top: 72px;
+  }
+
+  /* Grid collapse */
+  .grid-2,
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Nav: show hamburger, hide desktop links */
+  .nav-toggle {
+    display: flex;
+  }
+
+  .nav-links {
+    display: none;
+  }
+
+  .nav-mobile {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Hero adjustments */
+  .hero {
+    min-height: calc(100svh - 72px);
+  }
+
+  .hero-subtitle {
+    font-size: 1.05rem;
+  }
+
+  /* Quote payment grid → single column */
+  .payment-options {
+    grid-template-columns: 1fr;
+  }
+
+  /* Section breathing room reduced on small screens */
+  .section {
+    padding: 3rem 0;
+  }
+
+  .quote-body,
+  .quote-header {
+    padding: 1.5rem;
+  }
+
+  /* Promo strip */
+  .promo-strip {
+    padding: 3rem 0;
+  }
+
+  /* Footer */
+  footer.site-footer {
+    padding: 3rem 0 1.5rem;
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+
+  /* Buttons full-width on smallest screens */
+  .hero-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

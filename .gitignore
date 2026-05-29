@@ -1,0 +1,35 @@
+# Secrets — NEVER commit
+.env
+
+# Composer dependencies (installed on server via `composer install`)
+/vendor/
+
+# User-uploaded content (managed on server, not in repo)
+/public/uploads/
+
+# Logs
+*.log
+/logs/
+
+# System & IDE junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# PHP error dumps
+*.php~
+/tmp/
+
+# Database dumps / backups (may contain data) — but NOT migrations
+*.sql.gz
+/backup*.sql
+/dump*.sql
+
+# Explicitly track the migrations directory
+!/migrations/*.sql
+
+# OS temp files
+desktop.ini

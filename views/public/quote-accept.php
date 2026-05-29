@@ -1,0 +1,357 @@
+<?php
+/**
+ * views/public/quote-accept.php — Public quote acceptance page.
+ *
+ * Rendered inside views/layouts/public.php. Presents the quote to the customer
+ * in a three-step Alpine.js flow: review → payment → confirmed.
+ *
+ * Variables injected by QuoteController::show():
+ *   array<string, mixed>                              $quote      Quote row (includes token, status,
+ *                                                                 subtotal, deposit_amount, event_date,
+ *                                                                 valid_until, notes, items_json,
+ *                                                                 customer_* columns).
+ *   array<int, array{description,qty,unit_price}>     $items      Decoded items from QuoteService::decodeItems().
+ *   string                                            $csrfToken  Session CSRF token.
+ *   bool                                              $expired    True when valid_until is in the past.
+ *   string                                            $lang       Active locale code ('en' or 'es').
+ *
+ * @see \App\Controllers\QuoteController::show()
+ * @see \App\Services\QuoteService::decodeItems()
+ */
+
+use App\Core\Config;
+?>
+
+<section class="section section--dark" style="padding: 3rem 0">
+  <div class="container">
+
+    <!-- Quote Card -->
+    <div class="quote-card" x-data="quoteApp()" x-cloak>
+
+      <!-- Quote Header (dark) -->
+      <div class="quote-header" style="text-align:center">
+        <img src="/public/assets/images/logo.jpg"
+             style="height:50px; margin: 0 auto 1rem; display:block"
+             alt="<?= htmlspecialchars(Config::get('BUSINESS_NAME', '')) ?>">
+        <span class="eyebrow label" style="color:rgba(255,255,255,0.4)"><?= htmlspecialchars(__t('quote.title')) ?></span>
+        <h2 style="color:white; margin: 0.5rem 0"><?= htmlspecialchars(Config::get('BUSINESS_NAME', '')) ?></h2>
+        <?php if (!empty($quote['event_date'])): ?>
+        <p style="color:rgba(255,255,255,0.6); margin: 0.25rem 0">
+          <?= htmlspecialchars(__t('quote.event_date')) ?>: <?= htmlspecialchars(date('F j, Y', (int) strtotime((string) $quote['event_date']))) ?>
+        </p>
+        <?php endif; ?>
+        <?php if (!empty($quote['valid_until'])): ?>
+        <p style="color:rgba(255,255,255,0.4); font-size:0.875rem; margin:0.25rem 0">
+          <?= htmlspecialchars(__t('quote.valid_until')) ?>: <?= htmlspecialchars(date('F j, Y', (int) strtotime((string) $quote['valid_until']))) ?>
+        </p>
+        <?php endif; ?>
+      </div><!-- /.quote-header -->
+
+      <?php if ($expired): ?>
+      <!-- Expired state -->
+      <div class="quote-body text-center" style="padding: 4rem 2rem">
+        <p style="color:var(--color-muted); font-size:1.1rem"><?= htmlspecialchars(__t('quote.expired')) ?></p>
+        <a href="/contact" class="btn btn-primary" style="margin-top:1.5rem">
+          <?= htmlspecialchars(__t('contact.title')) ?>
+        </a>
+      </div>
+
+      <?php else: ?>
+
+      <!-- ─── Step: Review ─────────────────────────────────────────────────── -->
+      <div class="quote-body" x-show="step === 'review'">
+
+        <table class="quote-table" style="width:100%">
+          <thead>
+            <tr>
+              <th style="text-align:left"><?= htmlspecialchars(__t('quote.items_heading')) ?></th>
+              <th style="text-align:center; width:60px"><?= htmlspecialchars(__t('quote.qty')) ?></th>
+              <th style="text-align:right; width:120px"><?= htmlspecialchars(__t('quote.unit_price')) ?></th>
+              <th style="text-align:right; width:120px"><?= htmlspecialchars(__t('quote.subtotal')) ?></th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($items as $item): ?>
+            <tr>
+              <td><?= htmlspecialchars((string) $item['description']) ?></td>
+              <td style="text-align:center"><?= (int) $item['qty'] ?></td>
+              <td style="text-align:right">$<?= number_format((float) $item['unit_price'], 2) ?></td>
+              <td style="text-align:right">$<?= number_format((float) $item['qty'] * (float) $item['unit_price'], 2) ?></td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+          <tfoot>
+            <tr class="quote-total-row">
+              <td colspan="3" style="text-align:right; padding-top:1rem; font-weight:600">
+                <?= htmlspecialchars(__t('quote.subtotal')) ?>
+              </td>
+              <td style="text-align:right; padding-top:1rem; color:var(--color-primary); font-weight:700; font-size:1.2rem">
+                $<?= number_format((float) $quote['subtotal'], 2) ?>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <?php if (!empty($quote['notes'])): ?>
+        <div style="margin-top:1.5rem; padding:1rem; background:var(--color-bg-light); border-radius:6px; border-left:3px solid var(--color-border)">
+          <p style="color:var(--color-muted); font-size:0.875rem; margin:0"><?= htmlspecialchars((string) $quote['notes']) ?></p>
+        </div>
+        <?php endif; ?>
+
+        <!-- Deposit box -->
+        <div class="quote-deposit-box" style="margin-top:2rem">
+          <span class="eyebrow label" style="color:rgba(255,255,255,0.4)"><?= htmlspecialchars(__t('quote.deposit_label')) ?></span>
+          <div style="font-family:'Cormorant Garamond',serif; font-size:3rem; color:var(--color-accent); margin:0.5rem 0">
+            $<?= number_format((float) $quote['deposit_amount'], 2) ?>
+          </div>
+          <p style="color:rgba(255,255,255,0.6); font-size:0.9rem"><?= htmlspecialchars(__t('quote.deposit_note')) ?></p>
+
+          <?php if ($quote['status'] === 'sent'): ?>
+          <!-- Accept form — collects customer contact info -->
+          <form @submit.prevent="acceptQuote"
+                style="margin-top:1.5rem; max-width:400px; margin-left:auto; margin-right:auto">
+            <div class="form-group" style="margin-bottom:0.75rem">
+              <input type="text"
+                     x-model="customerName"
+                     placeholder="<?= htmlspecialchars(__t('order.name')) ?>"
+                     autocomplete="name"
+                     style="background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.2); color:#fff; text-align:center">
+            </div>
+            <div class="form-group" style="margin-bottom:0.75rem">
+              <input type="email"
+                     x-model="customerEmail"
+                     placeholder="<?= htmlspecialchars(__t('order.email')) ?> (<?= htmlspecialchars(__t('general.optional')) ?>)"
+                     autocomplete="email"
+                     style="background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.2); color:#fff; text-align:center">
+            </div>
+            <div class="form-group" style="margin-bottom:1.5rem">
+              <input type="tel"
+                     x-model="customerPhone"
+                     placeholder="<?= htmlspecialchars(__t('order.phone')) ?> (<?= htmlspecialchars(__t('general.optional')) ?>)"
+                     autocomplete="tel"
+                     style="background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.2); color:#fff; text-align:center">
+            </div>
+            <button type="submit" class="btn btn-accent btn-lg" style="width:100%" :disabled="accepting">
+              <span x-show="!accepting"><?= htmlspecialchars(__t('quote.accept_button')) ?></span>
+              <span x-show="accepting"><?= htmlspecialchars(__t('general.loading')) ?></span>
+            </button>
+            <p x-show="acceptError"
+               style="color:#ff9999; margin-top:0.75rem; font-size:0.9rem; text-align:center"
+               x-text="acceptError"></p>
+          </form>
+
+          <?php elseif (in_array($quote['status'], ['accepted', 'deposit_confirmed', 'completed'], true)): ?>
+          <!-- Quote already accepted — offer a shortcut to the payment step -->
+          <p style="color:rgba(255,255,255,0.6); margin-top:1rem">
+            <?= htmlspecialchars(__t('quote.accept_button')) ?> ✓
+          </p>
+          <button class="btn btn-outline-light btn-lg"
+                  style="margin-top:1rem"
+                  @click="step = 'payment'">
+            <?= htmlspecialchars(__t('quote.payment_title')) ?>
+          </button>
+          <?php endif; ?>
+
+        </div><!-- /.quote-deposit-box -->
+      </div><!-- /.quote-body review -->
+
+      <!-- ─── Step: Payment ────────────────────────────────────────────────── -->
+      <div class="quote-body" x-show="step === 'payment'" x-cloak>
+        <div class="text-center" style="margin-bottom:2rem">
+          <span class="eyebrow label"><?= htmlspecialchars(__t('quote.payment_title')) ?></span>
+          <h3 style="margin:0.5rem 0">
+            <?= htmlspecialchars(
+                str_replace(
+                    '{amount}',
+                    '$' . number_format((float) $quote['deposit_amount'], 2),
+                    __t('quote.payment_instructions')
+                )
+            ) ?>
+          </h3>
+        </div>
+
+        <div class="payment-options">
+          <?php if (Config::get('ZELLE_PHONE')): ?>
+          <div class="payment-option">
+            <div class="label"><?= htmlspecialchars(__t('quote.payment_zelle')) ?></div>
+            <div class="value"><?= htmlspecialchars((string) Config::get('ZELLE_PHONE')) ?></div>
+          </div>
+          <?php endif; ?>
+          <?php if (Config::get('CASHAPP_TAG')): ?>
+          <div class="payment-option">
+            <div class="label"><?= htmlspecialchars(__t('quote.payment_cashapp')) ?></div>
+            <div class="value"><?= htmlspecialchars((string) Config::get('CASHAPP_TAG')) ?></div>
+          </div>
+          <?php endif; ?>
+        </div>
+
+        <div style="text-align:center; margin-top:2.5rem">
+          <button class="btn btn-accent btn-lg"
+                  @click="confirmDeposit()"
+                  :disabled="confirming">
+            <span x-show="!confirming"><?= htmlspecialchars(__t('quote.confirm_button')) ?></span>
+            <span x-show="confirming"><?= htmlspecialchars(__t('general.loading')) ?></span>
+          </button>
+          <p x-show="depositError"
+             style="color:#e53e3e; margin-top:0.75rem"
+             x-text="depositError"></p>
+        </div>
+      </div><!-- /.quote-body payment -->
+
+      <!-- ─── Step: Confirmed ──────────────────────────────────────────────── -->
+      <div class="quote-body text-center" x-show="step === 'confirmed'" x-cloak>
+        <div style="font-size:3rem; margin-bottom:1rem" aria-hidden="true">&#127800;</div>
+        <h2><?= htmlspecialchars(__t('quote.confirmed_title')) ?></h2>
+        <p style="color:var(--color-muted); max-width:500px; margin:1rem auto 2rem">
+          <?= htmlspecialchars(__t('quote.confirmed_message')) ?>
+        </p>
+        <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap">
+          <?php if (Config::get('FACEBOOK_URL')): ?>
+          <a href="<?= htmlspecialchars((string) Config::get('FACEBOOK_URL')) ?>"
+             class="btn btn-outline"
+             target="_blank"
+             rel="noopener noreferrer">
+            Facebook
+          </a>
+          <?php endif; ?>
+          <?php
+          $igUrl = Config::get(
+              'INSTAGRAM_URL',
+              'https://www.instagram.com/' . Config::get('INSTAGRAM_HANDLE', '')
+          );
+          ?>
+          <?php if ($igUrl): ?>
+          <a href="<?= htmlspecialchars((string) $igUrl) ?>"
+             class="btn btn-outline"
+             target="_blank"
+             rel="noopener noreferrer">
+            Instagram
+          </a>
+          <?php endif; ?>
+        </div>
+      </div><!-- /.quote-body confirmed -->
+
+      <?php endif; // end if !$expired ?>
+
+    </div><!-- /.quote-card -->
+  </div><!-- /.container -->
+</section>
+
+<script>
+/**
+ * Alpine.js component that drives the three-step quote acceptance flow.
+ *
+ * Steps:
+ *   review    — customer reads the itemised quote and submits their contact info.
+ *   payment   — customer sees payment instructions and confirms they sent money.
+ *   confirmed — success state shown after deposit_confirmed.
+ *
+ * Both acceptQuote() and confirmDeposit() POST JSON to the PHP endpoints and
+ * advance the step on success, or display an inline error message on failure.
+ *
+ * @returns {object} Alpine component data and methods.
+ */
+function quoteApp() {
+  return {
+    /** Active step: 'review' | 'payment' | 'confirmed' */
+    step: <?= json_encode(
+        in_array($quote['status'] ?? '', ['accepted', 'deposit_confirmed', 'completed'], true)
+            ? 'payment'
+            : 'review',
+        JSON_THROW_ON_ERROR
+    ) ?>,
+
+    customerName:  '',
+    customerEmail: '',
+    customerPhone: '',
+
+    /** True while the accept POST is in flight. */
+    accepting:   false,
+    /** Error message shown below the accept form, or empty string. */
+    acceptError: '',
+
+    /** True while the deposit-confirm POST is in flight. */
+    confirming:   false,
+    /** Error message shown below the confirm button, or empty string. */
+    depositError: '',
+
+    token: <?= json_encode($quote['token'] ?? '', JSON_THROW_ON_ERROR) ?>,
+    csrf:  <?= json_encode($csrfToken,           JSON_THROW_ON_ERROR) ?>,
+
+    /**
+     * Posts customer info and transitions the quote to 'accepted'.
+     * Advances to the 'payment' step on success.
+     *
+     * @returns {Promise<void>}
+     */
+    async acceptQuote() {
+      if (!this.customerName.trim()) {
+        this.acceptError = '<?= addslashes(__t('order.name')) ?> is required.';
+        return;
+      }
+      this.accepting   = true;
+      this.acceptError = '';
+
+      try {
+        const res = await fetch('/quote/' + this.token + '/accept', {
+          method:  'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': this.csrf,
+          },
+          body: JSON.stringify({
+            name:         this.customerName,
+            email:        this.customerEmail,
+            phone:        this.customerPhone,
+            _csrf_token:  this.csrf,
+          }),
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          this.step = 'payment';
+        } else {
+          this.acceptError = data.error || '<?= addslashes(__t('general.error')) ?>';
+        }
+      } catch {
+        this.acceptError = '<?= addslashes(__t('general.error')) ?>';
+      } finally {
+        this.accepting = false;
+      }
+    },
+
+    /**
+     * Notifies the server that the deposit has been sent and advances to
+     * the 'confirmed' step on success.
+     *
+     * @returns {Promise<void>}
+     */
+    async confirmDeposit() {
+      this.confirming   = true;
+      this.depositError = '';
+
+      try {
+        const res = await fetch('/quote/' + this.token + '/deposit', {
+          method:  'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': this.csrf,
+          },
+          body: JSON.stringify({ _csrf_token: this.csrf }),
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          this.step = 'confirmed';
+        } else {
+          this.depositError = data.error || '<?= addslashes(__t('general.error')) ?>';
+        }
+      } catch {
+        this.depositError = '<?= addslashes(__t('general.error')) ?>';
+      } finally {
+        this.confirming = false;
+      }
+    },
+  };
+}
+</script>
