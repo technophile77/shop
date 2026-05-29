@@ -25,7 +25,7 @@
  * @param string $key Setting key from site_settings.
  * @return string HTML-escaped value suitable for use in a value="…" attribute.
  */
-$val = static fn (string $key) use ($settings): string =>
+$val = static fn (string $key): string =>
     htmlspecialchars($settings[$key] ?? '');
 ?>
 
