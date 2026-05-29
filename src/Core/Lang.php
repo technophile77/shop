@@ -21,8 +21,8 @@ class Lang
     /** @var array<string, array<string, string>> Keyed by language code. */
     private static array $cache = [];
 
-    /** @var string Active language code; initialised to 'en'. */
-    private static string $current = 'en';
+    /** @var string|null Active language code; null until first call to current(). */
+    private static ?string $current = null;
 
     /** @var list<string> Supported locale codes. */
     private const AVAILABLE = ['en', 'es'];
@@ -98,16 +98,22 @@ class Lang
     /**
      * Returns the active language code.
      *
-     * The value is set by set() and persisted in the PHP session under the
-     * key 'lang'.  Falls back to 'en' when the session contains no value or
-     * an unrecognised code.
+     * On the first call per request the value is read from $_SESSION['lang']
+     * (written by set()).  Falls back to 'en' when the session has no value or
+     * contains an unrecognised code.  Subsequent calls within the same request
+     * return the in-memory cached value.
      *
      * @return string 'en' or 'es'
      *
-     * @example $code = Lang::current(); // 'en'
+     * @example $code = Lang::current(); // 'es' after Lang::set('es')
      */
     public static function current(): string
     {
+        if (self::$current === null) {
+            $session = (session_status() === PHP_SESSION_ACTIVE) ? ($_SESSION['lang'] ?? 'en') : 'en';
+            self::$current = in_array($session, self::AVAILABLE, true) ? $session : 'en';
+        }
+
         return self::$current;
     }
 
