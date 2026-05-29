@@ -20,8 +20,7 @@
  * @see \App\Controllers\BaseController::render()
  */
 
-// Generate the CSRF token once for use in both the <meta> tag and the
-// language toggle form. Both reads return the same $_SESSION['_csrf'] value.
+// Expose CSRF token via <meta> for Alpine.js fetch() components.
 $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
 ?>
 <!DOCTYPE html>
@@ -110,15 +109,11 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
 
         <!-- Desktop nav actions: language toggle -->
         <div class="nav-actions">
-            <form method="POST"
-                  action="/lang/<?= htmlspecialchars($lang === 'en' ? 'es' : 'en') ?>"
-                  style="display:inline">
-                <input type="hidden" name="_csrf_token"
-                       value="<?= htmlspecialchars($_layoutCsrfToken) ?>">
-                <button type="submit" class="lang-toggle" aria-label="Switch language">
-                    <?= htmlspecialchars(__t('nav.lang_switch')) ?>
-                </button>
-            </form>
+            <a href="/lang/<?= htmlspecialchars($lang === 'en' ? 'es' : 'en') ?>"
+               class="lang-toggle"
+               aria-label="Switch language">
+                <?= htmlspecialchars(__t('nav.lang_switch')) ?>
+            </a>
 
             <!-- Mobile hamburger -->
             <button class="nav-toggle"
@@ -142,6 +137,9 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
         <a href="/order"><?= htmlspecialchars(\App\Core\Settings::get('order_button_text_' . $lang, __t('nav.order'))) ?></a>
         <a href="/about"><?= htmlspecialchars(__t('nav.about')) ?></a>
         <a href="/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a>
+        <a href="/lang/<?= htmlspecialchars($lang === 'en' ? 'es' : 'en') ?>"
+           class="lang-toggle"
+           aria-label="Switch language"><?= htmlspecialchars(__t('nav.lang_switch')) ?></a>
     </nav>
 </div>
 
