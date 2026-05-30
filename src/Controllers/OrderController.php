@@ -11,15 +11,15 @@ use App\Core\Response;
 use App\Core\Settings;
 use App\Models\Customer;
 use App\Models\Order;
-use App\Services\GeocodingService;
 use App\Services\MailService;
 
 /**
  * Handles the public custom bouquet request form.
  *
- * GET  /order               — renders the order form.
- * POST /order               — validates and persists the submission, returns JSON.
- * POST /order/delivery-fee  — geocodes an address and returns the delivery fee as JSON.
+ * GET  /order — renders the order form.
+ * POST /order — validates and persists the submission, returns JSON.
+ *
+ * Delivery fee is calculated client-side via the Google Places Autocomplete widget.
  *
  * @see \App\Models\Customer
  * @see \App\Models\Order
@@ -143,67 +143,6 @@ final class OrderController extends BaseController
         return Response::json([
             'success' => true,
             'message' => __t('order.success'),
-        ]);
-    }
-
-    /**
-     * Calculates the delivery fee for a given address.
-     *
-     * Geocodes the address via Nominatim, computes the straight-line distance
-     * from the business pickup location, and applies the configured fee schedule.
-     * Returns JSON: {success:true, distance:float, fee:float} or {success:false, error:string}
-     *
-     * @param Request              $request HTTP request.
-     * @param array<string, mixed> $params  Route parameters (unused).
-     *
-     * @return Response JSON response.
-     *
-     * @example
-     *   // POST /order/delivery-fee — returns {"success":true,"distance":3.2,"fee":10.00}
-     *   // POST /order/delivery-fee — returns {"success":false,"error":"Address not found…"}
-     */
-    public function calculateDelivery(Request $request, array $params = []): Response
-    {
-        if (!$request->validateCsrf()) {
-            return Response::json(['success' => false, 'error' => 'Invalid security token.'], 422);
-        }
-
-        $address = trim((string) $request->post('address', ''));
-
-        if ($address === '') {
-            return Response::json(['success' => false, 'error' => 'Please enter a delivery address.']);
-        }
-
-        $coords = GeocodingService::geocode($address);
-
-        if ($coords === null) {
-            return Response::json(['success' => false, 'error' => 'Address not found. Please check and try again.']);
-        }
-
-        $businessLat = (float) Config::get('BUSINESS_LAT', '36.0814');
-        $businessLng = (float) Config::get('BUSINESS_LNG', '-95.9987');
-
-        $distance = GeocodingService::haversineDistance(
-            $businessLat,
-            $businessLng,
-            $coords['lat'],
-            $coords['lng']
-        );
-
-        if ($distance > 30) {
-            return Response::json(['success' => false, 'error' => 'Sorry, we only deliver within 30 miles of our location.']);
-        }
-
-        $baseMiles = (float) Config::get('BUSINESS_DELIVERY_BASE_MILES', 5);
-        $baseFee   = (float) Config::get('BUSINESS_DELIVERY_BASE_FEE', 10);
-        $perMile   = (float) Config::get('BUSINESS_DELIVERY_PER_MILE_FEE', 1);
-
-        $fee = $baseFee + max(0, $distance - $baseMiles) * $perMile;
-
-        return Response::json([
-            'success'  => true,
-            'distance' => round($distance, 1),
-            'fee'      => round($fee, 2),
         ]);
     }
 

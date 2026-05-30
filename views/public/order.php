@@ -82,26 +82,24 @@ use App\Core\Settings;
                 </div>
 
                 <!-- Delivery address + fee calculator -->
-                <div x-show="form.delivery_type === 'delivery'" style="margin-bottom:1.5rem">
+                <div x-show="form.delivery_type === 'delivery'"
+                     style="margin-bottom:1.5rem"
+                     x-init="$nextTick(() => initAutocomplete($refs.deliveryInput, p => calculateFeeFromPlace(p)))">
                     <div class="form-group">
                         <label>
                             <?= htmlspecialchars(__t('order.delivery_address')) ?>
                             <span style="color:var(--color-accent)">*</span>
                         </label>
                         <input type="text"
-                               x-model="form.delivery_address"
-                               @blur="calculateFee()"
-                               placeholder="Street address, City, State, ZIP"
-                               autocomplete="street-address">
+                               x-ref="deliveryInput"
+                               id="delivery-address-input"
+                               placeholder="Start typing your address..."
+                               autocomplete="off"
+                               style="width:100%">
                     </div>
 
-                    <!-- Calculating spinner -->
-                    <p x-show="calculatingFee" style="font-size:0.9rem;color:var(--color-muted)">
-                        <?= htmlspecialchars(__t('order.calculating_fee')) ?>
-                    </p>
-
                     <!-- Fee result -->
-                    <div x-show="feeResult !== null && !calculatingFee"
+                    <div x-show="feeResult !== null"
                          style="background:var(--color-bg-light);border:1px solid var(--color-border);border-radius:8px;padding:1rem">
                         <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem">
                             <span style="color:var(--color-muted);font-size:0.9rem">Distance</span>
@@ -114,7 +112,7 @@ use App\Core\Settings;
                     </div>
 
                     <!-- Fee error -->
-                    <p x-show="feeError && !calculatingFee"
+                    <p x-show="feeError"
                        style="color:#d32f2f;font-size:0.9rem;margin-top:0.5rem"
                        x-text="feeError"></p>
                 </div>
@@ -238,64 +236,81 @@ use App\Core\Settings;
     </div><!-- /.container -->
 </section>
 
+<?php if (\App\Core\Config::get('GOOGLE_MAPS_API_KEY')): ?>
+<script src="https://maps.googleapis.com/maps/api/js?key=<?= htmlspecialchars(\App\Core\Config::get('GOOGLE_MAPS_API_KEY')) ?>&libraries=places"></script>
+<?php endif; ?>
+
 <script>
 /**
  * Alpine.js component for the custom bouquet order form.
  *
- * Sends the form as JSON to POST /order and shows either a localised success
- * banner or an inline error message without a full page reload.
+ * Delivery fee is calculated client-side using Google Places Autocomplete
+ * for address selection and the Haversine formula for distance. No
+ * server-side geocoding call is made.
  */
 function orderForm() {
     return {
-        submitting:     false,
-        success:        false,
-        error:          '',
-        feeResult:      null,
-        feeError:       '',
-        calculatingFee: false,
+        submitting: false,
+        success:    false,
+        error:      '',
+        feeResult:  null,
+        feeError:   '',
         form: {
-            name:               '',
-            email:              '',
-            phone:              '',
-            event_date:         '',
-            occasion:           '<?= htmlspecialchars(addslashes($arrangementHint ?? ''), ENT_QUOTES) ?>',
-            arrangement_style:  '',
-            color_preferences:  '',
-            budget_range:       '',
-            notes:              '',
-            delivery_type:      'pickup',
-            delivery_address:   '',
-            delivery_fee:       null,
-            _csrf_token:        '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>'
+            name:              '',
+            email:             '',
+            phone:             '',
+            event_date:        '',
+            occasion:          '<?= htmlspecialchars(addslashes($arrangementHint ?? ''), ENT_QUOTES) ?>',
+            arrangement_style: '',
+            color_preferences: '',
+            budget_range:      '',
+            notes:             '',
+            delivery_type:     'pickup',
+            delivery_address:  '',
+            delivery_fee:      null,
+            _csrf_token:       '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>'
         },
 
-        async calculateFee() {
-            if (!this.form.delivery_address || this.form.delivery_address.length < 5) return;
-            this.calculatingFee = true;
-            this.feeError       = '';
-            this.feeResult      = null;
-            try {
-                const res = await fetch('/order/delivery-fee', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': this.form._csrf_token
-                    },
-                    body: JSON.stringify({ address: this.form.delivery_address, _csrf_token: this.form._csrf_token })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    this.feeResult        = data;
-                    this.form.delivery_fee = data.fee;
-                } else {
-                    this.feeError          = data.error;
-                    this.form.delivery_fee = null;
-                }
-            } catch (_e) {
-                this.feeError = 'Could not calculate delivery fee. Please try again.';
-            } finally {
-                this.calculatingFee = false;
+        calculateFeeFromPlace(place) {
+            if (!place || !place.geometry) {
+                this.feeError  = 'Please select an address from the dropdown suggestions.';
+                this.feeResult = null;
+                this.form.delivery_fee    = null;
+                this.form.delivery_address = '';
+                return;
             }
+
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
+
+            // Haversine distance in miles
+            const R      = 3958.8;
+            const bizLat = <?= (float) \App\Core\Config::get('BUSINESS_LAT', '36.0814') ?>;
+            const bizLng = <?= (float) \App\Core\Config::get('BUSINESS_LNG', '-95.9987') ?>;
+            const dLat   = (lat - bizLat) * Math.PI / 180;
+            const dLng   = (lng - bizLng) * Math.PI / 180;
+            const a      = Math.sin(dLat / 2) ** 2
+                         + Math.cos(bizLat * Math.PI / 180) * Math.cos(lat * Math.PI / 180)
+                         * Math.sin(dLng / 2) ** 2;
+            const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            if (distance > 30) {
+                this.feeError  = '<?= htmlspecialchars(__t('order.delivery_outside_range'), ENT_QUOTES) ?>';
+                this.feeResult = null;
+                this.form.delivery_fee    = null;
+                this.form.delivery_address = '';
+                return;
+            }
+
+            const baseMiles = <?= (float) \App\Core\Config::get('BUSINESS_DELIVERY_BASE_MILES', 5) ?>;
+            const baseFee   = <?= (float) \App\Core\Config::get('BUSINESS_DELIVERY_BASE_FEE', 10) ?>;
+            const perMile   = <?= (float) \App\Core\Config::get('BUSINESS_DELIVERY_PER_MILE_FEE', 1) ?>;
+            const fee       = baseFee + Math.max(0, distance - baseMiles) * perMile;
+
+            this.form.delivery_address = place.formatted_address;
+            this.form.delivery_fee     = Math.round(fee * 100) / 100;
+            this.feeResult             = { distance: Math.round(distance * 10) / 10, fee: this.form.delivery_fee };
+            this.feeError              = '';
         },
 
         async submitOrder() {
@@ -303,12 +318,7 @@ function orderForm() {
             this.error      = '';
 
             if (this.form.delivery_type === 'delivery' && !this.form.delivery_address) {
-                this.error      = 'Please enter your delivery address.';
-                this.submitting = false;
-                return;
-            }
-            if (this.form.delivery_type === 'delivery' && !this.feeResult) {
-                this.error      = 'Please wait for the delivery fee to be calculated.';
+                this.error      = 'Please select your delivery address from the suggestions.';
                 this.submitting = false;
                 return;
             }
@@ -335,7 +345,39 @@ function orderForm() {
             } finally {
                 this.submitting = false;
             }
+        },
+
+        init() {
+            // Clear delivery state when switching back to pickup
+            this.$watch('form.delivery_type', val => {
+                if (val === 'pickup') {
+                    this.form.delivery_address = '';
+                    this.form.delivery_fee     = null;
+                    this.feeResult             = null;
+                    this.feeError              = '';
+                    const input = this.$refs.deliveryInput;
+                    if (input) input.value = '';
+                }
+            });
         }
     };
+}
+
+/**
+ * Initialises a Google Places Autocomplete widget on the given input element.
+ * Restricted to US street addresses. Calls onPlaceSelected with the place object
+ * when the user picks a suggestion.
+ *
+ * @param {HTMLInputElement} inputEl
+ * @param {Function}         onPlaceSelected
+ */
+function initAutocomplete(inputEl, onPlaceSelected) {
+    if (typeof google === 'undefined' || !google.maps || !inputEl) return;
+    const ac = new google.maps.places.Autocomplete(inputEl, {
+        componentRestrictions: { country: 'us' },
+        fields:                ['formatted_address', 'geometry'],
+        types:                 ['address'],
+    });
+    ac.addListener('place_changed', () => onPlaceSelected(ac.getPlace()));
 }
 </script>
