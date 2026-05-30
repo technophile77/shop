@@ -30,32 +30,31 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?></title>
     <meta name="description" content="<?= htmlspecialchars($metaDesc) ?>">
-    <link rel="canonical" href="<?= htmlspecialchars(
-        \App\Core\Config::get('APP_URL', '') . parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH)
-    ) ?>">
-    <link rel="alternate" hreflang="en" href="<?= htmlspecialchars(
-        \App\Core\Config::get('APP_URL', '') . preg_replace('#^/(en|es)(/.*)?$#', '/en$2', parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH))
-    ) ?>">
-    <link rel="alternate" hreflang="es" href="<?= htmlspecialchars(
-        \App\Core\Config::get('APP_URL', '') . preg_replace('#^/(en|es)(/.*)?$#', '/es$2', parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH))
-    ) ?>">
-    <link rel="alternate" hreflang="x-default" href="<?= htmlspecialchars(
-        \App\Core\Config::get('APP_URL', '') . preg_replace('#^/(en|es)(/.*)?$#', '/en$2', parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH))
-    ) ?>">
+    <?php
+    // LANG_STRIPPED_PATH is set by index.php after removing the /en/ or /es/ prefix.
+    // Use it to build correct lang-prefixed canonical/hreflang/OG URLs.
+    $_seoBasePath = $_SERVER['LANG_STRIPPED_PATH'] ?? '/';
+    $_seoAppUrl   = rtrim((string) \App\Core\Config::get('APP_URL', ''), '/');
+    $_seoPageUrl  = $_seoAppUrl . '/' . $lang . ($_seoBasePath === '/' ? '' : $_seoBasePath);
+    ?>
+    <link rel="canonical"                     href="<?= htmlspecialchars($_seoPageUrl) ?>">
+    <link rel="alternate" hreflang="en"       href="<?= htmlspecialchars($_seoAppUrl . '/en' . ($_seoBasePath === '/' ? '/' : $_seoBasePath)) ?>">
+    <link rel="alternate" hreflang="es"       href="<?= htmlspecialchars($_seoAppUrl . '/es' . ($_seoBasePath === '/' ? '/' : $_seoBasePath)) ?>">
+    <link rel="alternate" hreflang="x-default" href="<?= htmlspecialchars($_seoAppUrl . '/en' . ($_seoBasePath === '/' ? '/' : $_seoBasePath)) ?>">
 
     <!-- Open Graph -->
     <meta property="og:type"        content="website">
     <meta property="og:site_name"   content="<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
     <meta property="og:title"       content="<?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
     <meta property="og:description" content="<?= htmlspecialchars($metaDesc ?: ($lang === 'es' ? 'Arreglos florales y ramos personalizados en Tulsa, OK.' : 'Custom bouquets and fresh flowers in Tulsa, OK.')) ?>">
-    <meta property="og:url"         content="<?= htmlspecialchars(\App\Core\Config::get('APP_URL', '') . parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH)) ?>">
-    <meta property="og:image"       content="<?= htmlspecialchars(\App\Core\Config::get('APP_URL', '')) ?>/public/assets/images/header.jpg">
+    <meta property="og:url"         content="<?= htmlspecialchars($_seoPageUrl) ?>">
+    <meta property="og:image"       content="<?= htmlspecialchars($_seoAppUrl) ?>/public/assets/images/header.jpg">
 
     <!-- Twitter Card -->
     <meta name="twitter:card"        content="summary_large_image">
     <meta name="twitter:title"       content="<?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
     <meta name="twitter:description" content="<?= htmlspecialchars($metaDesc ?: ($lang === 'es' ? 'Arreglos florales y ramos personalizados en Tulsa, OK.' : 'Custom bouquets and fresh flowers in Tulsa, OK.')) ?>">
-    <meta name="twitter:image"       content="<?= htmlspecialchars(\App\Core\Config::get('APP_URL', '')) ?>/public/assets/images/header.jpg">
+    <meta name="twitter:image"       content="<?= htmlspecialchars($_seoAppUrl) ?>/public/assets/images/header.jpg">
 
     <meta name="csrf-token" content="<?= htmlspecialchars($_layoutCsrfToken) ?>">
 

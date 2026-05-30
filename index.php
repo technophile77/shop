@@ -72,7 +72,9 @@ if (preg_match('#^/(en|es)(/.*)?$#', $_rawPath, $_langMatch)) {
     $_qs = isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== ''
         ? '?' . $_SERVER['QUERY_STRING']
         : '';
-    $_SERVER['REQUEST_URI'] = $_strippedPath . $_qs;
+    // Store stripped path for canonical/hreflang construction in the layout.
+    $_SERVER['LANG_STRIPPED_PATH'] = $_strippedPath;
+    $_SERVER['REQUEST_URI']        = $_strippedPath . $_qs;
 } elseif (
     $_SERVER['REQUEST_METHOD'] === 'GET'
     && !str_starts_with($_rawPath, '/admin')
