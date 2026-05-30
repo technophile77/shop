@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /admin
+Disallow: /quote/
+Disallow: /lang/
+
+Sitemap: https://flowers.cresswell.org/sitemap.xml

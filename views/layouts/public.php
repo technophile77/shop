@@ -30,6 +30,33 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?></title>
     <meta name="description" content="<?= htmlspecialchars($metaDesc) ?>">
+    <link rel="canonical" href="<?= htmlspecialchars(
+        \App\Core\Config::get('APP_URL', '') . parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH)
+    ) ?>">
+    <link rel="alternate" hreflang="en" href="<?= htmlspecialchars(
+        \App\Core\Config::get('APP_URL', '') . preg_replace('#^/(en|es)(/.*)?$#', '/en$2', parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH))
+    ) ?>">
+    <link rel="alternate" hreflang="es" href="<?= htmlspecialchars(
+        \App\Core\Config::get('APP_URL', '') . preg_replace('#^/(en|es)(/.*)?$#', '/es$2', parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH))
+    ) ?>">
+    <link rel="alternate" hreflang="x-default" href="<?= htmlspecialchars(
+        \App\Core\Config::get('APP_URL', '') . preg_replace('#^/(en|es)(/.*)?$#', '/en$2', parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH))
+    ) ?>">
+
+    <!-- Open Graph -->
+    <meta property="og:type"        content="website">
+    <meta property="og:site_name"   content="<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
+    <meta property="og:title"       content="<?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars($metaDesc ?: ($lang === 'es' ? 'Arreglos florales y ramos personalizados en Tulsa, OK.' : 'Custom bouquets and fresh flowers in Tulsa, OK.')) ?>">
+    <meta property="og:url"         content="<?= htmlspecialchars(\App\Core\Config::get('APP_URL', '') . parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH)) ?>">
+    <meta property="og:image"       content="<?= htmlspecialchars(\App\Core\Config::get('APP_URL', '')) ?>/public/assets/images/header.jpg">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card"        content="summary_large_image">
+    <meta name="twitter:title"       content="<?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
+    <meta name="twitter:description" content="<?= htmlspecialchars($metaDesc ?: ($lang === 'es' ? 'Arreglos florales y ramos personalizados en Tulsa, OK.' : 'Custom bouquets and fresh flowers in Tulsa, OK.')) ?>">
+    <meta name="twitter:image"       content="<?= htmlspecialchars(\App\Core\Config::get('APP_URL', '')) ?>/public/assets/images/header.jpg">
+
     <meta name="csrf-token" content="<?= htmlspecialchars($_layoutCsrfToken) ?>">
 
     <!-- Google Fonts: Cormorant Garamond, Montserrat, Lato -->
@@ -79,6 +106,42 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
         src="https://www.facebook.com/tr?id=<?= htmlspecialchars(\App\Core\Config::get('META_PIXEL_ID')) ?>&ev=PageView&noscript=1"
         alt=""></noscript>
     <?php endif; ?>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Florist",
+      "name": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', ''), ENT_QUOTES) ?>",
+      "url": "<?= htmlspecialchars(\App\Core\Config::get('APP_URL', ''), ENT_QUOTES) ?>",
+      "telephone": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_PHONE', ''), ENT_QUOTES) ?>",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_STREET_ADDRESS', ''), ENT_QUOTES) ?>",
+        "addressLocality": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_CITY', 'Tulsa'), ENT_QUOTES) ?>",
+        "addressRegion": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_STATE', 'OK'), ENT_QUOTES) ?>",
+        "postalCode": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_POSTAL_CODE', ''), ENT_QUOTES) ?>",
+        "addressCountry": "US"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": <?= (float) \App\Core\Config::get('BUSINESS_LAT', 36.0814) ?>,
+        "longitude": <?= (float) \App\Core\Config::get('BUSINESS_LNG', -95.9987) ?>
+      },
+      "sameAs": [
+        <?php
+        $_schemaLinks = array_values(array_filter([
+            \App\Core\Config::get('FACEBOOK_URL'),
+            \App\Core\Config::get('INSTAGRAM_URL',
+                'https://www.instagram.com/' . \App\Core\Config::get('INSTAGRAM_HANDLE', '')),
+        ]));
+        echo implode(",\n        ", array_map(
+            fn($u) => '"' . htmlspecialchars((string) $u, ENT_QUOTES) . '"',
+            $_schemaLinks
+        ));
+        ?>
+      ]
+    }
+    </script>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
 
@@ -89,22 +152,22 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     <div class="container nav-inner">
 
         <!-- Logo -->
-        <a href="/" class="nav-logo" aria-label="<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?> — Home">
+        <a href="/<?= $lang ?>/" class="nav-logo" aria-label="<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?> — Home">
             <img src="/public/assets/images/logo.jpg"
                  alt="<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?> logo">
         </a>
 
         <!-- Desktop nav links -->
         <ul class="nav-links" role="list">
-            <li><a href="/"><?= htmlspecialchars(__t('nav.home')) ?></a></li>
-            <li><a href="/products"><?= htmlspecialchars(__t('nav.products')) ?></a></li>
+            <li><a href="/<?= $lang ?>"><?= htmlspecialchars(__t('nav.home')) ?></a></li>
+            <li><a href="/<?= $lang ?>/products"><?= htmlspecialchars(__t('nav.products')) ?></a></li>
             <li>
-                <a href="/order" class="btn btn-accent btn-sm">
+                <a href="/<?= $lang ?>/order" class="btn btn-accent btn-sm">
                     <?= htmlspecialchars(\App\Core\Settings::get('order_button_text_' . $lang, __t('nav.order'))) ?>
                 </a>
             </li>
-            <li><a href="/about"><?= htmlspecialchars(__t('nav.about')) ?></a></li>
-            <li><a href="/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a></li>
+            <li><a href="/<?= $lang ?>/about"><?= htmlspecialchars(__t('nav.about')) ?></a></li>
+            <li><a href="/<?= $lang ?>/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a></li>
             <?php if (\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')): ?>
             <li>
                 <a href="<?= htmlspecialchars(\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')) ?>"
@@ -142,11 +205,11 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
 <!-- Mobile drawer -->
 <div id="nav-mobile" class="nav-mobile" role="dialog" aria-label="Mobile navigation">
     <nav class="nav-mobile-links" role="list">
-        <a href="/"><?= htmlspecialchars(__t('nav.home')) ?></a>
-        <a href="/products"><?= htmlspecialchars(__t('nav.products')) ?></a>
-        <a href="/order"><?= htmlspecialchars(\App\Core\Settings::get('order_button_text_' . $lang, __t('nav.order'))) ?></a>
-        <a href="/about"><?= htmlspecialchars(__t('nav.about')) ?></a>
-        <a href="/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a>
+        <a href="/<?= $lang ?>"><?= htmlspecialchars(__t('nav.home')) ?></a>
+        <a href="/<?= $lang ?>/products"><?= htmlspecialchars(__t('nav.products')) ?></a>
+        <a href="/<?= $lang ?>/order"><?= htmlspecialchars(\App\Core\Settings::get('order_button_text_' . $lang, __t('nav.order'))) ?></a>
+        <a href="/<?= $lang ?>/about"><?= htmlspecialchars(__t('nav.about')) ?></a>
+        <a href="/<?= $lang ?>/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a>
         <?php if (\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')): ?>
         <a href="<?= htmlspecialchars(\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')) ?>"
            target="_blank"
@@ -193,7 +256,7 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
             <!-- Brand column -->
             <div class="footer-brand">
                 <div class="footer-logo">
-                    <a href="/" aria-label="<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?> — Home">
+                    <a href="/<?= $lang ?>/" aria-label="<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?> — Home">
                         <img src="/public/assets/images/logo.jpg"
                              alt="<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?> logo">
                     </a>
@@ -256,11 +319,11 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
             <div class="footer-nav">
                 <p class="footer-heading"><?= htmlspecialchars(__t('nav.home')) ?></p>
                 <ul class="footer-links" role="list">
-                    <li><a href="/"><?= htmlspecialchars(__t('nav.home')) ?></a></li>
-                    <li><a href="/products"><?= htmlspecialchars(__t('nav.products')) ?></a></li>
-                    <li><a href="/order"><?= htmlspecialchars(\App\Core\Settings::get('order_button_text_' . $lang, __t('nav.order'))) ?></a></li>
-                    <li><a href="/about"><?= htmlspecialchars(__t('nav.about')) ?></a></li>
-                    <li><a href="/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a></li>
+                    <li><a href="/<?= $lang ?>"><?= htmlspecialchars(__t('nav.home')) ?></a></li>
+                    <li><a href="/<?= $lang ?>/products"><?= htmlspecialchars(__t('nav.products')) ?></a></li>
+                    <li><a href="/<?= $lang ?>/order"><?= htmlspecialchars(\App\Core\Settings::get('order_button_text_' . $lang, __t('nav.order'))) ?></a></li>
+                    <li><a href="/<?= $lang ?>/about"><?= htmlspecialchars(__t('nav.about')) ?></a></li>
+                    <li><a href="/<?= $lang ?>/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a></li>
                     <?php if (\App\Core\Settings::get('show_doordash_button', '1') === '1' && \App\Core\Config::get('DOORDASH_STORE_URL')): ?>
                     <li>
                         <a href="<?= htmlspecialchars(\App\Core\Config::get('DOORDASH_STORE_URL')) ?>"
@@ -277,6 +340,24 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
             <div class="footer-info">
                 <p class="footer-heading"><?= htmlspecialchars(__t('nav.contact')) ?></p>
                 <ul class="footer-links" role="list">
+                    <!-- NAP identity block — matches Google Business Profile exactly -->
+                    <li style="margin-bottom:1rem; line-height:1.6; font-size:0.9rem; color:rgba(255,255,255,0.8)">
+                        <strong style="display:block; color:#fff; margin-bottom:0.25rem">
+                            <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>
+                        </strong>
+                        <span>
+                            <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_ADDRESS', '')) ?>
+                            <span style="color:rgba(255,255,255,0.5); font-size:0.8rem; display:block; margin-top:0.1rem">
+                                <?= $lang === 'es' ? '(Estudio Privado — Solo Recogida y Citas)' : '(Private Studio — Pickup &amp; Appointment Only)' ?>
+                            </span>
+                        </span><br>
+                        <?php if (\App\Core\Config::get('BUSINESS_PHONE')): ?>
+                        <a href="tel:<?= htmlspecialchars(preg_replace('/\D/', '', (string) \App\Core\Config::get('BUSINESS_PHONE', ''))) ?>"
+                           style="color:rgba(255,255,255,0.8); text-decoration:none">
+                            <?= htmlspecialchars((string) \App\Core\Config::get('BUSINESS_PHONE', '')) ?>
+                        </a>
+                        <?php endif; ?>
+                    </li>
                     <?php if (\App\Core\Config::get('WHATSAPP_PHONE')): ?>
                     <li>
                         <a href="https://wa.me/<?= htmlspecialchars(\App\Core\Config::get('WHATSAPP_PHONE')) ?>"

@@ -31,7 +31,9 @@ class HomeController extends BaseController
      * the correct category name (name_en or name_es) is selected in SQL, which
      * avoids an N+1 PHP-side lookup. The CSRF token is generated here so the
      * promotion signup form can embed it as a hidden field without a second
-     * Request instantiation in the view.
+     * Request instantiation in the view. The page title is read from the
+     * `home_page_title_{lang}` setting (e.g. `home_page_title_en`), falling
+     * back to the `BUSINESS_NAME` env value when the setting is empty.
      *
      * @param Request              $request The current HTTP request.
      * @param array<string,string> $params  Route parameters (none for this route).
@@ -72,7 +74,7 @@ class HomeController extends BaseController
             $this->render('public/home', [
                 'products'  => $products,
                 'csrfToken' => $csrfToken,
-                'pageTitle' => Config::get('BUSINESS_NAME', ''),
+                'pageTitle' => (string) Settings::get('home_page_title_' . $lang, Config::get('BUSINESS_NAME', '')),
                 'metaDesc'  => $metaDesc,
             ])
         );

@@ -40,6 +40,8 @@ final class SettingsController extends BaseController
         'hero_headline_es',
         'hero_subtext_en',
         'hero_subtext_es',
+        'home_page_title_en',
+        'home_page_title_es',
 
         // Buttons & Labels
         'order_button_text_en',
@@ -58,10 +60,14 @@ final class SettingsController extends BaseController
         // About Page
         'about_text_en',
         'about_text_es',
+        'about_meta_desc_en',
+        'about_meta_desc_es',
 
         // Business
         'products_page_title_en',
         'products_page_title_es',
+        'products_meta_desc_en',
+        'products_meta_desc_es',
         'order_page_title_en',
         'order_page_title_es',
         'about_page_title_en',

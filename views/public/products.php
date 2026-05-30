@@ -45,14 +45,14 @@ use App\Core\Settings;
   <div class="container">
     <div class="filter-bar">
 
-      <a href="/products"
+      <a href="/<?= $lang ?>/products"
          class="filter-btn <?= $activeSlug === 'all' ? 'active' : '' ?>"
          data-category="all">
         <?= __t('products.filter_all') ?>
       </a>
 
       <?php foreach ($categories as $cat): ?>
-      <a href="/products/<?= htmlspecialchars($cat['slug']) ?>"
+      <a href="/<?= $lang ?>/products/<?= htmlspecialchars($cat['slug']) ?>"
          class="filter-btn <?= $activeSlug === $cat['slug'] ? 'active' : '' ?>"
          data-category="<?= htmlspecialchars($cat['slug']) ?>">
         <?= htmlspecialchars($cat['name_' . $lang] ?? $cat['name_en']) ?>
@@ -73,7 +73,7 @@ use App\Core\Settings;
     <!-- Empty state — no products in this category yet -->
     <div class="text-center" style="padding: 4rem 0; color: var(--color-muted)">
       <p><?= __t('products.custom_note') ?></p>
-      <a href="/order" class="btn btn-primary" style="margin-top: 1.5rem">
+      <a href="/<?= $lang ?>/order" class="btn btn-primary" style="margin-top: 1.5rem">
         <?= htmlspecialchars(Settings::get('order_button_text_' . $lang, Settings::get('order_button_text_en', __t('products.request_cta')))) ?>
       </a>
     </div>
@@ -133,7 +133,7 @@ use App\Core\Settings;
           <?php endif; ?>
 
           <!-- CTA — links to order form with arrangement pre-filled -->
-          <a href="/order?arrangement=<?= urlencode($product['name_en']) ?>"
+          <a href="/<?= $lang ?>/order?arrangement=<?= urlencode($product['name_en']) ?>"
              class="btn btn-outline"
              style="width:100%; justify-content:center">
             <?= htmlspecialchars(Settings::get('order_button_text_' . $lang, Settings::get('order_button_text_en', __t('products.request_cta')))) ?>
@@ -159,7 +159,7 @@ use App\Core\Settings;
       <h3 style="color:var(--color-text-light); margin: 1rem 0">
         <?= __t('products.custom_note') ?>
       </h3>
-      <a href="/order"
+      <a href="/<?= $lang ?>/order"
          class="btn btn-accent btn-lg"
          style="margin-top: 0.5rem">
         <?= htmlspecialchars(Settings::get('order_button_text_' . $lang, Settings::get('order_button_text_en', __t('products.request_cta')))) ?>

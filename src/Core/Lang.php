@@ -13,6 +13,7 @@ namespace App\Core;
  * Typical bootstrap sequence:
  *   Lang::set(Lang::current());   // restore from session or fall back to 'en'
  *   Lang::load(Lang::current());  // pre-warm the cache for the active locale
+ *   $lang = Lang::fromAcceptHeader();  // detect preferred language on first visit
  *
  * @see __t()  Global shorthand helper defined in src/Core/helpers.php
  */
@@ -152,6 +153,44 @@ class Lang
     public static function available(): array
     {
         return self::AVAILABLE;
+    }
+
+    /**
+     * Detects the preferred language from the HTTP Accept-Language header.
+     *
+     * Parses the browser-sent header (e.g. "es-US,es;q=0.9,en;q=0.8") and
+     * returns 'es' when any Spanish locale outranks or ties with English.
+     * Falls back to 'en' when no header is present or parsing fails.
+     *
+     * @return string 'es' or 'en'
+     *
+     * @example
+     *   // $_SERVER['HTTP_ACCEPT_LANGUAGE'] = 'es-MX,es;q=0.9,en;q=0.8'
+     *   Lang::fromAcceptHeader(); // 'es'
+     */
+    public static function fromAcceptHeader(): string
+    {
+        $header = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '';
+
+        if ($header === '') {
+            return 'en';
+        }
+
+        preg_match_all('/([a-z]{2})(?:-[A-Z]{2})?(?:;q=([\d.]+))?/i', $header, $m, PREG_SET_ORDER);
+
+        $scores = [];
+        foreach ($m as $match) {
+            $code  = strtolower($match[1]);
+            $score = isset($match[2]) && $match[2] !== '' ? (float) $match[2] : 1.0;
+            if (!isset($scores[$code])) {
+                $scores[$code] = $score;
+            }
+        }
+
+        $esScore = $scores['es'] ?? -1.0;
+        $enScore = $scores['en'] ?? 0.0;
+
+        return $esScore >= $enScore ? 'es' : 'en';
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

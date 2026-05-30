@@ -69,15 +69,19 @@ use App\Core\Settings;
                 <div x-show="form.delivery_type === 'pickup'"
                      style="background:var(--color-bg-light);border:1px solid var(--color-border);border-radius:8px;padding:1rem;margin-bottom:1.5rem">
                     <p style="font-weight:600;margin-bottom:0.25rem;color:var(--color-text-dark)">
-                        <?= htmlspecialchars(__t('order.pickup_info')) ?>
+                        <?= $lang === 'es' ? 'Recogida en Estudio' : 'Studio Pickup' ?>
                     </p>
                     <p style="color:var(--color-text-dark);margin-bottom:0.5rem">
                         <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_ADDRESS', '6134 S Troost Ave, Tulsa, OK 74136')) ?>
                     </p>
-                    <a href="https://maps.google.com/?q=<?= urlencode(\App\Core\Config::get('BUSINESS_ADDRESS', '6134 S Troost Ave, Tulsa, OK 74136')) ?>"
-                       target="_blank" rel="noopener noreferrer"
+                    <p style="font-size:0.875rem;color:var(--color-muted);margin-bottom:0.75rem">
+                        <?= $lang === 'es'
+                            ? 'Somos un estudio privado — no hay ventas sin cita. Por favor, envía un mensaje de texto cuando llegues y llevamos tu pedido de inmediato.'
+                            : 'We are a private studio — no walk-ins. Please text us when you arrive and we\'ll bring your order right out.' ?>
+                    </p>
+                    <a href="sms:<?= htmlspecialchars(preg_replace('/\D/', '', (string) \App\Core\Config::get('WHATSAPP_PHONE', ''))) ?>"
                        style="font-size:0.85rem;color:var(--color-primary)">
-                        <?= htmlspecialchars(__t('order.get_directions')) ?> &rarr;
+                        <?= $lang === 'es' ? 'Enviar mensaje de texto al llegar &rarr;' : 'Text us when you arrive &rarr;' ?>
                     </a>
                 </div>
 

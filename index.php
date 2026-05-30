@@ -24,21 +24,20 @@ if (session_status() === PHP_SESSION_NONE) {
     ]);
 }
 
+use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Router;
 use App\Models\PageView;
 
-$request = Request::fromGlobals();
-
 // Capture UTM parameters for ad attribution tracking.
 // Stored in the session so attribution survives across page navigation.
-if ($request->query('utm_source')) {
+if (!empty($_GET['utm_source'])) {
     $_SESSION['utm'] = [
-        'source'   => $request->query('utm_source', ''),
-        'medium'   => $request->query('utm_medium', ''),
-        'campaign' => $request->query('utm_campaign', ''),
-        'content'  => $request->query('utm_content', ''),
-        'term'     => $request->query('utm_term', ''),
+        'source'   => $_GET['utm_source']   ?? '',
+        'medium'   => $_GET['utm_medium']   ?? '',
+        'campaign' => $_GET['utm_campaign'] ?? '',
+        'content'  => $_GET['utm_content']  ?? '',
+        'term'     => $_GET['utm_term']     ?? '',
     ];
 }
 
@@ -57,6 +56,47 @@ PageView::record($_sessionToken, $_pageUrl, $_referrer, $_utmSession, $_ipHash);
 if (!empty($_GET['utm_source'])) {
     PageView::recordAdSession($_sessionToken, $_utmSession, $_ipHash);
 }
+
+// ── Language-prefix routing ───────────────────────────────────────────────
+// Public pages are served under /en/ and /es/ so both language versions
+// are indexable by search engines. Strip the prefix here so the Router
+// still sees plain paths (/products, /order, etc.) without any changes.
+
+$_rawPath = strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
+
+if (preg_match('#^/(en|es)(/.*)?$#', $_rawPath, $_langMatch)) {
+    // Valid lang prefix — set language and rewrite REQUEST_URI for the router.
+    $_langCode     = $_langMatch[1];
+    $_strippedPath = isset($_langMatch[2]) ? $_langMatch[2] : '/';
+    Lang::set($_langCode);
+    $_qs = isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== ''
+        ? '?' . $_SERVER['QUERY_STRING']
+        : '';
+    $_SERVER['REQUEST_URI'] = $_strippedPath . $_qs;
+} elseif (
+    $_SERVER['REQUEST_METHOD'] === 'GET'
+    && !str_starts_with($_rawPath, '/admin')
+    && !str_starts_with($_rawPath, '/lang/')
+    && !str_starts_with($_rawPath, '/quote/')
+    && $_rawPath !== '/robots.txt'
+    && $_rawPath !== '/sitemap.xml'
+    && !str_starts_with($_rawPath, '/public/')
+) {
+    // GET request with no lang prefix — redirect to language-prefixed URL.
+    // Use session language if set, otherwise detect from Accept-Language header.
+    $_detectedLang = isset($_SESSION['lang']) && in_array($_SESSION['lang'], ['en', 'es'], true)
+        ? $_SESSION['lang']
+        : Lang::fromAcceptHeader();
+    $_qs = isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== ''
+        ? '?' . $_SERVER['QUERY_STRING']
+        : '';
+    header('Location: /' . $_detectedLang . $_rawPath . $_qs, true, 302);
+    exit;
+}
+// ── End language-prefix routing ───────────────────────────────────────────
+
+// Build request AFTER lang-prefix rewrite so Router sees the stripped path.
+$request = Request::fromGlobals();
 
 // Route and dispatch
 $routes = require __DIR__ . '/config/routes.php';

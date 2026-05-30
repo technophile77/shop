@@ -37,7 +37,7 @@ use App\Core\Settings;
             <?= htmlspecialchars(Settings::get('hero_subtext_' . $lang, '')) ?>
         </p>
         <div class="hero-actions">
-            <a href="/order" class="btn btn-accent btn-lg">
+            <a href="/<?= $lang ?>/order" class="btn btn-accent btn-lg">
                 <?= htmlspecialchars(Settings::get('order_button_text_' . $lang, 'Request a Custom Bouquet')) ?>
             </a>
             <?php if (Settings::get('show_doordash_button', '1') === '1' && Config::get('DOORDASH_ENABLED') === 'true' && Config::get('DOORDASH_STORE_URL')): ?>
@@ -88,7 +88,7 @@ use App\Core\Settings;
                         <?php endif; ?>
                     </p>
                     <?php endif; ?>
-                    <a href="/order?arrangement=<?= urlencode((string) ($product['name_en'] ?? '')) ?>"
+                    <a href="/<?= $lang ?>/order?arrangement=<?= urlencode((string) ($product['name_en'] ?? '')) ?>"
                        class="btn btn-outline btn-sm"
                        style="width:100%; justify-content:center">
                         <?= htmlspecialchars(Settings::get('order_button_text_' . $lang, 'Request a Custom Bouquet')) ?>
@@ -99,7 +99,7 @@ use App\Core\Settings;
         </div>
 
         <div class="text-center" style="margin-top:3rem">
-            <a href="/products" class="btn btn-primary">
+            <a href="/<?= $lang ?>/products" class="btn btn-primary">
                 <?= htmlspecialchars(__t('home.view_all')) ?>
             </a>
         </div>
