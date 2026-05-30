@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Core\Config;
+use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Settings;
-use App\Core\Lang;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Services\MailService;
 
 /**
  * Handles the public custom bouquet request form.
@@ -118,9 +120,74 @@ final class OrderController extends BaseController
             'notes'             => $notes,
         ]);
 
+        $this->sendOrderNotification(
+            $name, $email, $phone, $eventDate,
+            $occasion, $arrangementStyle, $colorPreferences, $budgetRange, $notes
+        );
+
         return Response::json([
             'success' => true,
             'message' => __t('order.success'),
         ]);
+    }
+
+    /**
+     * Send a new bouquet request notification to the business owner.
+     *
+     * Fires after the order and customer records are persisted. Failures are
+     * silently logged so a mail misconfiguration never breaks the form submit.
+     */
+    private function sendOrderNotification(
+        string $name,
+        string $email,
+        string $phone,
+        string $eventDate,
+        string $occasion,
+        string $arrangementStyle,
+        string $colorPreferences,
+        string $budgetRange,
+        string $notes,
+    ): void {
+        $to = (string) Config::get('BUSINESS_EMAIL', '');
+        if ($to === '' || !MailService::isConfigured()) {
+            return;
+        }
+
+        $rows = '';
+        foreach ([
+            'Name'              => $name,
+            'Email'             => $email,
+            'Phone'             => $phone,
+            'Event Date'        => $eventDate,
+            'Occasion'          => $occasion,
+            'Arrangement Style' => $arrangementStyle,
+            'Color Preferences' => $colorPreferences,
+            'Budget Range'      => $budgetRange,
+            'Notes'             => $notes,
+        ] as $label => $value) {
+            if ($value === '') {
+                continue;
+            }
+            $rows .= '<tr>'
+                . '<td style="padding:6px 12px;font-weight:600;color:#555;white-space:nowrap">'
+                . htmlspecialchars($label) . '</td>'
+                . '<td style="padding:6px 12px;color:#1a1a1a">'
+                . nl2br(htmlspecialchars($value)) . '</td>'
+                . '</tr>';
+        }
+
+        $html = MailService::buildHtml(
+            '<h2 style="margin:0 0 1rem;font-size:1.2rem">New Bouquet Request</h2>'
+            . '<table style="border-collapse:collapse;width:100%">' . $rows . '</table>'
+            . '<p style="margin:1.5rem 0 0;font-size:0.85rem;color:#999">'
+            . 'View all orders in the <a href="' . htmlspecialchars((string) Config::get('APP_URL', '')) . '/admin">admin panel</a>.'
+            . '</p>'
+        );
+
+        $result = MailService::send($to, '', 'New Bouquet Request — ' . ($name ?: 'Anonymous'), $html);
+
+        if (!$result['success']) {
+            error_log('[OrderController] Notification email failed: ' . ($result['error'] ?? 'unknown'));
+        }
     }
 }

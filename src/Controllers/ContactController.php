@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Core\Config;
 use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Settings;
 use App\Models\Customer;
+use App\Services\MailService;
 
 /**
  * Handles the public contact page and its form submission.
@@ -95,6 +97,58 @@ final class ContactController extends BaseController
             'notes'  => $message,
         ]);
 
+        $this->sendContactNotification($name, $email, $phone, $message);
+
         return Response::json(['success' => true]);
+    }
+
+    /**
+     * Send a new contact message notification to the business owner.
+     *
+     * Failures are silently logged so a mail misconfiguration never breaks
+     * the contact form submit.
+     */
+    private function sendContactNotification(
+        string $name,
+        string $email,
+        string $phone,
+        string $message,
+    ): void {
+        $to = (string) Config::get('BUSINESS_EMAIL', '');
+        if ($to === '' || !MailService::isConfigured()) {
+            return;
+        }
+
+        $rows = '';
+        foreach ([
+            'Name'    => $name,
+            'Email'   => $email,
+            'Phone'   => $phone,
+            'Message' => $message,
+        ] as $label => $value) {
+            if ($value === '') {
+                continue;
+            }
+            $rows .= '<tr>'
+                . '<td style="padding:6px 12px;font-weight:600;color:#555;white-space:nowrap;vertical-align:top">'
+                . htmlspecialchars($label) . '</td>'
+                . '<td style="padding:6px 12px;color:#1a1a1a">'
+                . nl2br(htmlspecialchars($value)) . '</td>'
+                . '</tr>';
+        }
+
+        $html = MailService::buildHtml(
+            '<h2 style="margin:0 0 1rem;font-size:1.2rem">New Contact Message</h2>'
+            . '<table style="border-collapse:collapse;width:100%">' . $rows . '</table>'
+            . '<p style="margin:1.5rem 0 0;font-size:0.85rem;color:#999">'
+            . 'View all customers in the <a href="' . htmlspecialchars((string) Config::get('APP_URL', '')) . '/admin/customers">admin panel</a>.'
+            . '</p>'
+        );
+
+        $result = MailService::send($to, '', 'New Message from ' . ($name ?: 'Website Visitor'), $html);
+
+        if (!$result['success']) {
+            error_log('[ContactController] Notification email failed: ' . ($result['error'] ?? 'unknown'));
+        }
     }
 }
