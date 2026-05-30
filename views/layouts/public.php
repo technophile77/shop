@@ -111,7 +111,7 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
                    class="btn btn-accent btn-sm"
                    target="_blank"
                    rel="noopener noreferrer">
-                    <?= htmlspecialchars(\App\Core\Settings::get('doordash_button_label_' . $lang, 'Order Online')) ?>
+                    <?= htmlspecialchars($lang === 'es' ? 'Ordenar en Línea' : 'Order Online') ?>
                 </a>
             </li>
             <?php endif; ?>
