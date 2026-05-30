@@ -184,7 +184,7 @@ final class OrderController extends BaseController
             . '</p>'
         );
 
-        $result = MailService::send($to, '', 'New Bouquet Request — ' . ($name ?: 'Anonymous'), $html);
+        $result = MailService::send($to, '', 'New Bouquet Request - ' . ($name ?: 'Anonymous'), $html);
 
         if (!$result['success']) {
             error_log('[OrderController] Notification email failed: ' . ($result['error'] ?? 'unknown'));

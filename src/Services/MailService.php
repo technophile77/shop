@@ -72,6 +72,7 @@ final class MailService
 
         try {
             $mail->isSMTP();
+            $mail->CharSet    = 'UTF-8';
             $mail->Host       = (string) Config::get('SMTP_HOST', '');
             $mail->SMTPAuth   = true;
             $mail->Username   = (string) Config::get('SMTP_USER', '');
