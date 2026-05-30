@@ -499,10 +499,7 @@ nav.site-nav.scrolled {
 .hero-bg {
   position: absolute;
   inset: 0;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  opacity: 0.35;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .hero-content {

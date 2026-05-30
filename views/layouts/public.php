@@ -309,6 +309,9 @@ document.addEventListener('DOMContentLoaded', function () {
 <!-- Tawk.to live chat widget -->
 <script>
 var Tawk_API = Tawk_API || {}, Tawk_LoadStart = new Date();
+Tawk_API.onLoad = function () {
+    Tawk_API.setAttributes({ language: '<?= $lang === 'es' ? 'Español' : 'English' ?>' }, function () {});
+};
 (function () {
     var s1 = document.createElement('script'),
         s0 = document.getElementsByTagName('script')[0];

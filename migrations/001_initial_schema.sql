@@ -13,6 +13,12 @@
 -- INSERT statements use INSERT IGNORE.
 -- =============================================================================
 
+-- Declare UTF-8 client charset before any DML so accented characters in seed
+-- data are not misinterpreted as Latin-1 by the mysql CLI (which defaults to
+-- Latin-1), which would cause double-encoding in utf8mb4 columns.
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
+
 -- ---------------------------------------------------------------------------
 -- Table: admin_users
 -- Owner logins for the admin panel. Passwords are stored as bcrypt hashes
