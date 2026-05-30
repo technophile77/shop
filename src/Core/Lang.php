@@ -86,7 +86,7 @@ class Lang
      */
     public static function get(string $key, ?string $lang = null): string
     {
-        $code = $lang ?? self::$current;
+        $code = $lang ?? self::current();
 
         if (!isset(self::$cache[$code])) {
             self::load($code);
