@@ -26,6 +26,7 @@ return [
     ['GET',  '/products',                   'ProductController',           'index'],
     ['GET',  '/products/{slug}',            'ProductController',           'byCategory'],
     ['GET',  '/order',                      'OrderController',             'form'],
+    ['POST', '/order/delivery-fee',         'OrderController',             'calculateDelivery'],
     ['POST', '/order',                      'OrderController',             'submit'],
     ['GET',  '/quote/{token}',              'QuoteController',             'show'],
     ['POST', '/quote/{token}/accept',       'QuoteController',             'accept'],

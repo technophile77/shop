@@ -194,6 +194,55 @@ $cashappTag    = Config::get('CASHAPP_TAG', '');
                     </div>
                 </div>
 
+                <!-- Pickup & Delivery Info -->
+                <?php
+                $bizAddr   = \App\Core\Config::get('BUSINESS_ADDRESS', '');
+                $baseMiles = (int) \App\Core\Config::get('BUSINESS_DELIVERY_BASE_MILES', 5);
+                $baseFee   = (int) \App\Core\Config::get('BUSINESS_DELIVERY_BASE_FEE', 10);
+                $perMile   = (int) \App\Core\Config::get('BUSINESS_DELIVERY_PER_MILE_FEE', 1);
+                $mapsUrl   = $bizAddr !== '' ? 'https://maps.google.com/?q=' . urlencode($bizAddr) : '';
+                ?>
+                <?php if ($bizAddr !== '' || $baseFee > 0): ?>
+                <div class="admin-card" style="margin-bottom:1.5rem">
+                    <h3 style="font-size:1rem; font-weight:600; margin-bottom:1rem; color:var(--color-text-dark)">
+                        <?= $lang === 'es' ? 'Recogida y Entrega' : 'Pickup & Delivery' ?>
+                    </h3>
+
+                    <?php if ($bizAddr !== ''): ?>
+                    <div style="margin-bottom:1rem">
+                        <p style="font-size:0.8rem; color:var(--color-muted); margin-bottom:0.25rem; text-transform:uppercase; letter-spacing:0.05em">
+                            <?= htmlspecialchars(__t('footer.pickup_address')) ?>
+                        </p>
+                        <p style="font-weight:600; margin-bottom:0.25rem"><?= htmlspecialchars($bizAddr) ?></p>
+                        <?php if ($mapsUrl !== ''): ?>
+                        <a href="<?= htmlspecialchars($mapsUrl) ?>" target="_blank" rel="noopener noreferrer"
+                           style="font-size:0.85rem; color:var(--color-primary)">
+                            <?= htmlspecialchars(__t('order.get_directions')) ?> &rarr;
+                        </a>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($baseFee > 0): ?>
+                    <div>
+                        <p style="font-size:0.8rem; color:var(--color-muted); margin-bottom:0.25rem; text-transform:uppercase; letter-spacing:0.05em">
+                            <?= htmlspecialchars(__t('footer.delivery_info')) ?>
+                        </p>
+                        <p style="font-weight:600">
+                            <?= $lang === 'es'
+                                ? htmlspecialchars("Dentro de {$baseMiles} millas: \${$baseFee}")
+                                : htmlspecialchars("Within {$baseMiles} miles: \${$baseFee}") ?>
+                        </p>
+                        <p style="font-size:0.85rem; color:var(--color-muted)">
+                            <?= $lang === 'es'
+                                ? htmlspecialchars("+\${$perMile} por milla adicional")
+                                : htmlspecialchars("+\${$perMile} per additional mile") ?>
+                        </p>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+
                 <!-- Payment / deposit info -->
                 <?php if ($zellePhone !== '' || $cashappTag !== ''): ?>
                 <div class="admin-card" style="background:var(--color-bg-light); border:1px solid var(--color-border)">

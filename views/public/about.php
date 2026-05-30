@@ -80,6 +80,41 @@ $aboutText = Settings::get('about_text_' . $lang, Config::get($lang === 'es' ? '
                 </div>
                 <?php endif; ?>
 
+                <?php
+                $bizAddr   = \App\Core\Config::get('BUSINESS_ADDRESS', '');
+                $baseMiles = (int) \App\Core\Config::get('BUSINESS_DELIVERY_BASE_MILES', 5);
+                $baseFee   = (int) \App\Core\Config::get('BUSINESS_DELIVERY_BASE_FEE', 10);
+                $perMile   = (int) \App\Core\Config::get('BUSINESS_DELIVERY_PER_MILE_FEE', 1);
+                $mapsUrl   = $bizAddr !== '' ? 'https://maps.google.com/?q=' . urlencode($bizAddr) : '';
+                if ($bizAddr !== ''): ?>
+                <div style="margin-top:1rem">
+                    <p style="color:var(--color-muted); font-size:0.9rem; margin-bottom:0.25rem">
+                        <?= $lang === 'es' ? 'Dirección' : 'Address' ?>
+                    </p>
+                    <p style="font-weight:600; color:var(--color-text-dark); margin-bottom:0.25rem">
+                        <?= htmlspecialchars($bizAddr) ?>
+                    </p>
+                    <?php if ($mapsUrl !== ''): ?>
+                    <a href="<?= htmlspecialchars($mapsUrl) ?>" target="_blank" rel="noopener noreferrer"
+                       style="font-size:0.85rem; color:var(--color-primary)">
+                        <?= htmlspecialchars(__t('order.get_directions')) ?> &rarr;
+                    </a>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+                <?php if ($baseFee > 0): ?>
+                <div style="margin-top:1rem">
+                    <p style="color:var(--color-muted); font-size:0.9rem; margin-bottom:0.25rem">
+                        <?= $lang === 'es' ? 'Entrega' : 'Delivery' ?>
+                    </p>
+                    <p style="font-weight:600; color:var(--color-text-dark)">
+                        <?= $lang === 'es'
+                            ? htmlspecialchars("Dentro de {$baseMiles} millas: \${$baseFee} · +\${$perMile} por milla adicional")
+                            : htmlspecialchars("Within {$baseMiles} miles: \${$baseFee} · +\${$perMile} per additional mile") ?>
+                    </p>
+                </div>
+                <?php endif; ?>
+
                 <!-- Social links -->
                 <?php if ($fbUrl !== '' || $igUrl !== ''): ?>
                 <div style="margin-top:2rem; display:flex; gap:1rem; flex-wrap:wrap">

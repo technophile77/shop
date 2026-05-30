@@ -295,9 +295,35 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
                         </a>
                     </li>
                     <?php endif; ?>
+                    <?php
+                    $bizAddr  = \App\Core\Config::get('BUSINESS_ADDRESS', '');
+                    $baseMiles = (int) \App\Core\Config::get('BUSINESS_DELIVERY_BASE_MILES', 5);
+                    $baseFee   = (int) \App\Core\Config::get('BUSINESS_DELIVERY_BASE_FEE', 10);
+                    $perMile   = (int) \App\Core\Config::get('BUSINESS_DELIVERY_PER_MILE_FEE', 1);
+                    ?>
+                    <?php if ($bizAddr !== ''): ?>
+                    <li style="font-size:0.85rem; color:rgba(255,255,255,0.65); margin-top:0.75rem; line-height:1.4">
+                        <span style="color:rgba(255,255,255,0.4); display:block; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.2rem">
+                            <?= htmlspecialchars(__t('footer.pickup_address')) ?>
+                        </span>
+                        <?= htmlspecialchars($bizAddr) ?>
+                    </li>
+                    <?php endif; ?>
+                    <?php if ($baseFee > 0): ?>
+                    <li style="font-size:0.85rem; color:rgba(255,255,255,0.65); margin-top:0.5rem; line-height:1.4">
+                        <span style="color:rgba(255,255,255,0.4); display:block; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.2rem">
+                            <?= htmlspecialchars(__t('footer.delivery_info')) ?>
+                        </span>
+                        <?= $lang === 'es'
+                            ? htmlspecialchars("Dentro de {$baseMiles} millas: \${$baseFee} · +\${$perMile} por milla adicional")
+                            : htmlspecialchars("Within {$baseMiles} miles: \${$baseFee} · +\${$perMile} per additional mile") ?>
+                    </li>
+                    <?php endif; ?>
+                    <?php if ($bizAddr === '' && $baseFee === 0): ?>
                     <li style="color:rgba(255,255,255,0.5); font-size:0.9rem">
                         <?= htmlspecialchars(__t('footer.delivery')) ?>
                     </li>
+                    <?php endif; ?>
                 </ul>
             </div>
 

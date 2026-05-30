@@ -62,6 +62,15 @@ return [
     'order.submit'               => 'Enviar Mi Solicitud',
     'order.success'              => '¡Gracias! Recibimos tu solicitud y pronto te enviaremos una cotización personalizada.',
     'order.error'                => 'Algo salió mal. Por favor intenta de nuevo o contáctanos directamente.',
+    'order.pickup'               => 'Recoger',
+    'order.delivery'             => 'Entrega a Domicilio',
+    'order.delivery_address'     => 'Dirección de Entrega',
+    'order.delivery_fee'         => 'Tarifa de Entrega Estimada',
+    'order.pickup_info'          => 'Lugar de Recogida',
+    'order.calculating_fee'      => 'Calculando tarifa de entrega...',
+    'order.get_directions'       => 'Cómo Llegar',
+    'order.delivery_type'        => '¿Cómo desea recibir su pedido?',
+    'order.delivery_outside_range' => 'Lo sentimos, solo hacemos entregas dentro de 30 millas de nuestra ubicación.',
 
     // ── Quote acceptance page ─────────────────────────────────────────────────
     'quote.title'                => 'Tu Cotización Personalizada',
@@ -102,8 +111,10 @@ return [
     // ── Footer ────────────────────────────────────────────────────────────────
     'footer.tagline'      => 'Hecho con Amor',
     'footer.rights'       => 'Todos los derechos reservados',
-    'footer.delivery'     => 'Entrega y Recogida Disponible',
-    'footer.doordash_cta' => 'Pedir en DoorDash',
+    'footer.delivery'       => 'Entrega y Recogida Disponible',
+    'footer.pickup_address' => 'Dirección de Recogida',
+    'footer.delivery_info'  => 'Entrega',
+    'footer.doordash_cta'   => 'Pedir en DoorDash',
 
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Cargando...',

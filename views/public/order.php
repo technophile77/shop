@@ -46,6 +46,79 @@ use App\Core\Settings;
                   x-data="orderForm()"
                   @submit.prevent="submitOrder">
 
+                <!-- Pickup or Delivery -->
+                <div class="form-group" style="margin-bottom:1.5rem">
+                    <label style="display:block;margin-bottom:0.75rem;font-weight:600">
+                        <?= htmlspecialchars(__t('order.delivery_type')) ?>
+                    </label>
+                    <div style="display:flex;gap:2rem;flex-wrap:wrap">
+                        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-weight:normal">
+                            <input type="radio" x-model="form.delivery_type" value="pickup"
+                                   style="width:1.1rem;height:1.1rem;accent-color:var(--color-primary)">
+                            <?= htmlspecialchars(__t('order.pickup')) ?>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-weight:normal">
+                            <input type="radio" x-model="form.delivery_type" value="delivery"
+                                   style="width:1.1rem;height:1.1rem;accent-color:var(--color-primary)">
+                            <?= htmlspecialchars(__t('order.delivery')) ?>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Pickup info card -->
+                <div x-show="form.delivery_type === 'pickup'"
+                     style="background:var(--color-bg-light);border:1px solid var(--color-border);border-radius:8px;padding:1rem;margin-bottom:1.5rem">
+                    <p style="font-weight:600;margin-bottom:0.25rem;color:var(--color-text-dark)">
+                        <?= htmlspecialchars(__t('order.pickup_info')) ?>
+                    </p>
+                    <p style="color:var(--color-text-dark);margin-bottom:0.5rem">
+                        <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_ADDRESS', '6134 S Troost Ave, Tulsa, OK 74136')) ?>
+                    </p>
+                    <a href="https://maps.google.com/?q=<?= urlencode(\App\Core\Config::get('BUSINESS_ADDRESS', '6134 S Troost Ave, Tulsa, OK 74136')) ?>"
+                       target="_blank" rel="noopener noreferrer"
+                       style="font-size:0.85rem;color:var(--color-primary)">
+                        <?= htmlspecialchars(__t('order.get_directions')) ?> &rarr;
+                    </a>
+                </div>
+
+                <!-- Delivery address + fee calculator -->
+                <div x-show="form.delivery_type === 'delivery'" style="margin-bottom:1.5rem">
+                    <div class="form-group">
+                        <label>
+                            <?= htmlspecialchars(__t('order.delivery_address')) ?>
+                            <span style="color:var(--color-accent)">*</span>
+                        </label>
+                        <input type="text"
+                               x-model="form.delivery_address"
+                               @blur="calculateFee()"
+                               placeholder="Street address, City, State, ZIP"
+                               autocomplete="street-address">
+                    </div>
+
+                    <!-- Calculating spinner -->
+                    <p x-show="calculatingFee" style="font-size:0.9rem;color:var(--color-muted)">
+                        <?= htmlspecialchars(__t('order.calculating_fee')) ?>
+                    </p>
+
+                    <!-- Fee result -->
+                    <div x-show="feeResult !== null && !calculatingFee"
+                         style="background:var(--color-bg-light);border:1px solid var(--color-border);border-radius:8px;padding:1rem">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem">
+                            <span style="color:var(--color-muted);font-size:0.9rem">Distance</span>
+                            <span x-text="feeResult ? feeResult.distance + ' miles' : ''"></span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-weight:600">
+                            <span><?= htmlspecialchars(__t('order.delivery_fee')) ?></span>
+                            <span style="color:var(--color-primary)" x-text="feeResult ? '$' + feeResult.fee.toFixed(2) : ''"></span>
+                        </div>
+                    </div>
+
+                    <!-- Fee error -->
+                    <p x-show="feeError && !calculatingFee"
+                       style="color:#d32f2f;font-size:0.9rem;margin-top:0.5rem"
+                       x-text="feeError"></p>
+                </div>
+
                 <!-- Name + Event Date -->
                 <div class="grid-2">
                     <div class="form-group">
@@ -174,9 +247,12 @@ use App\Core\Settings;
  */
 function orderForm() {
     return {
-        submitting: false,
-        success:    false,
-        error:      '',
+        submitting:     false,
+        success:        false,
+        error:          '',
+        feeResult:      null,
+        feeError:       '',
+        calculatingFee: false,
         form: {
             name:               '',
             email:              '',
@@ -187,12 +263,55 @@ function orderForm() {
             color_preferences:  '',
             budget_range:       '',
             notes:              '',
+            delivery_type:      'pickup',
+            delivery_address:   '',
+            delivery_fee:       null,
             _csrf_token:        '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>'
+        },
+
+        async calculateFee() {
+            if (!this.form.delivery_address || this.form.delivery_address.length < 5) return;
+            this.calculatingFee = true;
+            this.feeError       = '';
+            this.feeResult      = null;
+            try {
+                const res = await fetch('/order/delivery-fee', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': this.form._csrf_token
+                    },
+                    body: JSON.stringify({ address: this.form.delivery_address, _csrf_token: this.form._csrf_token })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.feeResult        = data;
+                    this.form.delivery_fee = data.fee;
+                } else {
+                    this.feeError          = data.error;
+                    this.form.delivery_fee = null;
+                }
+            } catch (_e) {
+                this.feeError = 'Could not calculate delivery fee. Please try again.';
+            } finally {
+                this.calculatingFee = false;
+            }
         },
 
         async submitOrder() {
             this.submitting = true;
             this.error      = '';
+
+            if (this.form.delivery_type === 'delivery' && !this.form.delivery_address) {
+                this.error      = 'Please enter your delivery address.';
+                this.submitting = false;
+                return;
+            }
+            if (this.form.delivery_type === 'delivery' && !this.feeResult) {
+                this.error      = 'Please wait for the delivery fee to be calculated.';
+                this.submitting = false;
+                return;
+            }
 
             try {
                 const res = await fetch('/order', {

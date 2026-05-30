@@ -22,8 +22,8 @@ final class Order
      * Creates a new order record and returns its auto-increment ID.
      *
      * @param array<string, mixed> $data Recognised keys: customer_id,
-     *        event_date, delivery_type, occasion, arrangement_style,
-     *        color_preferences, budget_range, notes.
+     *        event_date, delivery_type, delivery_address, delivery_fee,
+     *        occasion, arrangement_style, color_preferences, budget_range, notes.
      *
      * @return int The newly created order ID.
      *
@@ -32,6 +32,8 @@ final class Order
      *       'customer_id'       => 12,
      *       'event_date'        => '2026-06-14',
      *       'delivery_type'     => 'pickup',
+     *       'delivery_address'  => null,
+     *       'delivery_fee'      => null,
      *       'occasion'          => 'Birthday',
      *       'arrangement_style' => 'Romantic',
      *       'color_preferences' => 'Pink and white',
@@ -43,17 +45,19 @@ final class Order
     {
         $stmt = Database::rw()->prepare(
             'INSERT INTO orders
-                (customer_id, event_date, delivery_type, occasion,
-                 arrangement_style, color_preferences, budget_range, notes)
+                (customer_id, event_date, delivery_type, delivery_address, delivery_fee,
+                 occasion, arrangement_style, color_preferences, budget_range, notes)
              VALUES
-                (:customer_id, :event_date, :delivery_type, :occasion,
-                 :arrangement_style, :color_preferences, :budget_range, :notes)'
+                (:customer_id, :event_date, :delivery_type, :delivery_address, :delivery_fee,
+                 :occasion, :arrangement_style, :color_preferences, :budget_range, :notes)'
         );
 
         $stmt->execute([
             ':customer_id'       => $data['customer_id']       ?? null,
             ':event_date'        => $data['event_date']        ?? null,
             ':delivery_type'     => $data['delivery_type']     ?? 'pickup',
+            ':delivery_address'  => $data['delivery_address']  ?? null,
+            ':delivery_fee'      => $data['delivery_fee']      ?? null,
             ':occasion'          => $data['occasion']          ?? null,
             ':arrangement_style' => $data['arrangement_style'] ?? null,
             ':color_preferences' => $data['color_preferences'] ?? null,

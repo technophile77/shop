@@ -62,6 +62,15 @@ return [
     'order.submit'               => 'Send My Request',
     'order.success'              => 'Thank you! We received your request and will send you a custom quote soon.',
     'order.error'                => 'Something went wrong. Please try again or contact us directly.',
+    'order.pickup'               => 'Pickup',
+    'order.delivery'             => 'Delivery',
+    'order.delivery_address'     => 'Delivery Address',
+    'order.delivery_fee'         => 'Estimated Delivery Fee',
+    'order.pickup_info'          => 'Pickup Location',
+    'order.calculating_fee'      => 'Calculating delivery fee...',
+    'order.get_directions'       => 'Get Directions',
+    'order.delivery_type'        => 'How would you like to receive your order?',
+    'order.delivery_outside_range' => 'Sorry, we only deliver within 30 miles of our location.',
 
     // ── Quote acceptance page ─────────────────────────────────────────────────
     'quote.title'                => 'Your Custom Quote',
@@ -102,8 +111,10 @@ return [
     // ── Footer ────────────────────────────────────────────────────────────────
     'footer.tagline'      => 'Handcrafted with Love',
     'footer.rights'       => 'All rights reserved',
-    'footer.delivery'     => 'Delivery & Pickup Available',
-    'footer.doordash_cta' => 'Order on DoorDash',
+    'footer.delivery'       => 'Delivery & Pickup Available',
+    'footer.pickup_address' => 'Pickup Address',
+    'footer.delivery_info'  => 'Delivery',
+    'footer.doordash_cta'   => 'Order on DoorDash',
 
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Loading...',
