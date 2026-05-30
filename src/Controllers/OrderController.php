@@ -179,6 +179,7 @@ final class OrderController extends BaseController
         $html = MailService::buildHtml(
             '<h2 style="margin:0 0 1rem;font-size:1.2rem">New Bouquet Request</h2>'
             . '<table style="border-collapse:collapse;width:100%">' . $rows . '</table>'
+            . '<p style="margin:1.5rem 0 0;font-size:0.9rem">Enjoyed our service? <a href="https://g.page/r/CXreQ_QPNWNOEBM/review" style="color:#B55AA0">Leave us a Google review</a> — it means the world to us! 🌸</p>'
             . '<p style="margin:1.5rem 0 0;font-size:0.85rem;color:#999">'
             . 'View all orders in the <a href="' . htmlspecialchars((string) Config::get('APP_URL', '')) . '/admin">admin panel</a>.'
             . '</p>'

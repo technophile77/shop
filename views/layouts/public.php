@@ -219,6 +219,19 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
                         </svg>
                     </a>
                     <?php endif; ?>
+
+                    <?php if (\App\Core\Config::get('GOOGLE_REVIEW_URL')): ?>
+                    <!-- Google review link -->
+                    <a href="<?= htmlspecialchars(\App\Core\Config::get('GOOGLE_REVIEW_URL', '')) ?>"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       aria-label="Leave a Google review"
+                       style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.1);color:inherit;transition:background 0.2s">
+                        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="width:20px;height:20px">
+                            <path d="M12 11h8.533c.044.385.067.78.067 1.184 0 2.734-.98 5.048-2.678 6.61C16.25 20.403 14.3 21.2 12 21.2c-5.09 0-9.2-4.11-9.2-9.2s4.11-9.2 9.2-9.2c2.483 0 4.57.914 6.177 2.408L16.2 7.2C14.95 6.037 13.56 5.2 12 5.2 7.91 5.2 4.6 8.51 4.6 12.6s3.31 7.4 7.4 7.4c4.084 0 6.8-2.867 6.8-6.8H12v-2.2z"/>
+                        </svg>
+                    </a>
+                    <?php endif; ?>
                 </div>
             </div>
 

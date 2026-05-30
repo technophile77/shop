@@ -10,17 +10,18 @@ use App\Core\Request;
 use App\Core\Response;
 
 /**
- * Handles admin authentication: login form, login submission, and logout.
+ * Handles admin authentication: login form, login submission, logout, and
+ * password changes for the currently logged-in admin.
  *
- * All routes in this controller bypass the 'auth' middleware — the Router
- * applies auth checks before dispatching, so no redundant session checks are
- * needed here except the early-exit on loginForm() when already logged in.
+ * Login routes bypass the 'auth' middleware — the Router applies auth checks
+ * before dispatching, so no redundant session checks are needed here except
+ * the early-exit on loginForm() when already logged in.
  *
  * Brute-force mitigation: a 1-second sleep is applied on every failed login
- * attempt before re-rendering the form.
+ * attempt and on every failed current-password verification.
  *
  * @see \App\Controllers\BaseController  Provides render() and redirect().
- * @see \App\Core\Database               ro() for SELECT, rw() for last_login UPDATE.
+ * @see \App\Core\Database               ro() for SELECT, rw() for writes.
  */
 final class AuthController extends BaseController
 {
@@ -147,5 +148,113 @@ final class AuthController extends BaseController
         session_destroy();
 
         return $this->redirect('/admin/login');
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /admin/change-password — change password form
+    // -------------------------------------------------------------------------
+
+    /**
+     * Render the change-password form for the currently logged-in admin.
+     *
+     * Route: GET /admin/change-password (auth middleware)
+     *
+     * @param Request              $request Current HTTP request.
+     * @param array<string,string> $params  Route parameters (none for this route).
+     *
+     * @return Response Rendered HTML for admin/change-password.
+     *
+     * @example
+     *   $response = (new AuthController())->changePasswordForm($request, []);
+     */
+    public function changePasswordForm(Request $request, array $params = []): Response
+    {
+        return Response::html(
+            $this->render('admin/change-password', [
+                'csrfToken' => $request->csrfToken(),
+                'error'     => '',
+                'pageTitle' => 'Change Password',
+            ], 'admin')
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /admin/change-password — change password submission
+    // -------------------------------------------------------------------------
+
+    /**
+     * Handle the change-password form POST.
+     *
+     * Validates the CSRF token, verifies the current password against the stored
+     * bcrypt hash (sleeping 1 second on failure to slow brute-force), checks
+     * that the new password is at least 8 characters and that the confirmation
+     * matches, then updates the hash in the database.
+     *
+     * Route: POST /admin/change-password (auth middleware)
+     *
+     * On success:
+     *   - Writes the new bcrypt hash (cost 12) to admin_users.password_hash.
+     *   - Sets a success flash message.
+     *   - Redirects to /admin/change-password.
+     *
+     * On failure:
+     *   - Re-renders the form with an error message (no redirect).
+     *   - Sleeps 1 second when the current-password check fails.
+     *
+     * @param Request              $request Current HTTP request.
+     * @param array<string,string> $params  Route parameters (none for this route).
+     *
+     * @return Response JSON error on CSRF failure; redirect on success; HTML form on failure.
+     *
+     * @example
+     *   $response = (new AuthController())->changePassword($request, []);
+     */
+    public function changePassword(Request $request, array $params = []): Response
+    {
+        if (!$request->validateCsrf()) {
+            return Response::json(['error' => 'Invalid CSRF token.'], 403);
+        }
+
+        $currentPassword = (string) $request->post('current_password', '');
+        $newPassword     = (string) $request->post('new_password', '');
+        $confirmPassword = (string) $request->post('confirm_password', '');
+
+        $renderForm = function (string $error) use ($request): Response {
+            return Response::html(
+                $this->render('admin/change-password', [
+                    'csrfToken' => $request->csrfToken(),
+                    'error'     => $error,
+                    'pageTitle' => 'Change Password',
+                ], 'admin')
+            );
+        };
+
+        $stmt = Database::ro()->prepare(
+            'SELECT * FROM admin_users WHERE id = ? LIMIT 1'
+        );
+        $stmt->execute([(int) ($_SESSION['admin_id'] ?? 0)]);
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if ($row === false || !password_verify($currentPassword, (string) $row['password_hash'])) {
+            sleep(1);
+            return $renderForm('Current password is incorrect.');
+        }
+
+        if (strlen($newPassword) < 8) {
+            return $renderForm('New password must be at least 8 characters.');
+        }
+
+        if ($newPassword !== $confirmPassword) {
+            return $renderForm('New passwords do not match.');
+        }
+
+        $hash   = password_hash($newPassword, PASSWORD_BCRYPT, ['cost' => 12]);
+        $update = Database::rw()->prepare(
+            'UPDATE admin_users SET password_hash = ? WHERE id = ?'
+        );
+        $update->execute([$hash, (int) ($_SESSION['admin_id'] ?? 0)]);
+
+        $_SESSION['flash'] = ['type' => 'success', 'message' => 'Password updated successfully.'];
+        return $this->redirect('/admin/change-password');
     }
 }

@@ -174,6 +174,23 @@ $currentUri = $_SERVER['REQUEST_URI'] ?? '/admin';
                 </svg>
                 Site Settings
             </a>
+            <a href="/admin/admin-users" class="<?= str_starts_with($currentUri, '/admin/admin-users') ? 'active' : '' ?>">
+                <!-- Shield with person icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M8 1L2 3.5v4C2 11 5 13.5 8 15c3-1.5 6-4 6-7.5v-4L8 1z" fill="currentColor" opacity="0.25" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                    <circle cx="8" cy="6.5" r="1.75" fill="currentColor"/>
+                    <path d="M5 11.5c0-1.66 1.34-3 3-3s3 1.34 3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+                Admin Users
+            </a>
+            <a href="/admin/change-password" class="<?= $currentUri === '/admin/change-password' ? 'active' : '' ?>">
+                <!-- Key icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <circle cx="5.5" cy="8" r="3.5" stroke="currentColor" stroke-width="1.4"/>
+                    <path d="M8.5 8h5M11.5 8v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+                Change Password
+            </a>
             <a href="/admin/logout">
                 <!-- Arrow-right-from-box logout icon -->
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">

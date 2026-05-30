@@ -95,4 +95,14 @@ return [
     // Settings
     ['GET',  '/admin/settings',             'Admin\SettingsController',    'index',           ['auth']],
     ['POST', '/admin/settings',             'Admin\SettingsController',    'update',          ['auth']],
+
+    // Admin Users
+    ['GET',  '/admin/admin-users',             'Admin\AdminUsersController', 'index',   ['auth']],
+    ['GET',  '/admin/admin-users/new',         'Admin\AdminUsersController', 'newForm', ['auth']],
+    ['POST', '/admin/admin-users',             'Admin\AdminUsersController', 'create',  ['auth']],
+    ['POST', '/admin/admin-users/{id}/delete', 'Admin\AdminUsersController', 'delete',  ['auth']],
+
+    // Change Password
+    ['GET',  '/admin/change-password', 'Admin\AuthController', 'changePasswordForm', ['auth']],
+    ['POST', '/admin/change-password', 'Admin\AuthController', 'changePassword',     ['auth']],
 ];
