@@ -35,7 +35,7 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     // Use it to build correct lang-prefixed canonical/hreflang/OG URLs.
     $_seoBasePath = $_SERVER['LANG_STRIPPED_PATH'] ?? '/';
     $_seoAppUrl   = rtrim((string) \App\Core\Config::get('APP_URL', ''), '/');
-    $_seoPageUrl  = $_seoAppUrl . '/' . $lang . ($_seoBasePath === '/' ? '' : $_seoBasePath);
+    $_seoPageUrl  = $_seoAppUrl . '/' . $lang . ($_seoBasePath === '/' ? '/' : $_seoBasePath);
     ?>
     <link rel="canonical"                     href="<?= htmlspecialchars($_seoPageUrl) ?>">
     <link rel="alternate" hreflang="en"       href="<?= htmlspecialchars($_seoAppUrl . '/en' . ($_seoBasePath === '/' ? '/' : $_seoBasePath)) ?>">
