@@ -31,7 +31,7 @@ final class OrderController extends BaseController
      *
      * Generates a CSRF token and optionally pre-fills the arrangement hint
      * from the `arrangement` query parameter so product cards that link here
-     * can pre-populate the occasion field.
+     * can pre-populate the arrangement_style field.
      *
      * @param Request              $request HTTP request.
      * @param array<string, mixed> $params  Route parameters (unused).

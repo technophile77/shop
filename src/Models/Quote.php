@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Core\Database;
+use App\Core\Config;
 
 /**
  * Represents a custom-quote record in the `quotes` table.
@@ -15,6 +16,8 @@ use App\Core\Database;
  * admin can audit the full history.
  *
  * All reads use {@see Database::ro()}; all writes use {@see Database::rw()}.
+ *
+ * @see \App\Core\Config
  *
  * @see \App\Models\Customer::refreshLifetimeSpend()
  */
@@ -75,6 +78,8 @@ final class Quote
      *        - event_date (string|null): ISO date of the event, e.g. '2026-09-01'.
      *        - items (array): each element has keys description, qty, unit_price.
      *        - deposit_pct (int): percentage of subtotal required as deposit; default 50.
+     *        - tax_rate (float): sales tax rate applied; read from BUSINESS_SALES_TAX_RATE config.
+     *        - tax_amount (float): computed tax on the subtotal; stored for display.
      *        - notes (string|null): freeform note shown on the quote.
      *        - valid_days (int): days until the quote expires; default 14.
      *
@@ -109,13 +114,18 @@ final class Quote
         $depositAmount = $subtotal * ($depositPct / 100);
         $validUntil    = date('Y-m-d', strtotime("+{$validDays} days"));
 
+        $taxRate   = (float) Config::get('BUSINESS_SALES_TAX_RATE', 0.0);
+        $taxAmount = round($subtotal * $taxRate, 2);
+
         $stmt = Database::rw()->prepare(
             'INSERT INTO quotes
                 (token, customer_id, event_date, items_json, subtotal,
-                 deposit_pct, deposit_amount, notes, valid_until, status)
+                 deposit_pct, tax_rate, tax_amount, deposit_amount,
+                 notes, valid_until, status)
              VALUES
                 (:token, :customer_id, :event_date, :items_json, :subtotal,
-                 :deposit_pct, :deposit_amount, :notes, :valid_until, :status)'
+                 :deposit_pct, :tax_rate, :tax_amount, :deposit_amount,
+                 :notes, :valid_until, :status)'
         );
 
         $stmt->execute([
@@ -125,6 +135,8 @@ final class Quote
             ':items_json'     => json_encode($items, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
             ':subtotal'       => $subtotal,
             ':deposit_pct'    => $depositPct,
+            ':tax_rate'       => $taxRate,
+            ':tax_amount'     => $taxAmount,
             ':deposit_amount' => $depositAmount,
             ':notes'          => $data['notes'] ?? null,
             ':valid_until'    => $validUntil,

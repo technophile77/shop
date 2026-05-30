@@ -89,6 +89,29 @@ use App\Core\Config;
                 $<?= number_format((float) $quote['subtotal'], 2) ?>
               </td>
             </tr>
+            <?php
+            $taxRate   = (float) ($quote['tax_rate']   ?? 0.0);
+            $taxAmount = (float) ($quote['tax_amount'] ?? 0.0);
+            $quoteTotal = (float) $quote['subtotal'] + $taxAmount;
+            ?>
+            <?php if ($taxAmount > 0): ?>
+            <tr>
+              <td colspan="3" style="text-align:right; padding-top:0.5rem; color:var(--color-muted)">
+                Tax (<?= number_format($taxRate * 100, 3) ?>%)
+              </td>
+              <td style="text-align:right; padding-top:0.5rem; color:var(--color-primary); font-weight:600">
+                $<?= number_format($taxAmount, 2) ?>
+              </td>
+            </tr>
+            <tr class="quote-total-row">
+              <td colspan="3" style="text-align:right; padding-top:0.5rem; font-weight:700">
+                Total
+              </td>
+              <td style="text-align:right; padding-top:0.5rem; color:var(--color-primary); font-weight:700; font-size:1.2rem">
+                $<?= number_format($quoteTotal, 2) ?>
+              </td>
+            </tr>
+            <?php endif; ?>
           </tfoot>
         </table>
 

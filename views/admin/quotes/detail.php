@@ -25,6 +25,10 @@ $subtotal   = (float) $quote['subtotal'];
 $deposit    = (float) $quote['deposit_amount'];
 $depositPct = (int)   $quote['deposit_pct'];
 
+$taxRate   = (float) ($quote['tax_rate']   ?? 0.0);
+$taxAmount = (float) ($quote['tax_amount'] ?? 0.0);
+$total     = $subtotal + $taxAmount;
+
 $orderedStatuses = ['draft', 'sent', 'accepted', 'deposit_confirmed', 'completed'];
 
 /**
@@ -100,7 +104,7 @@ $statusLabel = static function (string $s): string {
         </div>
         <div style="text-align:right">
             <div style="font-size:1.5rem; font-weight:700; color:var(--color-text-dark)">
-                $<?= number_format($subtotal, 2) ?>
+                $<?= number_format($total, 2) ?>
             </div>
             <div style="font-size:0.875rem; color:var(--color-muted)">
                 Deposit (<?= $depositPct ?>%): <strong>$<?= number_format($deposit, 2) ?></strong>
@@ -177,6 +181,24 @@ $statusLabel = static function (string $s): string {
                             $<?= number_format($subtotal, 2) ?>
                         </td>
                     </tr>
+                    <?php if ($taxAmount > 0): ?>
+                    <tr>
+                        <td colspan="3" style="text-align:right; padding:0.5rem 1rem; color:var(--color-muted)">
+                            Tax (<?= number_format($taxRate * 100, 3) ?>%)
+                        </td>
+                        <td style="text-align:right; padding:0.5rem 1.5rem; font-weight:600">
+                            $<?= number_format($taxAmount, 2) ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="3" style="text-align:right; padding:0.5rem 1rem; font-weight:700">
+                            Total
+                        </td>
+                        <td style="text-align:right; padding:0.5rem 1.5rem; font-weight:700; font-size:1.05rem">
+                            $<?= number_format($total, 2) ?>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
                     <tr>
                         <td colspan="3" style="text-align:right; padding:0.5rem 1rem; color:var(--color-muted)">
                             Deposit (<?= $depositPct ?>%)

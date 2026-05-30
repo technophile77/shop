@@ -161,6 +161,10 @@
                 <span style="color:var(--color-muted)">Subtotal</span>
                 <strong x-text="'$' + subtotal.toFixed(2)"></strong>
             </div>
+            <div x-show="taxRate > 0" style="display:flex; justify-content:space-between; padding:0.5rem 0; border-bottom:1px solid var(--color-border)">
+                <span style="color:var(--color-muted)">Tax (<span x-text="(taxRate * 100).toFixed(3)"></span>%)</span>
+                <strong x-text="'$' + taxAmount.toFixed(2)"></strong>
+            </div>
             <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 0; border-bottom:1px solid var(--color-border)">
                 <div>
                     <span style="color:var(--color-muted)">Deposit</span>
@@ -176,7 +180,7 @@
             </div>
             <div style="display:flex; justify-content:space-between; padding:0.75rem 0; font-size:1.05rem">
                 <strong>Total</strong>
-                <strong x-text="'$' + subtotal.toFixed(2)"></strong>
+                <strong x-text="'$' + total.toFixed(2)"></strong>
             </div>
         </div>
     </div>
@@ -246,6 +250,8 @@ function quoteBuilder() {
         validDays: 14,
         /** Deposit percentage (25 | 50 | 75 | 100). */
         depositPct: 50,
+        /** Sales tax rate from server config, e.g. 0.08517. */
+        taxRate: <?= (float) \App\Core\Config::get('BUSINESS_SALES_TAX_RATE', 0) ?>,
         notes: '',
 
         /** Line-item list; always starts with one blank row. */
@@ -267,6 +273,22 @@ function quoteBuilder() {
          */
         get deposit() {
             return this.subtotal * (this.depositPct / 100);
+        },
+
+        /**
+         * Tax amount in dollars based on subtotal × taxRate.
+         * @returns {number}
+         */
+        get taxAmount() {
+            return this.subtotal * this.taxRate;
+        },
+
+        /**
+         * Grand total: subtotal plus tax.
+         * @returns {number}
+         */
+        get total() {
+            return this.subtotal + this.taxAmount;
         },
 
         /** Append a blank line item to the table. */

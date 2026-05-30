@@ -8,7 +8,7 @@
  * Variables injected by BaseController::render() via OrderController::form():
  *   string $lang            Current locale ('en' or 'es').
  *   string $csrfToken       Session CSRF token.
- *   string $arrangementHint Pre-fill value for the occasion field (may be empty).
+ *   string $arrangementHint Pre-fill value for the arrangement_style field (may be empty).
  *   string $pageTitle       Localised page title from site settings.
  *
  * @see \App\Controllers\OrderController::form()
@@ -115,6 +115,14 @@ use App\Core\Settings;
                     <p x-show="feeError"
                        style="color:#d32f2f;font-size:0.9rem;margin-top:0.5rem"
                        x-text="feeError"></p>
+
+                    <!-- Tax notice -->
+                    <?php $deliveryTaxRate = (float) \App\Core\Config::get('BUSINESS_SALES_TAX_RATE', 0); ?>
+                    <?php if ($deliveryTaxRate > 0): ?>
+                    <p style="font-size:0.8rem; color:var(--color-muted); margin-top:0.5rem">
+                        <?= number_format($deliveryTaxRate * 100, 3) ?>% <?= htmlspecialchars((string) \App\Core\Config::get('BUSINESS_STATE', 'OK')) ?> sales tax will apply to your order total.
+                    </p>
+                    <?php endif; ?>
                 </div>
 
                 <!-- Name + Event Date -->
@@ -173,7 +181,16 @@ use App\Core\Settings;
                         <input type="text"
                                name="arrangement_style"
                                x-model="form.arrangement_style"
-                               placeholder="<?= htmlspecialchars(__t('order.style_placeholder')) ?>">
+                               placeholder="<?= htmlspecialchars(__t('order.style_placeholder')) ?>"
+                               <?php if (!empty($arrangementHint)): ?>
+                               readonly
+                               style="background:var(--color-bg-light); color:var(--color-muted); cursor:default"
+                               <?php endif; ?>>
+                        <?php if (!empty($arrangementHint)): ?>
+                        <p style="font-size:0.8rem; color:var(--color-muted); margin-top:0.25rem">
+                            Pre-filled from your selection — contact us if you'd like a different arrangement.
+                        </p>
+                        <?php endif; ?>
                     </div>
                     <div class="form-group">
                         <label><?= htmlspecialchars(__t('order.colors')) ?></label>
@@ -260,8 +277,8 @@ function orderForm() {
             email:             '',
             phone:             '',
             event_date:        '',
-            occasion:          '<?= htmlspecialchars(addslashes($arrangementHint ?? ''), ENT_QUOTES) ?>',
-            arrangement_style: '',
+            occasion:          '',
+            arrangement_style: '<?= htmlspecialchars(addslashes($arrangementHint ?? ''), ENT_QUOTES) ?>',
             color_preferences: '',
             budget_range:      '',
             notes:             '',
