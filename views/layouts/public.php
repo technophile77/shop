@@ -105,6 +105,16 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
             </li>
             <li><a href="/about"><?= htmlspecialchars(__t('nav.about')) ?></a></li>
             <li><a href="/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a></li>
+            <?php if (\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')): ?>
+            <li>
+                <a href="<?= htmlspecialchars(\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')) ?>"
+                   class="btn btn-accent btn-sm"
+                   target="_blank"
+                   rel="noopener noreferrer">
+                    <?= htmlspecialchars(\App\Core\Settings::get('doordash_button_label_' . $lang, 'Order Online')) ?>
+                </a>
+            </li>
+            <?php endif; ?>
         </ul>
 
         <!-- Desktop nav actions: language toggle -->
@@ -137,6 +147,13 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
         <a href="/order"><?= htmlspecialchars(\App\Core\Settings::get('order_button_text_' . $lang, __t('nav.order'))) ?></a>
         <a href="/about"><?= htmlspecialchars(__t('nav.about')) ?></a>
         <a href="/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a>
+        <?php if (\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')): ?>
+        <a href="<?= htmlspecialchars(\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')) ?>"
+           target="_blank"
+           rel="noopener noreferrer">
+            <?= htmlspecialchars(\App\Core\Settings::get('doordash_button_label_' . $lang, 'Order Online')) ?>
+        </a>
+        <?php endif; ?>
         <a href="/lang/<?= htmlspecialchars($lang === 'en' ? 'es' : 'en') ?>"
            class="lang-toggle"
            aria-label="Switch language"><?= htmlspecialchars(__t('nav.lang_switch')) ?></a>
