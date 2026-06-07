@@ -58,7 +58,7 @@
                 </label>
                 <label class="admin-form-check">
                     <input type="radio" name="recipients" value="vip" x-model="recipients">
-                    VIP customers only (opted-in SMS, $<?= htmlspecialchars((string) Settings::get('vip_spend_threshold', '200')) ?>+ spend)
+                    VIP customers only (opted-in SMS, $<?= htmlspecialchars((string) ($settings['vip_spend_threshold'] ?? '200')) ?>+ spend)
                 </label>
                 <label class="admin-form-check">
                     <input type="radio" name="recipients" value="manual" x-model="recipients">

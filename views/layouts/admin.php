@@ -29,6 +29,8 @@ $currentUri = $_SERVER['REQUEST_URI'] ?? '/admin';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($pageTitle) ?> | Admin — <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?></title>
 
+    <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
+
     <!-- Google Fonts: Cormorant Garamond, Montserrat, Lato -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -98,6 +100,16 @@ $currentUri = $_SERVER['REQUEST_URI'] ?? '/admin';
                 </svg>
                 Products
             </a>
+            <a href="/admin/media" class="<?= str_starts_with($currentUri, '/admin/media') ? 'active' : '' ?>">
+                <!-- Photo/image icon: rectangle with mountain and sun -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <rect x="1" y="2" width="14" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="currentColor" opacity="0.15"/>
+                    <rect x="1" y="2" width="14" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                    <circle cx="5" cy="6" r="1.5" fill="currentColor" opacity="0.7"/>
+                    <path d="M1 10l3.5-3.5 3 3 2-2 3.5 3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Media
+            </a>
             <a href="/admin/categories" class="<?= str_starts_with($currentUri, '/admin/categories') ? 'active' : '' ?>">
                 <!-- Tag icon: rounded rectangle with a circle cut-out -->
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -105,6 +117,17 @@ $currentUri = $_SERVER['REQUEST_URI'] ?? '/admin';
                     <circle cx="5" cy="5" r="1.25" fill="white"/>
                 </svg>
                 Categories
+            </a>
+            <a href="/admin/addons" class="<?= str_starts_with($currentUri, '/admin/addons') ? 'active' : '' ?>">
+                <!-- Gift/plus icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <rect x="1" y="5" width="14" height="10" rx="1.5" fill="currentColor" opacity="0.25"/>
+                    <rect x="1" y="5" width="14" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                    <rect x="5.5" y="1" width="2" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+                    <rect x="8.5" y="1" width="2" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+                    <path d="M8 8v4M6 10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+                Add-Ons
             </a>
 
             <!-- Orders -->

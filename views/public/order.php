@@ -10,12 +10,26 @@
  *   string $csrfToken       Session CSRF token.
  *   string $arrangementHint Pre-fill value for the arrangement_style field (may be empty).
  *   string $pageTitle       Localised page title from site settings.
+ *   array  $addons          Active add-ons for the checkbox grid (may be empty).
  *
  * @see \App\Controllers\OrderController::form()
  */
 
 use App\Core\Config;
 use App\Core\Settings;
+
+$addonsJson = json_encode(
+    array_map(
+        fn ($a) => [
+            'id'      => (int) $a['id'],
+            'name_en' => $a['name_en'],
+            'name_es' => $a['name_es'] ?? null,
+            'image'   => $a['image_path'] ?? null,
+        ],
+        $addons ?? []
+    ),
+    JSON_HEX_TAG | JSON_HEX_QUOT
+);
 ?>
 
 <!-- ============================================================
@@ -43,7 +57,7 @@ use App\Core\Settings;
         <div class="admin-card" style="max-width:700px; margin:0 auto">
 
             <form id="order-form"
-                  x-data="orderForm()"
+                  x-data="orderForm(<?= htmlspecialchars($addonsJson, ENT_QUOTES, 'UTF-8') ?>)"
                   @submit.prevent="submitOrder">
 
                 <!-- Pickup or Delivery -->
@@ -218,6 +232,42 @@ use App\Core\Settings;
                     </select>
                 </div>
 
+                <!-- Add-Ons -->
+                <template x-if="availableAddons.length > 0">
+                    <div class="form-group">
+                        <label style="display:block; margin-bottom:0.75rem; font-weight:600">
+                            <?= $lang === 'es' ? 'Extras' : 'Add-Ons' ?>
+                        </label>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:0.75rem">
+                            <template x-for="addon in availableAddons" :key="addon.id">
+                                <label style="display:flex; flex-direction:column; align-items:center; gap:0.5rem;
+                                              cursor:pointer; padding:0.75rem; border-radius:8px;
+                                              border:2px solid; transition:border-color 0.15s, background 0.15s;
+                                              background:var(--color-bg-light); text-align:center"
+                                       :style="form.addons.some(a => a.id === addon.id)
+                                           ? 'border-color:var(--color-primary); background:#fdf3fc'
+                                           : 'border-color:#e8e8e8'">
+                                    <img x-show="addon.image"
+                                         :src="'/public/uploads/products/' + addon.image"
+                                         style="width:80px; height:80px; object-fit:cover; border-radius:6px"
+                                         :alt="addon.name_en">
+                                    <div x-show="!addon.image"
+                                         style="width:80px; height:80px; background:#ececec; border-radius:6px;
+                                                display:flex; align-items:center; justify-content:center; font-size:1.5rem">
+                                        🎁
+                                    </div>
+                                    <span style="font-size:0.82rem; color:var(--color-text-dark); line-height:1.3"
+                                          x-text="addon.name_en"></span>
+                                    <input type="checkbox"
+                                           :checked="form.addons.some(a => a.id === addon.id)"
+                                           @change="toggleAddon(addon)"
+                                           style="width:1rem; height:1rem; accent-color:var(--color-primary)">
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
                 <!-- Notes -->
                 <div class="form-group">
                     <label><?= htmlspecialchars(__t('order.notes')) ?></label>
@@ -268,9 +318,13 @@ use App\Core\Settings;
  * Delivery fee is calculated client-side using Google Places Autocomplete
  * for address selection and the Haversine formula for distance. No
  * server-side geocoding call is made.
+ *
+ * @param {Array} availableAddons Active add-ons from the server, shaped as
+ *        [{id, name_en, name_es, image}, …]. Empty when none are configured.
  */
-function orderForm() {
+function orderForm(availableAddons = []) {
     return {
+        availableAddons: availableAddons,
         submitting: false,
         success:    false,
         error:      '',
@@ -289,6 +343,7 @@ function orderForm() {
             delivery_type:     'pickup',
             delivery_address:  '',
             delivery_fee:      null,
+            addons:            [],
             _csrf_token:       '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>'
         },
 
@@ -332,6 +387,23 @@ function orderForm() {
             this.form.delivery_fee     = Math.round(fee * 100) / 100;
             this.feeResult             = { distance: Math.round(distance * 10) / 10, fee: this.form.delivery_fee };
             this.feeError              = '';
+        },
+
+        /**
+         * Toggle an add-on in form.addons.
+         *
+         * Stores a snapshot {id, name_en, name_es} so the order record and
+         * notification email show names independent of future add-on changes.
+         *
+         * @param {{id:number, name_en:string, name_es:string|null, image:string|null}} addon
+         */
+        toggleAddon(addon) {
+            const idx = this.form.addons.findIndex(a => a.id === addon.id);
+            if (idx >= 0) {
+                this.form.addons.splice(idx, 1);
+            } else {
+                this.form.addons.push({ id: addon.id, name_en: addon.name_en, name_es: addon.name_es });
+            }
         },
 
         async submitOrder() {

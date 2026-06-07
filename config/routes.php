@@ -35,6 +35,7 @@ return [
     ['POST', '/contact',                    'ContactController',           'submit'],
     ['POST', '/signup',                     'SignupController',            'submit'],
     ['GET',  '/lang/{code}',               'LocaleController',            'switch'],
+    ['GET',  '/sitemap.xml',               'SitemapController',           'index'],
 
     // -----------------------------------------------------------------------
     // Admin — unauthenticated (login form; no 'auth' middleware)
@@ -63,6 +64,20 @@ return [
     ['POST', '/admin/categories',           'Admin\CategoriesController',  'create',          ['auth']],
     ['POST', '/admin/categories/{id}',      'Admin\CategoriesController',  'update',          ['auth']],
     ['POST', '/admin/categories/{id}/delete', 'Admin\CategoriesController', 'delete',         ['auth']],
+
+    // Add-Ons
+    ['GET',  '/admin/addons',             'Admin\AddonsController', 'index',    ['auth']],
+    ['GET',  '/admin/addons/new',         'Admin\AddonsController', 'newForm',  ['auth']],
+    ['POST', '/admin/addons',             'Admin\AddonsController', 'create',   ['auth']],
+    ['GET',  '/admin/addons/{id}/edit',   'Admin\AddonsController', 'editForm', ['auth']],
+    ['POST', '/admin/addons/{id}',        'Admin\AddonsController', 'update',   ['auth']],
+    ['POST', '/admin/addons/{id}/delete', 'Admin\AddonsController', 'delete',   ['auth']],
+
+    // Media
+    ['GET',  '/admin/media',        'Admin\MediaController', 'index',  ['auth']],
+    ['GET',  '/admin/media/list',   'Admin\MediaController', 'list',   ['auth']],
+    ['POST', '/admin/media/upload', 'Admin\MediaController', 'upload', ['auth']],
+    ['POST', '/admin/media/delete', 'Admin\MediaController', 'delete', ['auth']],
 
     // Quotes
     ['GET',  '/admin/quotes',               'Admin\QuotesController',      'index',           ['auth']],

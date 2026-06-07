@@ -48,15 +48,21 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     <meta property="og:title"       content="<?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
     <meta property="og:description" content="<?= htmlspecialchars($metaDesc ?: ($lang === 'es' ? 'Arreglos florales y ramos personalizados en Tulsa, OK.' : 'Custom bouquets and fresh flowers in Tulsa, OK.')) ?>">
     <meta property="og:url"         content="<?= htmlspecialchars($_seoPageUrl) ?>">
-    <meta property="og:image"       content="<?= htmlspecialchars($_seoAppUrl) ?>/public/assets/images/header.jpg">
+    <meta property="og:image"       content="<?= htmlspecialchars($ogImage ?? ($_seoAppUrl . '/public/assets/images/header.jpg')) ?>">
 
     <!-- Twitter Card -->
     <meta name="twitter:card"        content="summary_large_image">
     <meta name="twitter:title"       content="<?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
     <meta name="twitter:description" content="<?= htmlspecialchars($metaDesc ?: ($lang === 'es' ? 'Arreglos florales y ramos personalizados en Tulsa, OK.' : 'Custom bouquets and fresh flowers in Tulsa, OK.')) ?>">
-    <meta name="twitter:image"       content="<?= htmlspecialchars($_seoAppUrl) ?>/public/assets/images/header.jpg">
+    <meta name="twitter:image"       content="<?= htmlspecialchars($ogImage ?? ($_seoAppUrl . '/public/assets/images/header.jpg')) ?>">
 
     <meta name="csrf-token" content="<?= htmlspecialchars($_layoutCsrfToken) ?>">
+
+    <?php if ($gscVerification = \App\Core\Config::get('GOOGLE_SITE_VERIFICATION')): ?>
+    <meta name="google-site-verification" content="<?= htmlspecialchars($gscVerification) ?>">
+    <?php endif; ?>
+
+    <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
 
     <!-- Google Fonts: Cormorant Garamond, Montserrat, Lato -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -138,7 +144,27 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
             $_schemaLinks
         ));
         ?>
+      ],
+      "priceRange": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_PRICE_RANGE', '$$'), ENT_QUOTES) ?>"
+      <?php
+      // Emit openingHoursSpecification only when at least one day is configured.
+      $_days = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+      $_dayNames = ['mon','tue','wed','thu','fri','sat','sun'];
+      $_hoursEntries = [];
+      foreach ($_days as $_i => $_dayCode):
+          $_opens  = \App\Core\Settings::get('business_hours_' . $_dayNames[$_i] . '_open');
+          $_closes = \App\Core\Settings::get('business_hours_' . $_dayNames[$_i] . '_close');
+          if ($_opens && $_closes):
+              $_hoursEntries[] = '{"@type":"OpeningHoursSpecification","dayOfWeek":"https://schema.org/' . $_dayCode . '","opens":"' . htmlspecialchars($_opens, ENT_QUOTES) . '","closes":"' . htmlspecialchars($_closes, ENT_QUOTES) . '"}';
+          endif;
+      endforeach;
+      if (!empty($_hoursEntries)):
+      ?>,
+      "openingHoursSpecification": [
+        <?= implode(",\n        ", $_hoursEntries) ?>
+
       ]
+      <?php endif; ?>
     }
     </script>
 </head>
@@ -463,7 +489,7 @@ Tawk_API.onLoad = function () {
 <!-- Toast notification container (populated by main.js) -->
 <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-<script src="/public/assets/js/main.js"></script>
+<script src="/public/assets/js/main.js" defer></script>
 
 </body>
 </html>

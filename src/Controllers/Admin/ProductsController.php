@@ -15,9 +15,8 @@ use App\Models\ProductCategory;
  * Admin controller for the Products CRUD section.
  *
  * Handles listing, creating, editing, updating, and soft-deleting products.
- * Image uploads are validated (JPEG/PNG/WebP, max 5 MB), given a unique
- * filename, moved to public/uploads/products/, and resized to a max width of
- * 1200 px via the Imagick extension before the database record is saved.
+ * Product images are selected from the media library; upload and resize are
+ * handled by MediaController.
  *
  * Flash messages are stored in $_SESSION['flash'] as
  * ['type' => 'success'|'error', 'message' => '…'] and are read and cleared
@@ -26,23 +25,15 @@ use App\Models\ProductCategory;
  * No auth checks are performed here — the Router enforces the 'auth'
  * middleware for every /admin/* route before this controller is invoked.
  *
- * @see \App\Models\Product          Provides all database read/write operations.
- * @see \App\Models\ProductCategory  Supplies category options for the form select.
- * @see \App\Controllers\BaseController  Provides render() and redirect().
+ * @see \App\Models\Product                      Provides all database read/write operations.
+ * @see \App\Models\ProductCategory              Supplies category options for the form select.
+ * @see \App\Controllers\BaseController          Provides render() and redirect().
+ * @see \App\Controllers\Admin\MediaController   Handles image upload and resize.
  */
 final class ProductsController extends BaseController
 {
     /** Absolute path to the product image upload directory. */
     private const UPLOAD_DIR = __DIR__ . '/../../../public/uploads/products/';
-
-    /** Maximum allowed upload size in bytes (5 MB). */
-    private const MAX_BYTES = 5 * 1024 * 1024;
-
-    /** MIME types accepted for product images. */
-    private const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
-
-    /** Maximum image width after resize (px). Aspect ratio is preserved. */
-    private const MAX_WIDTH = 1200;
 
     // -------------------------------------------------------------------------
     // GET /admin/products — list
@@ -129,21 +120,17 @@ final class ProductsController extends BaseController
     /**
      * Handle the product creation form submission.
      *
-     * Validates the CSRF token, processes an optional image upload, validates
-     * required fields, sanitises all string inputs, and delegates to
-     * Product::create(). On success, sets a flash message and redirects to
-     * the product list. On validation failure, sets an error flash and redirects
-     * back to the create form.
+     * Validates the CSRF token, validates required fields, sanitises all string
+     * inputs, and delegates to Product::create(). If the POST field 'image_path'
+     * contains a basename that resolves to an existing file in the upload
+     * directory, that filename is stored as the product's image. On success,
+     * sets a flash message and redirects to the product list. On validation
+     * failure, sets an error flash and redirects back to the create form.
      *
-     * @param Request              $request HTTP request containing POST data and
-     *                                      an optional multipart file upload under
-     *                                      the field name 'image'.
+     * @param Request              $request HTTP request containing POST data.
      * @param array<string,string> $params  Route parameters (none for this route).
      *
      * @return Response Redirect to /admin/products or /admin/products/new.
-     *
-     * @throws \RuntimeException  When the upload directory is not writable.
-     * @throws \ImagickException  When Imagick fails to process the image.
      *
      * @example
      *   (new ProductsController())->create($request, []);
@@ -167,12 +154,8 @@ final class ProductsController extends BaseController
             return $this->redirect('/admin/products/new');
         }
 
-        $imagePath = $this->handleImageUpload($request);
-        if ($imagePath === false) {
-            return $this->redirect('/admin/products/new');
-        }
-
-        if ($imagePath !== null) {
+        $imagePath = basename(trim((string) $request->post('image_path', '')));
+        if ($imagePath !== '' && is_file(self::UPLOAD_DIR . $imagePath)) {
             $data['image_path'] = $imagePath;
         }
 
@@ -229,9 +212,11 @@ final class ProductsController extends BaseController
     /**
      * Handle the product update form submission.
      *
-     * If a new image is uploaded, the old image file is deleted from disk
-     * (when the filename differs) before the new path is saved. Validates CSRF,
-     * required fields, and sanitises inputs the same way as create().
+     * Validates CSRF, required fields, and sanitises inputs the same way as
+     * create(). If 'image_path' is a non-empty basename pointing to an existing
+     * file in the upload directory, it is saved as the product's image. If
+     * 'image_path' is an empty string, image_path is cleared to null (removes
+     * the image association without deleting the file from disk).
      *
      * @param Request              $request HTTP request.
      * @param array<string,string> $params  Route parameters; expects 'id'.
@@ -267,21 +252,11 @@ final class ProductsController extends BaseController
             return $this->redirect("/admin/products/{$id}/edit");
         }
 
-        $imagePath = $this->handleImageUpload($request);
-        if ($imagePath === false) {
-            return $this->redirect("/admin/products/{$id}/edit");
-        }
-
-        if ($imagePath !== null) {
-            // Delete the old image from disk when it differs from the new one.
-            $oldPath = $product['image_path'] ?? null;
-            if ($oldPath !== null && $oldPath !== $imagePath) {
-                $fullOld = self::UPLOAD_DIR . $oldPath;
-                if (is_file($fullOld)) {
-                    unlink($fullOld);
-                }
-            }
+        $imagePath = basename(trim((string) $request->post('image_path', '')));
+        if ($imagePath !== '' && is_file(self::UPLOAD_DIR . $imagePath)) {
             $data['image_path'] = $imagePath;
+        } elseif ($imagePath === '') {
+            $data['image_path'] = null;
         }
 
         Product::update($id, $data);
@@ -362,112 +337,6 @@ final class ProductsController extends BaseController
             'featured'       => $request->post('featured') !== null ? 1 : 0,
             'active'         => $request->post('active') !== null ? 1 : 0,
         ];
-    }
-
-    /**
-     * Validate and persist an uploaded product image.
-     *
-     * Validates MIME type (JPEG, PNG, WebP only) and file size (max 5 MB).
-     * Generates a collision-resistant filename with uniqid(), moves the temp
-     * file to the upload directory, then resizes the image to at most
-     * MAX_WIDTH pixels wide while preserving aspect ratio using Imagick.
-     *
-     * Returns null when no file was uploaded (not an error), the new filename
-     * string on success, or false when validation fails (the flash message is
-     * set before returning false).
-     *
-     * @param Request $request The HTTP request; the file field name is 'image'.
-     *
-     * @return string|false|null
-     *   - string  → the saved filename (basename only, no directory).
-     *   - null    → no file was uploaded; caller should leave image_path unchanged.
-     *   - false   → validation failed; flash error already set; caller should redirect.
-     */
-    private function handleImageUpload(Request $request): string|false|null
-    {
-        $file = $request->file('image');
-
-        if ($file === null) {
-            return null;
-        }
-
-        // Validate upload error code.
-        if ($file['error'] !== UPLOAD_ERR_OK) {
-            $this->setFlash('error', 'Image upload failed (error code ' . $file['error'] . ').');
-            return false;
-        }
-
-        // Validate file size.
-        if ($file['size'] > self::MAX_BYTES) {
-            $this->setFlash('error', 'Image must be smaller than 5 MB.');
-            return false;
-        }
-
-        // Validate MIME type using the actual file content, not the browser header.
-        $mime = mime_content_type($file['tmp_name']);
-        if ($mime === false || !in_array($mime, self::ALLOWED_MIME, true)) {
-            $this->setFlash('error', 'Only JPEG, PNG, and WebP images are allowed.');
-            return false;
-        }
-
-        // Derive a safe extension from the validated MIME type.
-        $ext = match ($mime) {
-            'image/jpeg' => 'jpg',
-            'image/png'  => 'png',
-            'image/webp' => 'webp',
-        };
-
-        $filename = uniqid('product_', true) . '.' . $ext;
-        $dest     = self::UPLOAD_DIR . $filename;
-
-        if (!is_dir(self::UPLOAD_DIR)) {
-            mkdir(self::UPLOAD_DIR, 0755, true);
-        }
-
-        if (!move_uploaded_file($file['tmp_name'], $dest)) {
-            $this->setFlash('error', 'Failed to save the uploaded image.');
-            return false;
-        }
-
-        // Resize to MAX_WIDTH if wider, preserving aspect ratio.
-        $this->resizeImage($dest);
-
-        return $filename;
-    }
-
-    /**
-     * Resize an image file in-place so its width does not exceed MAX_WIDTH.
-     *
-     * Uses the Imagick extension when available. Falls back silently when
-     * Imagick is not installed — the unresized image is still usable.
-     * The file is written back to the same path after resizing.
-     *
-     * @param string $path Absolute filesystem path to the image file.
-     *
-     * @return void
-     *
-     * @see self::MAX_WIDTH
-     */
-    private function resizeImage(string $path): void
-    {
-        if (!class_exists(\Imagick::class)) {
-            return;
-        }
-
-        try {
-            $img = new \Imagick($path);
-
-            if ($img->getImageWidth() > self::MAX_WIDTH) {
-                $img->resizeImage(self::MAX_WIDTH, 0, \Imagick::FILTER_LANCZOS, 1);
-            }
-
-            $img->writeImage($path);
-            $img->clear();
-            $img->destroy();
-        } catch (\ImagickException) {
-            // Non-fatal — log and continue with the unresized file.
-            error_log("[ProductsController] Imagick resize failed for {$path}");
-        }
     }
 
     /**

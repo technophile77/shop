@@ -10,6 +10,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Settings;
 use App\Models\Customer;
+use App\Models\Addon;
 use App\Models\Order;
 use App\Services\MailService;
 
@@ -38,6 +39,8 @@ final class OrderController extends BaseController
      *
      * @return Response Rendered HTML response.
      *
+     * @see \App\Models\Addon::allActive()
+     *
      * @example
      *   // GET /order?arrangement=Eternal+Roses
      */
@@ -48,11 +51,14 @@ final class OrderController extends BaseController
         $arrangementHint  = $request->query('arrangement', '');
         $pageTitle        = (string) Settings::get('order_page_title_' . $lang, 'Request a Custom Bouquet');
 
+        $addons = Addon::allActive();
+
         $html = $this->render('public/order', [
             'csrfToken'       => $csrfToken,
             'arrangementHint' => $arrangementHint,
             'lang'            => $lang,
             'pageTitle'       => $pageTitle,
+            'addons'          => $addons,
         ]);
 
         return Response::html($html);
@@ -97,6 +103,24 @@ final class OrderController extends BaseController
         $deliveryAddress    = trim((string) $request->post('delivery_address', ''));
         $deliveryFee        = $request->post('delivery_fee') !== null ? (float) $request->post('delivery_fee') : null;
 
+        // Sanitise add-ons selection — the client sends form.addons as a JSON array
+        // of {id, name_en, name_es} snapshots, already decoded by Request::jsonBody().
+        $rawAddons = $request->post('addons', []);
+        $addons    = [];
+        if (is_array($rawAddons)) {
+            foreach ($rawAddons as $item) {
+                if (!is_array($item) || !isset($item['id'])) {
+                    continue;
+                }
+                $addons[] = [
+                    'id'      => (int) $item['id'],
+                    'name_en' => strip_tags(trim((string) ($item['name_en'] ?? ''))),
+                    'name_es' => (isset($item['name_es']) && $item['name_es'] !== '')
+                                 ? strip_tags(trim((string) $item['name_es'])) : null,
+                ];
+            }
+        }
+
         // Delivery address is required when delivery type is delivery.
         if ($deliveryType === 'delivery' && $deliveryAddress === '') {
             return Response::json(['success' => false, 'error' => 'Please enter your delivery address.'], 422);
@@ -132,12 +156,14 @@ final class OrderController extends BaseController
             'color_preferences' => $colorPreferences,
             'budget_range'      => $budgetRange,
             'notes'             => $notes,
+            'addons'            => $addons !== [] ? json_encode($addons) : null,
         ]);
 
         $this->sendOrderNotification(
             $name, $email, $phone, $eventDate,
             $occasion, $arrangementStyle, $colorPreferences, $budgetRange, $notes,
-            $deliveryType, $deliveryAddress, $deliveryFee
+            $deliveryType, $deliveryAddress, $deliveryFee,
+            $addons
         );
 
         return Response::json([
@@ -155,6 +181,7 @@ final class OrderController extends BaseController
      * @param string      $deliveryType    'pickup' or 'delivery'.
      * @param string      $deliveryAddress Customer delivery address; empty for pickup orders.
      * @param float|null  $deliveryFee     Calculated delivery fee; null for pickup orders.
+     * @param array  $addons          Selected add-on snapshots; empty array when none were chosen.
      */
     private function sendOrderNotification(
         string $name,
@@ -169,6 +196,7 @@ final class OrderController extends BaseController
         string $deliveryType = 'pickup',
         string $deliveryAddress = '',
         ?float $deliveryFee = null,
+        array  $addons = [],
     ): void {
         $to = (string) Config::get('BUSINESS_EMAIL', '');
         if ($to === '' || !MailService::isConfigured()) {
@@ -196,6 +224,15 @@ final class OrderController extends BaseController
                 . htmlspecialchars($label) . '</td>'
                 . '<td style="padding:6px 12px;color:#1a1a1a">'
                 . nl2br(htmlspecialchars($value)) . '</td>'
+                . '</tr>';
+        }
+
+        if ($addons !== []) {
+            $addonNames = implode(', ', array_map(fn ($a) => $a['name_en'], $addons));
+            $rows .= '<tr>'
+                . '<td style="padding:6px 12px;font-weight:600;color:#555;white-space:nowrap">Add-Ons</td>'
+                . '<td style="padding:6px 12px;color:#1a1a1a">'
+                . htmlspecialchars($addonNames) . '</td>'
                 . '</tr>';
         }
 

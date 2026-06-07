@@ -19,6 +19,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Claude Code workspace
+.claude/
+
 # PHP error dumps
 *.php~
 /tmp/

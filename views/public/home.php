@@ -71,7 +71,9 @@ use App\Core\Settings;
                          ? htmlspecialchars('/public/uploads/products/' . $product['image_path'])
                          : '/public/assets/images/placeholder-flower.jpg' ?>"
                      alt="<?= htmlspecialchars($product['name_' . $lang] ?? $product['name_en'] ?? '') ?>"
-                     loading="lazy">
+                     loading="lazy"
+                     width="400"
+                     height="300">
                 <div class="product-card-body">
                     <span class="product-card-category">
                         <?= htmlspecialchars($product['category_name'] ?? '') ?>

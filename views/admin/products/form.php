@@ -27,8 +27,7 @@
 <?php endif; ?>
 
 <form method="POST"
-      action="<?= $isNew ? '/admin/products' : '/admin/products/' . (int) $product['id'] ?>"
-      enctype="multipart/form-data">
+      action="<?= $isNew ? '/admin/products' : '/admin/products/' . (int) $product['id'] ?>">
 
     <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrfToken ?? '') ?>">
 
@@ -84,37 +83,166 @@
                 </div>
             </div>
 
-            <!-- Photo -->
-            <div class="admin-card">
+            <!-- Photo Picker -->
+            <?php $pickerXdata = 'imagePicker(' . json_encode($product['image_path'] ?? '') . ', ' . json_encode($csrfToken ?? '') . ')'; ?>
+            <div class="admin-card"
+                 x-data="<?= htmlspecialchars($pickerXdata, ENT_QUOTES, 'UTF-8') ?>">
                 <p class="admin-card-title" style="margin-bottom:1.25rem">Product Photo</p>
 
-                <?php if (!$isNew && !empty($product['image_path'])): ?>
-                <div style="margin-bottom:1rem">
-                    <p style="font-size:0.8rem; color:#666; margin-bottom:0.5rem">Current photo:</p>
-                    <img src="/public/uploads/products/<?= htmlspecialchars($product['image_path']) ?>"
-                         style="width:120px; height:90px; object-fit:cover; border-radius:6px; border:1.5px solid #dde1e7"
-                         alt="Current product photo">
-                </div>
-                <?php endif; ?>
+                <input type="hidden" name="image_path" :value="selected">
 
-                <div class="admin-form-group" style="margin-bottom:0">
-                    <label for="image">
-                        <?= (!$isNew && !empty($product['image_path'])) ? 'Replace Photo' : 'Upload Photo' ?>
-                    </label>
-                    <input type="file"
-                           id="image"
-                           name="image"
-                           accept="image/jpeg,image/png,image/webp"
-                           data-preview="#img-preview"
-                           style="width:100%; padding:0.5rem 0; font-size:0.9rem">
-                    <p style="font-size:0.78rem; color:#999; margin-top:0.35rem">
-                        JPEG, PNG, or WebP · max 5 MB · resized to 1200 px wide automatically
-                    </p>
-                    <div class="img-preview-wrap">
-                        <img id="img-preview" class="img-preview" alt="Preview">
+                <div x-show="selected" style="margin-bottom:1rem">
+                    <img :src="'/public/uploads/products/' + selected"
+                         style="width:120px; height:90px; object-fit:cover; border-radius:6px; border:1.5px solid #dde1e7"
+                         alt="Selected product photo">
+                    <div style="margin-top:0.5rem; display:flex; gap:0.5rem">
+                        <button type="button" class="admin-btn admin-btn-ghost"
+                                style="padding:0.3rem 0.75rem; font-size:0.75rem"
+                                @click="openPicker()">Change</button>
+                        <button type="button" class="admin-btn"
+                                style="padding:0.3rem 0.75rem; font-size:0.75rem; background:#fee2e2; color:#b91c1c; border-color:#fca5a5"
+                                @click="selected = ''">Remove</button>
                     </div>
                 </div>
-            </div>
+                <div x-show="!selected">
+                    <button type="button" class="admin-btn admin-btn-ghost"
+                            style="padding:0.5rem 1rem; font-size:0.85rem"
+                            @click="openPicker()">Choose from Library</button>
+                    <p style="font-size:0.78rem; color:#999; margin-top:0.35rem">
+                        Upload images via the <a href="/admin/media" target="_blank" style="color:var(--color-primary)">Media Library</a>.
+                    </p>
+                </div>
+
+                <!-- Picker overlay -->
+                <div x-show="open" x-cloak
+                     style="position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.55);
+                            display:flex; align-items:center; justify-content:center"
+                     @keydown.escape.window="open = false"
+                     @click.self="open = false">
+                    <div style="background:#fff; border-radius:10px; padding:1.5rem; width:720px;
+                                max-width:95vw; max-height:85vh; display:flex; flex-direction:column; gap:1rem;
+                                box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+
+                        <div style="display:flex; justify-content:space-between; align-items:center">
+                            <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:1.3rem; font-weight:600">
+                                Choose Image
+                            </h2>
+                            <button type="button" @click="open = false"
+                                    style="font-size:1.5rem; line-height:1; color:#666; background:none; border:none; cursor:pointer">
+                                &times;
+                            </button>
+                        </div>
+
+                        <!-- Upload new image within picker -->
+                        <div style="display:flex; align-items:center; gap:0.75rem; padding:0.75rem;
+                                    background:#f8f8f8; border-radius:6px; flex-wrap:wrap">
+                            <label style="font-size:0.8rem; color:#555; font-weight:500">Upload new:</label>
+                            <input type="file" accept="image/jpeg,image/png,image/webp"
+                                   @change="uploadFile($event)"
+                                   style="font-size:0.82rem; flex:1; min-width:180px">
+                            <span x-show="uploading" style="font-size:0.8rem; color:#666">Uploading&hellip;</span>
+                            <span x-show="uploadError" x-text="uploadError"
+                                  style="font-size:0.8rem; color:#b91c1c"></span>
+                        </div>
+
+                        <!-- Image grid -->
+                        <div style="overflow-y:auto; flex:1; min-height:200px">
+                            <div x-show="loading" style="text-align:center; color:#999; padding:3rem">Loading&hellip;</div>
+                            <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px">
+                                <template x-for="img in images" :key="img.filename">
+                                    <div @click="select(img)"
+                                         style="cursor:pointer; border-radius:6px; overflow:hidden;
+                                                border:2.5px solid transparent; transition:border-color 0.15s"
+                                         :style="selected === img.filename
+                                             ? 'border-color:var(--color-primary); box-shadow:0 0 0 2px var(--color-primary)'
+                                             : 'border-color:#e8e8e8'">
+                                        <img :src="img.url"
+                                             style="width:100%; height:90px; object-fit:cover; display:block">
+                                        <p style="font-size:0.62rem; color:#666; padding:3px 5px; margin:0;
+                                                  overflow:hidden; white-space:nowrap; text-overflow:ellipsis"
+                                           x-text="img.filename"></p>
+                                    </div>
+                                </template>
+                                <div x-show="!loading && images.length === 0"
+                                     style="grid-column:1/-1; text-align:center; color:#999; padding:3rem">
+                                    No images yet. Upload one above.
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div><!-- /.admin-card (image picker) -->
+
+<script>
+/**
+ * Alpine.js component for the product image picker.
+ *
+ * Manages the picker overlay, fetches the media library list, handles
+ * in-picker AJAX uploads, and exposes the selected filename via the
+ * hidden image_path form field.
+ *
+ * @param {string} initial  Currently saved image filename, or empty string.
+ * @param {string} csrf     CSRF token for the upload request.
+ * @returns {object} Alpine data object.
+ */
+function imagePicker(initial, csrf) {
+    return {
+        selected:    initial,
+        open:        false,
+        images:      [],
+        loading:     false,
+        uploading:   false,
+        uploadError: '',
+
+        openPicker() {
+            this.open = true;
+            if (this.images.length === 0) this.loadImages();
+        },
+
+        async loadImages() {
+            this.loading = true;
+            try {
+                const res   = await fetch('/admin/media/list');
+                this.images = await res.json();
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        select(img) {
+            this.selected = img.filename;
+            this.open     = false;
+        },
+
+        async uploadFile(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            this.uploading   = true;
+            this.uploadError = '';
+            const fd = new FormData();
+            fd.append('image', file);
+            fd.append('_csrf_token', csrf);
+            try {
+                const res  = await fetch('/admin/media/upload', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (data.success) {
+                    this.images.unshift({ filename: data.filename, url: data.url, bytes: data.bytes });
+                    this.select({ filename: data.filename });
+                } else {
+                    this.uploadError = data.error || 'Upload failed.';
+                }
+            } catch {
+                this.uploadError = 'Network error — please try again.';
+            } finally {
+                this.uploading = false;
+                e.target.value = '';
+            }
+        },
+    };
+}
+</script>
 
         </div><!-- /left column -->
 
