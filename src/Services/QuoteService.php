@@ -52,11 +52,13 @@ final class QuoteService
      * the shape without additional validation.
      *
      * @param string $itemsJson Raw JSON string from the `items_json` column.
+     *                          An empty string or the literal string 'null' returns
+     *                          an empty array without throwing.
      *
      * @return array<int, array{description: string, qty: int, unit_price: float}>
      *         Decoded and type-coerced item list.
      *
-     * @throws \JsonException When $itemsJson is not valid JSON.
+     * @throws \JsonException When $itemsJson is non-empty but not valid JSON.
      *
      * @example
      *   $items = QuoteService::decodeItems($quote['items_json']);
@@ -66,6 +68,10 @@ final class QuoteService
      */
     public static function decodeItems(string $itemsJson): array
     {
+        if ($itemsJson === '' || $itemsJson === 'null') {
+            return [];
+        }
+
         /** @var mixed $decoded */
         $decoded = json_decode($itemsJson, associative: true, flags: JSON_THROW_ON_ERROR);
 

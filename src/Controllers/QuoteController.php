@@ -33,8 +33,9 @@ final class QuoteController extends BaseController
      *
      * Resolves the quote from the token in the URL. Returns a 404 when the
      * token is unknown or the quote is cancelled. When the quote is found, the
-     * view receives the decoded items array and an `$expired` flag so it can
-     * branch between the full form and an expiry message.
+     * view receives the decoded items array, an `$expired` flag, and a
+     * `$startStep` value so the Alpine.js component lands on the correct step
+     * without client-side status inference.
      *
      * @param Request              $request HTTP request.
      * @param array<string, mixed> $params  Route parameters; must contain 'token'.
@@ -53,9 +54,21 @@ final class QuoteController extends BaseController
             return Response::notFound();
         }
 
-        $items   = QuoteService::decodeItems((string) $quote['items_json']);
+        try {
+            $items = QuoteService::decodeItems((string) ($quote['items_json'] ?? ''));
+        } catch (\JsonException) {
+            $items = [];
+            error_log('[QuoteController] Failed to decode items_json for token: ' . $token);
+        }
+
         $expired = !empty($quote['valid_until'])
             && strtotime((string) $quote['valid_until']) < strtotime('today');
+
+        $startStep = match($quote['status'] ?? '') {
+            'deposit_confirmed', 'completed' => 'confirmed',
+            'accepted'                        => 'payment',
+            default                           => 'review',
+        };
 
         $html = $this->render('public/quote-accept', [
             'quote'      => $quote,
@@ -64,6 +77,7 @@ final class QuoteController extends BaseController
             'expired'    => $expired,
             'lang'       => Lang::current(),
             'pageTitle'  => __t('quote.title'),
+            'startStep'  => $startStep,
         ]);
 
         return Response::html($html);

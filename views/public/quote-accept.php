@@ -5,6 +5,10 @@
  * Rendered inside views/layouts/public.php. Presents the quote to the customer
  * in a three-step Alpine.js flow: review → payment → confirmed.
  *
+ * The line-items table is rendered outside all step divs so customers see
+ * their quote details regardless of which step they land on (e.g. a customer
+ * who has already accepted sees their items on the payment step too).
+ *
  * Variables injected by QuoteController::show():
  *   array<string, mixed>                              $quote      Quote row (includes token, status,
  *                                                                 subtotal, deposit_amount, event_date,
@@ -14,6 +18,7 @@
  *   string                                            $csrfToken  Session CSRF token.
  *   bool                                              $expired    True when valid_until is in the past.
  *   string                                            $lang       Active locale code ('en' or 'es').
+ *   string                                            $startStep  Initial Alpine step: 'review'|'payment'|'confirmed'.
  *
  * @see \App\Controllers\QuoteController::show()
  * @see \App\Services\QuoteService::decodeItems()
@@ -58,9 +63,14 @@ use App\Core\Config;
 
       <?php else: ?>
 
-      <!-- ─── Step: Review ─────────────────────────────────────────────────── -->
-      <div class="quote-body" x-show="step === 'review'">
+      <?php
+      $taxRate    = (float) ($quote['tax_rate']   ?? 0.0);
+      $taxAmount  = (float) ($quote['tax_amount'] ?? 0.0);
+      $quoteTotal = (float) $quote['subtotal'] + $taxAmount;
+      ?>
 
+      <!-- ─── Always-visible quote summary ─────────────────────────────────── -->
+      <div class="quote-body" style="border-bottom:1px solid var(--color-border)">
         <table class="quote-table" style="width:100%">
           <thead>
             <tr>
@@ -89,11 +99,6 @@ use App\Core\Config;
                 $<?= number_format((float) $quote['subtotal'], 2) ?>
               </td>
             </tr>
-            <?php
-            $taxRate   = (float) ($quote['tax_rate']   ?? 0.0);
-            $taxAmount = (float) ($quote['tax_amount'] ?? 0.0);
-            $quoteTotal = (float) $quote['subtotal'] + $taxAmount;
-            ?>
             <?php if ($taxAmount > 0): ?>
             <tr>
               <td colspan="3" style="text-align:right; padding-top:0.5rem; color:var(--color-muted)">
@@ -116,10 +121,15 @@ use App\Core\Config;
         </table>
 
         <?php if (!empty($quote['notes'])): ?>
-        <div style="margin-top:1.5rem; padding:1rem; background:var(--color-bg-light); border-radius:6px; border-left:3px solid var(--color-border)">
-          <p style="color:var(--color-muted); font-size:0.875rem; margin:0"><?= htmlspecialchars((string) $quote['notes']) ?></p>
+        <div style="margin-top:1.5rem; padding:1rem; background:#f9f4f9; border-radius:8px; font-size:0.9rem; color:var(--color-text-dark)">
+          <strong><?= htmlspecialchars(__t('quote.notes') ?: 'Notes') ?>:</strong>
+          <p style="margin:0.5rem 0 0; white-space:pre-wrap"><?= htmlspecialchars((string) $quote['notes']) ?></p>
         </div>
         <?php endif; ?>
+      </div><!-- /.quote-body always-visible summary -->
+
+      <!-- ─── Step: Review ─────────────────────────────────────────────────── -->
+      <div class="quote-body" x-show="step === 'review'">
 
         <!-- Deposit box -->
         <div class="quote-deposit-box" style="margin-top:2rem">
@@ -265,9 +275,13 @@ use App\Core\Config;
  * Alpine.js component that drives the three-step quote acceptance flow.
  *
  * Steps:
- *   review    — customer reads the itemised quote and submits their contact info.
+ *   review    — customer reads the deposit amount and submits their contact info.
  *   payment   — customer sees payment instructions and confirms they sent money.
- *   confirmed — success state shown after deposit_confirmed.
+ *   confirmed — success state shown after deposit_confirmed or completed.
+ *
+ * The initial step is determined server-side by QuoteController::show() and
+ * injected as $startStep, avoiding a mismatch between the PHP status and the
+ * JS step name.
  *
  * Both acceptQuote() and confirmDeposit() POST JSON to the PHP endpoints and
  * advance the step on success, or display an inline error message on failure.
@@ -277,12 +291,7 @@ use App\Core\Config;
 function quoteApp() {
   return {
     /** Active step: 'review' | 'payment' | 'confirmed' */
-    step: <?= json_encode(
-        in_array($quote['status'] ?? '', ['accepted', 'deposit_confirmed', 'completed'], true)
-            ? 'payment'
-            : 'review',
-        JSON_THROW_ON_ERROR
-    ) ?>,
+    step: <?= json_encode($startStep, JSON_THROW_ON_ERROR) ?>,
 
     customerName:  '',
     customerEmail: '',
