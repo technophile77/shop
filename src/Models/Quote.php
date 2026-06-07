@@ -314,6 +314,70 @@ final class Quote
         self::transition($id, 'sent');
     }
 
+    /**
+     * Stores the Stripe Checkout Session ID on the quote when Pay by Card is clicked.
+     *
+     * @param int    $id        Quote primary key.
+     * @param string $sessionId Stripe Checkout Session ID (cs_live_…).
+     */
+    public static function setStripeCheckoutSession(int $id, string $sessionId): void
+    {
+        $stmt = Database::rw()->prepare(
+            'UPDATE quotes SET stripe_checkout_session_id = :session_id WHERE id = :id'
+        );
+        $stmt->execute([':session_id' => $sessionId, ':id' => $id]);
+    }
+
+    /**
+     * Records Stripe payment identifiers and the payment method after a successful charge.
+     *
+     * @param int    $id              Quote primary key.
+     * @param string $sessionId       Stripe Checkout Session ID.
+     * @param string $paymentIntentId Stripe PaymentIntent ID.
+     * @param string $paymentMethod   One of 'zelle', 'cashapp', 'stripe_full', 'other'.
+     */
+    public static function updateStripePayment(
+        int    $id,
+        string $sessionId,
+        string $paymentIntentId,
+        string $paymentMethod,
+    ): void {
+        $stmt = Database::rw()->prepare(
+            'UPDATE quotes
+                SET stripe_checkout_session_id = :session_id,
+                    stripe_payment_intent_id   = :intent_id,
+                    payment_method             = :method
+              WHERE id = :id'
+        );
+        $stmt->execute([
+            ':session_id' => $sessionId,
+            ':intent_id'  => $paymentIntentId,
+            ':method'     => $paymentMethod,
+            ':id'         => $id,
+        ]);
+    }
+
+    /**
+     * Finds a quote by its Stripe Checkout Session ID.
+     *
+     * @param string $sessionId Stripe Checkout Session ID (cs_live_…).
+     *
+     * @return array<string, mixed>|null Quote row with customer columns, or null.
+     */
+    public static function findByStripeSession(string $sessionId): ?array
+    {
+        $stmt = Database::ro()->prepare(
+            'SELECT q.*, c.name AS customer_name, c.email AS customer_email, c.phone AS customer_phone
+               FROM quotes q
+               LEFT JOIN customers c ON c.id = q.customer_id
+              WHERE q.stripe_checkout_session_id = :session_id
+              LIMIT 1'
+        );
+        $stmt->execute([':session_id' => $sessionId]);
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------

@@ -218,6 +218,31 @@ use App\Core\Config;
           <?php endif; ?>
         </div>
 
+        <?php
+        $quoteTotal = (float) ($quote['subtotal'] ?? 0) + (float) ($quote['tax_amount'] ?? 0);
+        ?>
+        <?php if (\App\Services\StripeService::isConfigured()): ?>
+        <div style="border-top:1px solid var(--color-border); margin-top:2rem; padding-top:1.5rem">
+            <div class="label" style="margin-bottom:0.5rem; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em; color:var(--color-muted)">
+                Or Pay in Full by Card
+            </div>
+            <p style="font-size:0.875rem; color:var(--color-muted); margin:0 0 1rem">
+                Card payments charge the full amount of $<?= number_format($quoteTotal, 2) ?>.
+                Zelle and CashApp above are preferred — no fees and non-disputable.
+            </p>
+            <button class="btn btn-outline"
+                    style="width:100%"
+                    @click="payByCard()"
+                    :disabled="redirectingToStripe || submitting">
+                <span x-show="!redirectingToStripe">💳 Pay $<?= number_format($quoteTotal, 2) ?> by Card</span>
+                <span x-show="redirectingToStripe">Redirecting to payment…</span>
+            </button>
+            <p x-show="stripeError"
+               x-text="stripeError"
+               style="color:#e53e3e; margin-top:0.5rem; font-size:0.875rem; text-align:center"></p>
+        </div>
+        <?php endif; ?>
+
         <div style="text-align:center; margin-top:2.5rem">
           <button class="btn btn-accent btn-lg"
                   @click="confirmDeposit()"
@@ -307,6 +332,11 @@ function quoteApp() {
     /** Error message shown below the confirm button, or empty string. */
     depositError: '',
 
+    /** True while the browser is being redirected to Stripe Checkout. */
+    redirectingToStripe: false,
+    /** Error message shown below the card payment button, or empty string. */
+    stripeError: '',
+
     token: <?= json_encode($quote['token'] ?? '', JSON_THROW_ON_ERROR) ?>,
     csrf:  <?= json_encode($csrfToken,           JSON_THROW_ON_ERROR) ?>,
 
@@ -382,6 +412,34 @@ function quoteApp() {
         this.depositError = '<?= addslashes(__t('general.error')) ?>';
       } finally {
         this.confirming = false;
+      }
+    },
+
+    /**
+     * Initiates a Stripe Checkout Session and redirects the browser to the
+     * Stripe-hosted payment page. Shows an inline error if the request fails.
+     *
+     * @returns {Promise<void>}
+     */
+    async payByCard() {
+      this.redirectingToStripe = true;
+      this.stripeError = '';
+      try {
+        const res = await fetch('/quote/' + this.token + '/stripe/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _csrf_token: this.csrf }),
+        });
+        const data = await res.json();
+        if (data.success && data.url) {
+          window.location.href = data.url;
+        } else {
+          this.stripeError = data.error || 'Something went wrong. Please try again.';
+          this.redirectingToStripe = false;
+        }
+      } catch {
+        this.stripeError = 'Connection error. Please try again.';
+        this.redirectingToStripe = false;
       }
     },
   };
