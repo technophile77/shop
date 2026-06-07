@@ -23,7 +23,8 @@ final class Order
      *
      * @param array<string, mixed> $data Recognised keys: customer_id,
      *        event_date, delivery_type, delivery_address, delivery_fee,
-     *        occasion, arrangement_style, color_preferences, budget_range, notes.
+     *        occasion, arrangement_style, color_preferences, budget_range,
+     *        notes, addons (JSON-encoded string or null).
      *
      * @return int The newly created order ID.
      *
@@ -46,10 +47,10 @@ final class Order
         $stmt = Database::rw()->prepare(
             'INSERT INTO orders
                 (customer_id, event_date, delivery_type, delivery_address, delivery_fee,
-                 occasion, arrangement_style, color_preferences, budget_range, notes)
+                 occasion, arrangement_style, color_preferences, budget_range, notes, addons)
              VALUES
                 (:customer_id, :event_date, :delivery_type, :delivery_address, :delivery_fee,
-                 :occasion, :arrangement_style, :color_preferences, :budget_range, :notes)'
+                 :occasion, :arrangement_style, :color_preferences, :budget_range, :notes, :addons)'
         );
 
         $stmt->execute([
@@ -63,6 +64,7 @@ final class Order
             ':color_preferences' => $data['color_preferences'] ?? null,
             ':budget_range'      => $data['budget_range']      ?? null,
             ':notes'             => $data['notes']             ?? null,
+            ':addons'            => $data['addons']            ?? null,
         ]);
 
         return (int) Database::rw()->lastInsertId();
