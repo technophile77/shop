@@ -178,7 +178,7 @@ final class CategoriesController extends BaseController
         }
 
         $sortOrder = (int) $request->post('sort_order', 0);
-        $active    = $request->post('active') !== null ? 1 : 0;
+        $active    = $request->post('active') === '1' ? 1 : 0;
 
         $stmt = Database::rw()->prepare(
             'UPDATE product_categories

@@ -36,72 +36,47 @@
             </thead>
             <tbody>
                 <?php foreach ($categories as $cat): ?>
-                <tr x-data="{
-                        editing: false,
-                        nameEn: <?= json_encode($cat['name_en']) ?>,
-                        nameEs: <?= json_encode($cat['name_es'] ?? '') ?>,
-                        slug: <?= json_encode($cat['slug']) ?>,
-                        sortOrder: <?= (int) $cat['sort_order'] ?>,
-                        active: <?= $cat['active'] ? 'true' : 'false' ?>
-                    }">
+                <tr x-data="<?= htmlspecialchars(json_encode([
+                        'editing'   => false,
+                        'nameEn'    => $cat['name_en'],
+                        'nameEs'    => $cat['name_es'] ?? '',
+                        'slug'      => $cat['slug'],
+                        'sortOrder' => (int) $cat['sort_order'],
+                        'active'    => (bool) $cat['active'],
+                    ]), ENT_QUOTES, 'UTF-8') ?>">
 
-                    <!-- VIEW MODE -->
-                    <template x-if="!editing">
-                        <td style="padding-left:1.5rem">
-                            <strong x-text="nameEn"></strong>
-                        </td>
-                    </template>
-                    <template x-if="editing">
-                        <td style="padding-left:1.5rem">
-                            <input type="text" x-model="nameEn" placeholder="Name (EN)"
-                                   style="padding:0.4rem 0.6rem; border:1.5px solid #dde1e7; border-radius:4px; font-size:0.875rem; width:100%">
-                        </td>
-                    </template>
+                    <td style="padding-left:1.5rem">
+                        <strong x-show="!editing" x-text="nameEn"></strong>
+                        <input x-show="editing" type="text" x-model="nameEn" placeholder="Name (EN)"
+                               style="padding:0.4rem 0.6rem; border:1.5px solid #dde1e7; border-radius:4px; font-size:0.875rem; width:100%">
+                    </td>
 
-                    <template x-if="!editing">
-                        <td style="color:#555" x-text="nameEs || '—'"></td>
-                    </template>
-                    <template x-if="editing">
-                        <td>
-                            <input type="text" x-model="nameEs" placeholder="Name (ES)"
-                                   style="padding:0.4rem 0.6rem; border:1.5px solid #dde1e7; border-radius:4px; font-size:0.875rem; width:100%">
-                        </td>
-                    </template>
+                    <td style="color:#555">
+                        <span x-show="!editing" x-text="nameEs || '—'"></span>
+                        <input x-show="editing" type="text" x-model="nameEs" placeholder="Name (ES)"
+                               style="padding:0.4rem 0.6rem; border:1.5px solid #dde1e7; border-radius:4px; font-size:0.875rem; width:100%">
+                    </td>
 
-                    <template x-if="!editing">
-                        <td><code style="font-size:0.8rem; background:#f4f6f9; padding:0.2rem 0.4rem; border-radius:3px" x-text="slug"></code></td>
-                    </template>
-                    <template x-if="editing">
-                        <td>
-                            <input type="text" x-model="slug" placeholder="slug"
-                                   style="padding:0.4rem 0.6rem; border:1.5px solid #dde1e7; border-radius:4px; font-size:0.875rem; width:100%; font-family:monospace">
-                        </td>
-                    </template>
+                    <td>
+                        <code x-show="!editing" style="font-size:0.8rem; background:#f4f6f9; padding:0.2rem 0.4rem; border-radius:3px" x-text="slug"></code>
+                        <input x-show="editing" type="text" x-model="slug" placeholder="slug"
+                               style="padding:0.4rem 0.6rem; border:1.5px solid #dde1e7; border-radius:4px; font-size:0.875rem; width:100%; font-family:monospace">
+                    </td>
 
-                    <template x-if="!editing">
-                        <td style="text-align:center" x-text="sortOrder"></td>
-                    </template>
-                    <template x-if="editing">
-                        <td style="text-align:center">
-                            <input type="number" x-model.number="sortOrder" min="0"
-                                   style="padding:0.4rem 0.6rem; border:1.5px solid #dde1e7; border-radius:4px; font-size:0.875rem; width:70px; text-align:center">
-                        </td>
-                    </template>
+                    <td style="text-align:center">
+                        <span x-show="!editing" x-text="sortOrder"></span>
+                        <input x-show="editing" type="number" x-model.number="sortOrder" min="0"
+                               style="padding:0.4rem 0.6rem; border:1.5px solid #dde1e7; border-radius:4px; font-size:0.875rem; width:70px; text-align:center">
+                    </td>
 
-                    <template x-if="!editing">
-                        <td style="text-align:center">
-                            <span class="badge" :class="active ? 'badge-active' : 'badge-draft'" x-text="active ? 'Active' : 'Hidden'"></span>
-                        </td>
-                    </template>
-                    <template x-if="editing">
-                        <td style="text-align:center">
-                            <label style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer; font-size:0.85rem">
-                                <input type="checkbox" x-model="active"
-                                       style="width:15px; height:15px; accent-color:var(--color-primary)">
-                                Active
-                            </label>
-                        </td>
-                    </template>
+                    <td style="text-align:center">
+                        <span x-show="!editing" class="badge" :class="active ? 'badge-active' : 'badge-draft'" x-text="active ? 'Active' : 'Hidden'"></span>
+                        <label x-show="editing" style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer; font-size:0.85rem">
+                            <input type="checkbox" x-model="active"
+                                   style="width:15px; height:15px; accent-color:var(--color-primary)">
+                            Active
+                        </label>
+                    </td>
 
                     <td style="text-align:center">
                         <?php if ((int) $cat['product_count'] > 0): ?>

@@ -72,6 +72,7 @@ abstract class BaseController
             'pageTitle' => $data['pageTitle'] ?? Config::get('BUSINESS_NAME', ''),
             'metaDesc'  => $data['metaDesc'] ?? '',
             'bodyClass' => $data['bodyClass'] ?? '',
+            'ogImage'   => null,
         ];
 
         // Merge: $shared supplies defaults; caller $data wins for everything else.
