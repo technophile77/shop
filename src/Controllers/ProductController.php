@@ -58,6 +58,48 @@ final class ProductController extends BaseController
         $metaDesc = Settings::get('products_meta_desc_' . $lang)
             ?? Settings::get('products_meta_desc_en', '');
 
+        $appUrl  = rtrim((string) \App\Core\Config::get('APP_URL', ''), '/');
+        $ogImage = null;
+        foreach ($products as $_p) {
+            if (!empty($_p['image_path'])) {
+                $ogImage = $appUrl . '/public/uploads/products/' . $_p['image_path'];
+                break;
+            }
+        }
+
+        $listItems = [];
+        $position  = 1;
+        foreach ($products as $_p) {
+            $name  = $_p['name_' . $lang] ?? $_p['name_en'] ?? '';
+            $desc  = $_p['description_' . $lang] ?? $_p['description_en'] ?? '';
+            $image = !empty($_p['image_path'])
+                ? $appUrl . '/public/uploads/products/' . $_p['image_path']
+                : $appUrl . '/public/assets/images/placeholder-flower.jpg';
+            $item = [
+                '@type'    => 'ListItem',
+                'position' => $position++,
+                'item'     => [
+                    '@type'       => 'Product',
+                    'name'        => $name,
+                    'description' => $desc,
+                    'image'       => $image,
+                    'offers'      => [
+                        '@type'         => 'Offer',
+                        'priceCurrency' => 'USD',
+                        'price'         => !empty($_p['price_from']) ? number_format((float)$_p['price_from'], 2) : '0.00',
+                        'availability'  => 'https://schema.org/InStock',
+                    ],
+                ],
+            ];
+            $listItems[] = $item;
+        }
+        $jsonLd = [
+            '@context'        => 'https://schema.org',
+            '@type'           => 'ItemList',
+            'name'            => $pageTitle,
+            'itemListElement' => $listItems,
+        ];
+
         $html = $this->render('public/products', [
             'categories' => $categories,
             'products'   => $products,
@@ -65,6 +107,8 @@ final class ProductController extends BaseController
             'lang'       => $lang,
             'pageTitle'  => $pageTitle,
             'metaDesc'   => $metaDesc,
+            'ogImage'    => $ogImage,
+            'jsonLd'     => $jsonLd,
         ]);
 
         return Response::html($html);
@@ -106,7 +150,56 @@ final class ProductController extends BaseController
         $pageTitle    = htmlspecialchars($categoryName) . ' — ' . htmlspecialchars($siteTitle);
 
         $metaDesc = Settings::get('products_meta_desc_' . $lang)
-            ?? Settings::get('products_meta_desc_en', '');
+            ?? Settings::get('products_meta_desc_en')
+            ?? sprintf(
+                $lang === 'es'
+                    ? 'Explora nuestros %s en %s. Arreglos florales frescos con pedidos personalizados disponibles.'
+                    : 'Shop our %s at %s. Fresh floral arrangements with custom orders available.',
+                strtolower((string) ($category['name_' . $lang] ?? $category['name_en'] ?? '')),
+                \App\Core\Config::get('BUSINESS_NAME', '')
+            );
+
+        $appUrl  = rtrim((string) \App\Core\Config::get('APP_URL', ''), '/');
+        $ogImage = null;
+        foreach ($products as $_p) {
+            if (!empty($_p['image_path'])) {
+                $ogImage = $appUrl . '/public/uploads/products/' . $_p['image_path'];
+                break;
+            }
+        }
+
+        $listItems = [];
+        $position  = 1;
+        foreach ($products as $_p) {
+            $name  = $_p['name_' . $lang] ?? $_p['name_en'] ?? '';
+            $desc  = $_p['description_' . $lang] ?? $_p['description_en'] ?? '';
+            $image = !empty($_p['image_path'])
+                ? $appUrl . '/public/uploads/products/' . $_p['image_path']
+                : $appUrl . '/public/assets/images/placeholder-flower.jpg';
+            $item = [
+                '@type'    => 'ListItem',
+                'position' => $position++,
+                'item'     => [
+                    '@type'       => 'Product',
+                    'name'        => $name,
+                    'description' => $desc,
+                    'image'       => $image,
+                    'offers'      => [
+                        '@type'         => 'Offer',
+                        'priceCurrency' => 'USD',
+                        'price'         => !empty($_p['price_from']) ? number_format((float)$_p['price_from'], 2) : '0.00',
+                        'availability'  => 'https://schema.org/InStock',
+                    ],
+                ],
+            ];
+            $listItems[] = $item;
+        }
+        $jsonLd = [
+            '@context'        => 'https://schema.org',
+            '@type'           => 'ItemList',
+            'name'            => $pageTitle,
+            'itemListElement' => $listItems,
+        ];
 
         $html = $this->render('public/products', [
             'categories' => $categories,
@@ -115,6 +208,8 @@ final class ProductController extends BaseController
             'lang'       => $lang,
             'pageTitle'  => $pageTitle,
             'metaDesc'   => $metaDesc,
+            'ogImage'    => $ogImage,
+            'jsonLd'     => $jsonLd,
         ]);
 
         return Response::html($html);
