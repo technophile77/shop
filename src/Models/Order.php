@@ -142,4 +142,146 @@ final class Order
         );
         $stmt->execute([$status, $id]);
     }
+
+    /**
+     * Creates a new shop-cart checkout order and returns its auto-increment ID.
+     *
+     * Populates both the existing quote-request columns and the new Phase-4
+     * columns added by migration 009_shop_orders.sql. The payment_status is
+     * always set to 'unpaid' at creation; call {@see markPaid()} after Stripe
+     * confirms payment.
+     *
+     * @param array<string, mixed> $data Recognised keys:
+     *        customer_id (int), delivery_address (string|null),
+     *        delivery_fee (float|null), items_json (string — JSON),
+     *        card_message (string|null), delivery_venue_name (string|null),
+     *        occasion_type (string|null), subtotal (float),
+     *        tax_amount (float), total (float).
+     *
+     * @return int The newly created order ID.
+     *
+     * @example
+     *   $orderId = Order::createShopOrder([
+     *       'customer_id'        => 12,
+     *       'delivery_address'   => '123 Main St, Tulsa, OK',
+     *       'delivery_fee'       => 10.00,
+     *       'items_json'         => json_encode($snapshot),
+     *       'card_message'       => 'Happy Birthday!',
+     *       'delivery_venue_name'=> null,
+     *       'occasion_type'      => 'Birthday',
+     *       'subtotal'           => 45.00,
+     *       'tax_amount'         => 3.83,
+     *       'total'              => 58.83,
+     *   ]);
+     */
+    public static function createShopOrder(array $data): int
+    {
+        $stmt = Database::rw()->prepare(
+            'INSERT INTO orders
+                (customer_id, delivery_type, delivery_address, delivery_fee,
+                 occasion, items_json, card_message, delivery_venue_name,
+                 occasion_type, subtotal, tax_amount, total, payment_status)
+             VALUES
+                (:customer_id, :delivery_type, :delivery_address, :delivery_fee,
+                 :occasion, :items_json, :card_message, :delivery_venue_name,
+                 :occasion_type, :subtotal, :tax_amount, :total, :payment_status)'
+        );
+
+        $stmt->execute([
+            ':customer_id'         => $data['customer_id']         ?? null,
+            ':delivery_type'       => 'delivery',
+            ':delivery_address'    => $data['delivery_address']    ?? null,
+            ':delivery_fee'        => $data['delivery_fee']        ?? null,
+            ':occasion'            => $data['occasion_type']       ?? null,
+            ':items_json'          => $data['items_json']          ?? null,
+            ':card_message'        => $data['card_message']        ?? null,
+            ':delivery_venue_name' => $data['delivery_venue_name'] ?? null,
+            ':occasion_type'       => $data['occasion_type']       ?? null,
+            ':subtotal'            => $data['subtotal']            ?? 0.00,
+            ':tax_amount'          => $data['tax_amount']          ?? 0.00,
+            ':total'               => $data['total']               ?? 0.00,
+            ':payment_status'      => 'unpaid',
+        ]);
+
+        return (int) Database::rw()->lastInsertId();
+    }
+
+    /**
+     * Stores the Stripe Checkout Session ID on a shop order.
+     *
+     * Called immediately after the session is created so the webhook handler
+     * can correlate incoming events with the order row.
+     *
+     * @param int    $id        The order ID.
+     * @param string $sessionId The Stripe Checkout Session ID (cs_…).
+     *
+     * @return void
+     *
+     * @example
+     *   Order::setStripeCheckoutSession($orderId, $session['id']);
+     */
+    public static function setStripeCheckoutSession(int $id, string $sessionId): void
+    {
+        $stmt = Database::rw()->prepare(
+            'UPDATE orders SET stripe_checkout_session_id = ? WHERE id = ?'
+        );
+        $stmt->execute([$sessionId, $id]);
+    }
+
+    /**
+     * Looks up a shop order by its Stripe Checkout Session ID.
+     *
+     * Used by the webhook handler and the success-redirect handler to map a
+     * Stripe session back to an order row without trusting URL parameters.
+     *
+     * @param string $sessionId The Stripe Checkout Session ID (cs_…).
+     *
+     * @return array<string, mixed>|null The order row, or null when not found.
+     *
+     * @example
+     *   $order = Order::findByStripeSessionId('cs_test_abc123');
+     */
+    public static function findByStripeSessionId(string $sessionId): ?array
+    {
+        $stmt = Database::ro()->prepare(
+            'SELECT o.*,
+                    c.name  AS customer_name,
+                    c.email AS customer_email,
+                    c.phone AS customer_phone
+             FROM orders o
+             LEFT JOIN customers c ON c.id = o.customer_id
+             WHERE o.stripe_checkout_session_id = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$sessionId]);
+        $row = $stmt->fetch();
+
+        return $row !== false ? $row : null;
+    }
+
+    /**
+     * Marks a shop order as paid and records the Stripe Payment Intent ID.
+     *
+     * Idempotent: if the order is already marked paid this call is a no-op
+     * (the WHERE clause filters it out so no duplicate update occurs).
+     *
+     * @param int    $id              The order ID.
+     * @param string $paymentIntentId The Stripe Payment Intent ID (pi_…).
+     *
+     * @return void
+     *
+     * @example
+     *   Order::markPaid($orderId, 'pi_3abc123');
+     */
+    public static function markPaid(int $id, string $paymentIntentId): void
+    {
+        $stmt = Database::rw()->prepare(
+            "UPDATE orders
+             SET payment_status = 'paid',
+                 stripe_payment_intent_id = ?
+             WHERE id = ?
+               AND payment_status != 'paid'"
+        );
+        $stmt->execute([$paymentIntentId, $id]);
+    }
 }

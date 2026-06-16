@@ -143,6 +143,21 @@ return [
     'cart.checkout'    => 'Proceed to Checkout',
     'cart.totals_note' => 'Delivery fee and sales tax are calculated at checkout.',
 
+    // ── Checkout ──────────────────────────────────────────────────────────────
+    'checkout.heading'         => 'Checkout',
+    'checkout.order_summary'   => 'Order Summary',
+    'checkout.card_message'    => 'Card Message',
+    'checkout.card_message_ph' => 'A note to include with the flowers (optional)',
+    'checkout.delivery_fee'    => 'Delivery Fee',
+    'checkout.sales_tax'       => 'Sales Tax',
+    'checkout.total'           => 'Total',
+    'checkout.pay_button'      => 'Pay with Card',
+    'checkout.success_heading' => 'Thank You — Order Confirmed!',
+    'checkout.success_message' => "We've received your payment and will prepare your arrangement with care.",
+
+    // ── Navigation (cart) ──────────────────────────────────────────────────────
+    'nav.cart'         => 'Cart',
+
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Loading...',
     'general.error'    => 'An error occurred.',

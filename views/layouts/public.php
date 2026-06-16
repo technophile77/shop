@@ -193,6 +193,14 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
             </li>
             <li><a href="/<?= $lang ?>/about"><?= htmlspecialchars(__t('nav.about')) ?></a></li>
             <li><a href="/<?= $lang ?>/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a></li>
+            <?php $__cartCount = \App\Support\CartSession::count(); ?>
+            <li>
+                <a href="/<?= $lang ?>/cart">
+                    <?= htmlspecialchars(__t('nav.cart')) ?><?php if ($__cartCount > 0): ?>
+                    <span class="cart-badge" style="display:inline-block; min-width:1.2rem; padding:0 0.35rem; margin-left:0.25rem; border-radius:999px; background:var(--color-accent); color:#fff; font-size:0.72rem; text-align:center"><?= $__cartCount ?></span>
+                    <?php endif; ?>
+                </a>
+            </li>
             <?php if (\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')): ?>
             <li>
                 <a href="<?= htmlspecialchars(\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')) ?>"
@@ -235,6 +243,7 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
         <a href="/<?= $lang ?>/order"><?= htmlspecialchars(\App\Core\Settings::get('order_button_text_' . $lang, __t('nav.order'))) ?></a>
         <a href="/<?= $lang ?>/about"><?= htmlspecialchars(__t('nav.about')) ?></a>
         <a href="/<?= $lang ?>/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a>
+        <a href="/<?= $lang ?>/cart"><?= htmlspecialchars(__t('nav.cart')) ?><?php $__mc = \App\Support\CartSession::count(); if ($__mc > 0): ?> (<?= $__mc ?>)<?php endif; ?></a>
         <?php if (\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')): ?>
         <a href="<?= htmlspecialchars(\App\Core\Config::get('DOORDASH_ORDER_ONLINE_URL')) ?>"
            target="_blank"

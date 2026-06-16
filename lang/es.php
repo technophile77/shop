@@ -143,6 +143,21 @@ return [
     'cart.checkout'    => 'Proceder al Pago',
     'cart.totals_note' => 'La tarifa de entrega y el impuesto se calculan al finalizar la compra.',
 
+    // ── Checkout ──────────────────────────────────────────────────────────────
+    'checkout.heading'         => 'Pago',
+    'checkout.order_summary'   => 'Resumen del Pedido',
+    'checkout.card_message'    => 'Mensaje de la Tarjeta',
+    'checkout.card_message_ph' => 'Una nota para incluir con las flores (opcional)',
+    'checkout.delivery_fee'    => 'Tarifa de Entrega',
+    'checkout.sales_tax'       => 'Impuesto',
+    'checkout.total'           => 'Total',
+    'checkout.pay_button'      => 'Pagar con Tarjeta',
+    'checkout.success_heading' => '¡Gracias — Pedido Confirmado!',
+    'checkout.success_message' => 'Hemos recibido tu pago y prepararemos tu arreglo con cariño.',
+
+    // ── Navigation (cart) ──────────────────────────────────────────────────────
+    'nav.cart'         => 'Carrito',
+
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Cargando...',
     'general.error'    => 'Ocurrió un error.',

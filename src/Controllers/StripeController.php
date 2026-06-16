@@ -3,9 +3,12 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Core\Config;
 use App\Core\Request;
 use App\Core\Response;
+use App\Models\Order;
 use App\Models\Quote;
+use App\Services\MailService;
 use App\Services\QuoteService;
 use App\Services\StripeService;
 
@@ -189,16 +192,45 @@ final class StripeController extends BaseController
     /**
      * Processes a checkout.session.completed event object.
      *
+     * Dispatches to the quote handler or the shop-order handler depending on
+     * which metadata key is present:
+     *   - metadata.quote_token  → existing quote full-payment flow (unchanged).
+     *   - metadata.shop_order_id → shop-cart order payment flow (Phase 4).
+     *
+     * Both branches are idempotent. When neither key is present the event is
+     * silently ignored so future session types can be added without breaking
+     * the webhook.
+     *
      * @param \Stripe\Checkout\Session $session The Stripe Session object from the event.
      */
     private function handleCheckoutSessionCompleted(object $session): void
     {
+        // ── Quote path (existing behaviour — leave intact) ────────────────────
         $token = $session->metadata->quote_token ?? '';
-        if ($token === '') {
+        if ($token !== '') {
+            $this->handleQuoteCheckoutCompleted($session, (string) $token);
             return;
         }
 
-        $quote = Quote::findByToken((string) $token);
+        // ── Shop-cart order path (Phase 4) ────────────────────────────────────
+        $shopOrderId = $session->metadata->shop_order_id ?? '';
+        if ($shopOrderId !== '') {
+            $this->handleShopOrderCheckoutCompleted($session, (int) $shopOrderId);
+        }
+    }
+
+    /**
+     * Handles checkout.session.completed for a quote full-payment session.
+     *
+     * Extracted from the original handleCheckoutSessionCompleted() to keep the
+     * dispatch method readable. Logic and behaviour are identical to Phase 3.
+     *
+     * @param \Stripe\Checkout\Session $session The Stripe Session object.
+     * @param string                   $token   The quote token from metadata.
+     */
+    private function handleQuoteCheckoutCompleted(object $session, string $token): void
+    {
+        $quote = Quote::findByToken($token);
         if ($quote === null) {
             return;
         }
@@ -228,6 +260,114 @@ final class StripeController extends BaseController
             );
         } catch (\Exception $e) {
             error_log('[StripeController] Failed to confirm quote from webhook: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Handles checkout.session.completed for a shop-cart order session.
+     *
+     * Idempotent: skips the update when the order is already marked paid.
+     * Notifies the owner by email after marking the order paid.
+     *
+     * @param \Stripe\Checkout\Session $session     The Stripe Session object.
+     * @param int                      $shopOrderId The order ID from metadata.
+     */
+    private function handleShopOrderCheckoutCompleted(object $session, int $shopOrderId): void
+    {
+        if (($session->payment_status ?? '') !== 'paid') {
+            return;
+        }
+
+        $order = Order::find($shopOrderId);
+        if ($order === null) {
+            error_log('[StripeController] Shop order not found for webhook: ' . $shopOrderId);
+            return;
+        }
+
+        // Idempotent: skip if already marked paid
+        if (($order['payment_status'] ?? '') === 'paid') {
+            return;
+        }
+
+        $paymentIntentId = is_string($session->payment_intent)
+            ? $session->payment_intent
+            : (string) ($session->payment_intent->id ?? '');
+
+        try {
+            Order::markPaid($shopOrderId, $paymentIntentId);
+
+            $customerName = (string) ($order['customer_name'] ?? 'Customer');
+            $total        = '$' . number_format((float) ($order['total'] ?? 0), 2);
+            $this->notifyOwnerShopOrder($order, $customerName, $total);
+        } catch (\Exception $e) {
+            error_log('[StripeController] Failed to mark shop order paid from webhook: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Sends the owner a notification email when a shop order is paid.
+     *
+     * Failures are silently logged so a mail misconfiguration never prevents
+     * the order from being recorded as paid.
+     *
+     * @param array<string, mixed> $order        The order row from Order::find().
+     * @param string               $customerName Display name for the subject line.
+     * @param string               $total        Formatted total string (e.g. '$58.83').
+     */
+    private function notifyOwnerShopOrder(array $order, string $customerName, string $total): void
+    {
+        $to = (string) Config::get('BUSINESS_EMAIL', '');
+        if ($to === '' || !MailService::isConfigured()) {
+            return;
+        }
+
+        $orderId  = (int) ($order['id'] ?? 0);
+        $email    = (string) ($order['customer_email'] ?? '');
+        $phone    = (string) ($order['customer_phone'] ?? '');
+        $address  = (string) ($order['delivery_address'] ?? '');
+        $occasion = (string) ($order['occasion_type'] ?? '');
+        $message  = (string) ($order['card_message'] ?? '');
+        $appUrl   = rtrim((string) Config::get('APP_URL', ''), '/');
+
+        $rows = '';
+        foreach ([
+            'Order #'          => (string) $orderId,
+            'Customer'         => $customerName,
+            'Email'            => $email,
+            'Phone'            => $phone,
+            'Occasion'         => $occasion,
+            'Delivery Address' => $address,
+            'Card Message'     => $message,
+            'Order Total'      => $total,
+        ] as $label => $value) {
+            if ($value === '' || $value === '0') {
+                continue;
+            }
+            $rows .= '<tr>'
+                . '<td style="padding:6px 12px;font-weight:600;color:#555;white-space:nowrap">'
+                . htmlspecialchars($label) . '</td>'
+                . '<td style="padding:6px 12px;color:#1a1a1a">'
+                . nl2br(htmlspecialchars($value)) . '</td>'
+                . '</tr>';
+        }
+
+        $html = MailService::buildHtml(
+            '<h2 style="margin:0 0 1rem;font-size:1.2rem">New Shop Order — Payment Received</h2>'
+            . '<table style="border-collapse:collapse;width:100%">' . $rows . '</table>'
+            . '<p style="margin:1.5rem 0 0;font-size:0.85rem;color:#999">'
+            . 'View all orders in the <a href="' . htmlspecialchars($appUrl) . '/admin">admin panel</a>.'
+            . '</p>'
+        );
+
+        $result = MailService::send(
+            $to,
+            '',
+            'New Shop Order #' . $orderId . ' — ' . $customerName . ' — ' . $total,
+            $html
+        );
+
+        if (!$result['success']) {
+            error_log('[StripeController] Shop order notification failed: ' . ($result['error'] ?? 'unknown'));
         }
     }
 }
