@@ -8,8 +8,16 @@ use App\Core\Config;
 use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
+use App\Models\Addon;
+use App\Models\FlowerColor;
+use App\Models\FlowerType;
+use App\Models\FlowerTypeColor;
 use App\Models\Occasion;
+use App\Models\PaperColor;
 use App\Models\Product;
+use App\Models\ProductFlowerType;
+use App\Support\Destination;
+use App\Support\FlowerColorResolver;
 use App\Support\Shop;
 
 /**
@@ -64,6 +72,48 @@ final class ShopController extends BaseController
         $copy     = Shop::occasionCopy($slug, $lang);
         $appUrl   = rtrim((string) Config::get('APP_URL', ''), '/');
 
+        // Record the "send flowers to this venue" destination when arriving from
+        // a venue card on a city page (Phase 5 emits these query params). The
+        // destination persists in the session through checkout.
+        if ($request->query('venue_name') !== null || $request->query('dest_city') !== null) {
+            Destination::set(Destination::normalize([
+                'service'       => $request->query('dest_service'),
+                'city'          => $request->query('dest_city'),
+                'venue_name'    => $request->query('venue_name'),
+                'venue_address' => $request->query('venue_address'),
+                'occasion'      => $slug,
+            ]));
+        }
+
+        // Pre-load the global catalogs once, then resolve per-product flower-type
+        // color options for buyable products (the add-to-cart panel data).
+        $paperColors    = PaperColor::allActive();
+        $addons         = Addon::allActive();
+        $flowerTypesById = [];
+        foreach (FlowerType::allActive() as $_ft) {
+            $flowerTypesById[(int) $_ft['id']] = $_ft;
+        }
+        $flowerColorsById = [];
+        foreach (FlowerColor::allActive() as $_fc) {
+            $flowerColorsById[(int) $_fc['id']] = $_fc;
+        }
+        $flowerTypeColorMap = FlowerTypeColor::map();
+
+        $productColorOptions = [];
+        foreach ($products as $_p) {
+            if (!Shop::isBuyable($_p)) {
+                continue;
+            }
+            $pid = (int) $_p['id'];
+            $productColorOptions[$pid] = FlowerColorResolver::availableColorsForProduct(
+                ProductFlowerType::flowerTypeIdsForProduct($pid),
+                $flowerTypesById,
+                $flowerTypeColorMap,
+                $flowerColorsById,
+                isset($_p['pictured_flower_color_id']) ? (int) $_p['pictured_flower_color_id'] : null
+            );
+        }
+
         // Build JSON-LD ItemList — same pattern as ProductController.
         $listItems = [];
         $position  = 1;
@@ -103,14 +153,19 @@ final class ShopController extends BaseController
         ];
 
         $html = $this->render('public/occasion', [
-            'occasion'  => $occasion,
-            'products'  => $products,
-            'copy'      => $copy,
-            'lang'      => $lang,
-            'slug'      => $slug,
-            'pageTitle' => $pageTitle,
-            'metaDesc'  => $copy['blurb'],
-            'jsonLd'    => $jsonLd,
+            'occasion'            => $occasion,
+            'products'            => $products,
+            'copy'                => $copy,
+            'lang'                => $lang,
+            'slug'                => $slug,
+            'pageTitle'           => $pageTitle,
+            'metaDesc'            => $copy['blurb'],
+            'jsonLd'              => $jsonLd,
+            'productColorOptions' => $productColorOptions,
+            'paperColors'         => $paperColors,
+            'addons'              => $addons,
+            'destination'         => Destination::get(),
+            'csrfToken'           => $request->csrfToken(),
         ]);
 
         return Response::html($html);

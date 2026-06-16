@@ -124,8 +124,24 @@ return [
     'occasion.birthday'  => 'Birthday',
 
     // ── Shop — occasion bouquet pages ─────────────────────────────────────────
-    'shop.add_to_cart'  => 'Add to Cart',
-    'shop.customize'    => 'Customize this bouquet',
+    'shop.add_to_cart'     => 'Add to Cart',
+    'shop.customize'       => 'Customize this bouquet',
+    'shop.paper_color'     => 'Wrap / paper color',
+    'shop.addons'          => 'Add-ons',
+    'shop.ribbon_message'  => 'Ribbon message',
+    'shop.quantity'        => 'Quantity',
+    'shop.mixed'           => '(mixed)',
+    'shop.color_hint'      => 'Pick one color, or select several for a mixed arrangement.',
+    'shop.colors_may_differ' => 'Delivered colors may differ slightly from the photo based on availability.',
+
+    // ── Cart ──────────────────────────────────────────────────────────────────
+    'cart.heading'     => 'Your Cart',
+    'cart.empty'       => 'Your cart is empty.',
+    'cart.update'      => 'Update',
+    'cart.remove'      => 'Remove',
+    'cart.subtotal'    => 'Subtotal',
+    'cart.checkout'    => 'Proceed to Checkout',
+    'cart.totals_note' => 'Delivery fee and sales tax are calculated at checkout.',
 
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Loading...',

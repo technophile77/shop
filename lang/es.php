@@ -124,8 +124,24 @@ return [
     'occasion.birthday'  => 'Cumpleaños',
 
     // ── Shop — occasion bouquet pages ─────────────────────────────────────────
-    'shop.add_to_cart'  => 'Agregar al Carrito',
-    'shop.customize'    => 'Personaliza este ramo',
+    'shop.add_to_cart'     => 'Agregar al Carrito',
+    'shop.customize'       => 'Personaliza este ramo',
+    'shop.paper_color'     => 'Color del papel',
+    'shop.addons'          => 'Complementos',
+    'shop.ribbon_message'  => 'Mensaje del listón',
+    'shop.quantity'        => 'Cantidad',
+    'shop.mixed'           => '(mezclado)',
+    'shop.color_hint'      => 'Elige un color, o selecciona varios para un arreglo mezclado.',
+    'shop.colors_may_differ' => 'Los colores entregados pueden variar ligeramente de la foto según la disponibilidad.',
+
+    // ── Cart ──────────────────────────────────────────────────────────────────
+    'cart.heading'     => 'Tu Carrito',
+    'cart.empty'       => 'Tu carrito está vacío.',
+    'cart.update'      => 'Actualizar',
+    'cart.remove'      => 'Eliminar',
+    'cart.subtotal'    => 'Subtotal',
+    'cart.checkout'    => 'Proceder al Pago',
+    'cart.totals_note' => 'La tarifa de entrega y el impuesto se calculan al finalizar la compra.',
 
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Cargando...',
