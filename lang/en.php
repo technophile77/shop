@@ -117,6 +117,12 @@ return [
     'footer.delivery_info'  => 'Delivery',
     'footer.doordash_cta'   => 'Order on DoorDash',
 
+    // ── Occasions ─────────────────────────────────────────────────────────────
+    'occasion.get_well'  => 'Get Well',
+    'occasion.new_baby'  => 'New Baby',
+    'occasion.sympathy'  => 'Sympathy',
+    'occasion.birthday'  => 'Birthday',
+
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Loading...',
     'general.error'    => 'An error occurred.',

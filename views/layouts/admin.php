@@ -118,6 +118,45 @@ $currentUri = $_SERVER['REQUEST_URI'] ?? '/admin';
                 </svg>
                 Categories
             </a>
+            <a href="/admin/occasions" class="<?= str_starts_with($currentUri, '/admin/occasions') ? 'active' : '' ?>">
+                <!-- Calendar/event icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <rect x="1" y="3" width="14" height="12" rx="1.5" fill="currentColor" opacity="0.2" stroke="currentColor" stroke-width="1.4"/>
+                    <line x1="5" y1="1" x2="5" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    <line x1="11" y1="1" x2="11" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    <line x1="1" y1="7" x2="15" y2="7" stroke="currentColor" stroke-width="1.2"/>
+                </svg>
+                Occasions
+            </a>
+            <a href="/admin/flower-types" class="<?= str_starts_with($currentUri, '/admin/flower-types') ? 'active' : '' ?>">
+                <!-- Flower type icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <circle cx="8" cy="8" r="2.5" fill="currentColor"/>
+                    <circle cx="8" cy="2.5" r="1.5" fill="currentColor" opacity="0.55"/>
+                    <circle cx="8" cy="13.5" r="1.5" fill="currentColor" opacity="0.55"/>
+                    <circle cx="2.5" cy="8" r="1.5" fill="currentColor" opacity="0.55"/>
+                    <circle cx="13.5" cy="8" r="1.5" fill="currentColor" opacity="0.55"/>
+                </svg>
+                Flower Types
+            </a>
+            <a href="/admin/flower-colors" class="<?= str_starts_with($currentUri, '/admin/flower-colors') ? 'active' : '' ?>">
+                <!-- Palette icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="currentColor" opacity="0.12"/>
+                    <circle cx="5.5" cy="6" r="1.2" fill="currentColor"/>
+                    <circle cx="10.5" cy="6" r="1.2" fill="currentColor"/>
+                    <circle cx="8" cy="10.5" r="1.2" fill="currentColor"/>
+                </svg>
+                Flower Colors
+            </a>
+            <a href="/admin/paper-colors" class="<?= str_starts_with($currentUri, '/admin/paper-colors') ? 'active' : '' ?>">
+                <!-- Swatch/paper icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <rect x="2" y="2" width="8" height="12" rx="1" fill="currentColor" opacity="0.3" stroke="currentColor" stroke-width="1.3"/>
+                    <rect x="6" y="5" width="8" height="9" rx="1" fill="currentColor" opacity="0.5" stroke="currentColor" stroke-width="1.3"/>
+                </svg>
+                Paper Colors
+            </a>
             <a href="/admin/addons" class="<?= str_starts_with($currentUri, '/admin/addons') ? 'active' : '' ?>">
                 <!-- Gift/plus icon -->
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">

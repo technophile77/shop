@@ -117,6 +117,12 @@ return [
     'footer.delivery_info'  => 'Entrega',
     'footer.doordash_cta'   => 'Pedir en DoorDash',
 
+    // ── Occasions ─────────────────────────────────────────────────────────────
+    'occasion.get_well'  => 'Que te mejores',
+    'occasion.new_baby'  => 'Nuevo Bebé',
+    'occasion.sympathy'  => 'Condolencias',
+    'occasion.birthday'  => 'Cumpleaños',
+
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Cargando...',
     'general.error'    => 'Ocurrió un error.',

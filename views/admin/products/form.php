@@ -337,6 +337,88 @@ function imagePicker(initial, csrf) {
                 </div>
             </div>
 
+            <!-- Flower Count -->
+            <div class="admin-card">
+                <p class="admin-card-title" style="margin-bottom:1.25rem">Flower Details</p>
+
+                <div class="admin-form-group" style="margin-bottom:0">
+                    <label for="flower_count">Flower Count <span style="color:#999; font-weight:400; text-transform:none; letter-spacing:0">(optional)</span></label>
+                    <input type="number" id="flower_count" name="flower_count"
+                           value="<?= htmlspecialchars((string) ($product['flower_count'] ?? '')) ?>"
+                           min="1" step="1" placeholder="e.g. 12">
+                </div>
+            </div>
+
+            <!-- Occasions -->
+            <div class="admin-card">
+                <p class="admin-card-title" style="margin-bottom:1.25rem">Occasions</p>
+                <div style="display:flex; flex-direction:column; gap:0.5rem">
+                <?php foreach ($occasions as $occ): ?>
+                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.875rem; font-weight:400; font-family:'Lato',sans-serif; text-transform:none; letter-spacing:0; color:#333">
+                        <input type="checkbox" name="occasion_ids[]"
+                               value="<?= (int) $occ['id'] ?>"
+                               <?= in_array((int) $occ['id'], $selectedOccasionIds ?? [], true) ? 'checked' : '' ?>
+                               style="width:15px; height:15px; accent-color:var(--color-primary)">
+                        <?= htmlspecialchars($occ['name_en']) ?>
+                    </label>
+                <?php endforeach; ?>
+                <?php if (empty($occasions)): ?>
+                    <p style="font-size:0.8rem; color:#999">No occasions configured yet.</p>
+                <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Flower Types -->
+            <div class="admin-card">
+                <p class="admin-card-title" style="margin-bottom:1.25rem">Flower Types</p>
+                <div style="display:flex; flex-direction:column; gap:0.5rem">
+                <?php foreach ($flowerTypes as $ft): ?>
+                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.875rem; font-weight:400; font-family:'Lato',sans-serif; text-transform:none; letter-spacing:0; color:#333">
+                        <input type="checkbox" name="flower_type_ids[]"
+                               value="<?= (int) $ft['id'] ?>"
+                               <?= in_array((int) $ft['id'], $selectedFlowerTypeIds ?? [], true) ? 'checked' : '' ?>
+                               style="width:15px; height:15px; accent-color:var(--color-primary)">
+                        <?= htmlspecialchars($ft['name_en']) ?>
+                    </label>
+                <?php endforeach; ?>
+                <?php if (empty($flowerTypes)): ?>
+                    <p style="font-size:0.8rem; color:#999">No flower types configured yet.</p>
+                <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Pictured Colors -->
+            <div class="admin-card">
+                <p class="admin-card-title" style="margin-bottom:1.25rem">Photo Colors</p>
+                <p style="font-size:0.78rem; color:#888; margin-bottom:0.875rem">Colors shown in the product photo — used as defaults when customers customize.</p>
+
+                <div class="admin-form-group">
+                    <label for="pictured_flower_color_id">Flower Color in Photo</label>
+                    <select id="pictured_flower_color_id" name="pictured_flower_color_id">
+                        <option value="">— None —</option>
+                        <?php foreach ($flowerColors as $fc): ?>
+                        <option value="<?= (int) $fc['id'] ?>"
+                            <?= (isset($product['pictured_flower_color_id']) && (int) $product['pictured_flower_color_id'] === (int) $fc['id']) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($fc['name_en']) ?><?= $fc['hex'] ? ' (' . htmlspecialchars($fc['hex']) . ')' : '' ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="admin-form-group" style="margin-bottom:0">
+                    <label for="pictured_paper_color_id">Paper Color in Photo</label>
+                    <select id="pictured_paper_color_id" name="pictured_paper_color_id">
+                        <option value="">— None —</option>
+                        <?php foreach ($paperColors as $pc): ?>
+                        <option value="<?= (int) $pc['id'] ?>"
+                            <?= (isset($product['pictured_paper_color_id']) && (int) $product['pictured_paper_color_id'] === (int) $pc['id']) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($pc['name_en']) ?><?= $pc['hex'] ? ' (' . htmlspecialchars($pc['hex']) . ')' : '' ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+
             <!-- Save button -->
             <button type="submit" class="admin-btn admin-btn-primary" style="width:100%; justify-content:center; padding:0.875rem">
                 <?= $isNew ? 'Save Product' : 'Update Product' ?>
