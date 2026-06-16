@@ -188,10 +188,18 @@ $fmtFee = static fn (float $f): string => '$' . (fmod($f, 1.0) === 0.0 ? number_
                     <strong><?= htmlspecialchars($fmtFee((float) $venue['fee'])) ?></strong>
                 </p>
                 <?php endif; ?>
-                <a href="https://maps.google.com/?q=<?= urlencode($venue['name'] . ', ' . $venue['address']) ?>"
-                   target="_blank" rel="noopener noreferrer"
-                   style="font-size:0.85rem; color:var(--color-primary)">
-                    <?= $lang === 'es' ? 'Ver mapa' : 'View map' ?> &rarr;
+                <?php
+                $sendSlug = \App\Support\LocalArea::occasionSlugForService($service);
+                $sendUrl  = '/' . $lang . '/flowers/occasion/' . $sendSlug
+                    . '?dest_service='  . urlencode($service)
+                    . '&dest_city='     . urlencode($citySlug)
+                    . '&venue_name='    . urlencode($venue['name'])
+                    . '&venue_address=' . urlencode($venue['address']);
+                ?>
+                <a href="<?= htmlspecialchars($sendUrl) ?>"
+                   class="btn btn-primary btn-sm"
+                   style="margin-top:0.25rem">
+                    <?= $lang === 'es' ? 'Enviar flores' : 'Send flowers' ?> &rarr;
                 </a>
             </div>
             <?php endforeach; ?>
@@ -201,6 +209,29 @@ $fmtFee = static fn (float $f): string => '$' . (fmod($f, 1.0) === 0.0 ? number_
                 ? 'Las distancias son en línea recta desde nuestra tienda y las tarifas de entrega son estimadas; la tarifa final se calcula con su dirección exacta al finalizar el pedido. ¿No ve el lugar que busca? Entregamos en toda el área — contáctenos.'
                 : 'Distances are straight-line from our shop and delivery fees are estimates; the final fee is calculated from your exact address at checkout. Don\'t see your venue? We deliver area-wide — just reach out.' ?>
         </p>
+    </div>
+</section>
+<?php endif; ?>
+
+<!-- ============================================================
+     BIRTHDAY BOUQUETS — inline product grid (birthday pages only)
+     ============================================================ -->
+<?php if ($service === 'birthday' && !empty($bouquetProducts)): ?>
+<section class="section section--light" style="padding-top:0">
+    <div class="container">
+        <h2 style="margin-bottom:0.5rem">
+            <?= htmlspecialchars($lang === 'es' ? 'Ramos de Cumpleaños' : 'Birthday Bouquets') ?>
+        </h2>
+        <p style="color:var(--color-muted); max-width:640px; margin-bottom:2rem">
+            <?= $lang === 'es'
+                ? 'Elige un ramo, personaliza los colores y lo entregamos a tu destinatario.'
+                : 'Pick a bouquet, customize the colors, and we\'ll deliver it to your recipient.' ?>
+        </p>
+        <div class="product-grid">
+            <?php foreach ($bouquetProducts as $product): ?>
+            <?php include __DIR__ . '/_bouquet_card.php'; ?>
+            <?php endforeach; ?>
+        </div>
     </div>
 </section>
 <?php endif; ?>

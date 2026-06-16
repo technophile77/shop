@@ -315,4 +315,17 @@ final class LocalAreaTest extends TestCase
         self::assertNotEmpty($problems);
         self::assertStringContainsString("'entities'", implode("\n", $problems));
     }
+
+    /**
+     * occasionSlugForService maps each city-page service to its occasion slug,
+     * and returns null for unknown services.
+     */
+    public function testOccasionSlugForService(): void
+    {
+        self::assertSame('sympathy', LocalArea::occasionSlugForService('funeral'));
+        self::assertSame('get-well', LocalArea::occasionSlugForService('hospital'));
+        self::assertSame('birthday', LocalArea::occasionSlugForService('birthday'));
+        self::assertNull(LocalArea::occasionSlugForService('unknown'));
+        self::assertNull(LocalArea::occasionSlugForService(''));
+    }
 }
