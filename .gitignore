@@ -4,6 +4,10 @@
 # Composer dependencies (installed on server via `composer install`)
 /vendor/
 
+# PHPUnit (dev-only; phar/cache are never committed)
+/.phpunit.cache/
+/phpunit.phar
+
 # User-uploaded content (managed on server, not in repo)
 /public/uploads/
 

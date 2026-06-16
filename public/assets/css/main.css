@@ -913,11 +913,13 @@ select {
 /**
  * Persistent floating WhatsApp button.
  * z-index 999 keeps it above all content but below nav (1000).
+ * Pinned bottom-left so it never collides with the Tawk.to live-chat
+ * widget, which docks itself in the bottom-right corner.
  */
 .whatsapp-btn {
   position: fixed;
   bottom: 1.5rem;
-  right: 1.5rem;
+  left: 1.5rem;
   width: 56px;
   height: 56px;
   border-radius: 50%;

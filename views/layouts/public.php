@@ -349,6 +349,7 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
                     <li><a href="/<?= $lang ?>/order"><?= htmlspecialchars(\App\Core\Settings::get('order_button_text_' . $lang, __t('nav.order'))) ?></a></li>
                     <li><a href="/<?= $lang ?>/about"><?= htmlspecialchars(__t('nav.about')) ?></a></li>
                     <li><a href="/<?= $lang ?>/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a></li>
+                    <li><a href="/<?= $lang ?>/delivery-areas"><?= htmlspecialchars(__t('nav.areas')) ?></a></li>
                     <?php if (\App\Core\Settings::get('show_doordash_button', '1') === '1' && \App\Core\Config::get('DOORDASH_STORE_URL')): ?>
                     <li>
                         <a href="<?= htmlspecialchars(\App\Core\Config::get('DOORDASH_STORE_URL')) ?>"
@@ -358,6 +359,25 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
                         </a>
                     </li>
                     <?php endif; ?>
+                </ul>
+            </div>
+
+            <!-- Service areas — top city pages for internal linking / local SEO -->
+            <div class="footer-nav">
+                <p class="footer-heading"><?= htmlspecialchars(__t('nav.areas')) ?></p>
+                <ul class="footer-links" role="list">
+                    <?php foreach (array_slice(\App\Support\LocalArea::areas(), 0, 4, true) as $_areaSlug => $_area): ?>
+                    <li>
+                        <a href="/<?= $lang ?>/funeral-flowers-<?= htmlspecialchars($_areaSlug) ?>">
+                            <?= htmlspecialchars((string) $_area['name']) ?>
+                        </a>
+                    </li>
+                    <?php endforeach; ?>
+                    <li>
+                        <a href="/<?= $lang ?>/delivery-areas">
+                            <?= $lang === 'es' ? 'Ver todas las áreas' : 'View all areas' ?>
+                        </a>
+                    </li>
                 </ul>
             </div>
 

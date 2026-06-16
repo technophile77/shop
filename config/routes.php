@@ -40,6 +40,12 @@ return [
     ['GET',  '/lang/{code}',               'LocaleController',            'switch'],
     ['GET',  '/sitemap.xml',               'SitemapController',           'index'],
 
+    // Local-SEO city landing pages (driven by config/local-areas.php)
+    ['GET',  '/delivery-areas',                  'LocalAreaController',    'hub'],
+    ['GET',  '/funeral-flowers-{city}',          'LocalAreaController',    'funeral'],
+    ['GET',  '/hospital-flower-delivery-{city}', 'LocalAreaController',    'hospital'],
+    ['GET',  '/birthday-delivery-{city}',        'LocalAreaController',    'birthday'],
+
     // -----------------------------------------------------------------------
     // Admin — unauthenticated (login form; no 'auth' middleware)
     // -----------------------------------------------------------------------

@@ -6,6 +6,7 @@ namespace App\Controllers;
 use App\Core\Config;
 use App\Core\Response;
 use App\Models\ProductCategory;
+use App\Support\LocalArea;
 
 /**
  * Generates the XML sitemap dynamically from the database.
@@ -57,6 +58,15 @@ class SitemapController
                 continue;
             }
             $xml .= self::urlBlock($base, '/products/' . $slug, 'weekly', '0.8');
+        }
+
+        // Local-SEO city landing pages + their hub (config/local-areas.php).
+        foreach (LocalArea::allPaths(LocalArea::areas(), LocalArea::services()) as $path) {
+            if ($path === '') {
+                continue;
+            }
+            $priority = $path === '/delivery-areas' ? '0.7' : '0.6';
+            $xml .= self::urlBlock($base, $path, 'monthly', $priority);
         }
 
         $xml .= '</urlset>' . "\n";

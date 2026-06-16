@@ -16,6 +16,7 @@ return [
     'nav.order'       => 'Order Now',
     'nav.about'       => 'About',
     'nav.contact'     => 'Contact',
+    'nav.areas'       => 'Delivery Areas',
     'nav.lang_switch' => 'Español',
 
     // ── Home page ─────────────────────────────────────────────────────────────
