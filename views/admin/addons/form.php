@@ -418,6 +418,36 @@ function addonForm(initial, csrf) {
                 </div>
             </div>
 
+            <!-- Pricing & Options -->
+            <div class="admin-card">
+                <p class="admin-card-title" style="margin-bottom:1.25rem">Pricing &amp; Options</p>
+
+                <div class="admin-form-group">
+                    <label for="price">Price (USD) <span style="color:#999; font-weight:400; text-transform:none; letter-spacing:0">(0 = included free)</span></label>
+                    <input type="number"
+                           id="price"
+                           name="price"
+                           value="<?= number_format((float) ($addon['price'] ?? 0), 2) ?>"
+                           min="0"
+                           step="0.01"
+                           placeholder="0.00">
+                </div>
+
+                <div style="margin-bottom:0">
+                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-family:'Lato',sans-serif; font-size:0.9rem; text-transform:none; letter-spacing:0; color:#333; font-weight:400">
+                        <input type="checkbox"
+                               name="has_custom_text"
+                               value="1"
+                               <?= !empty($addon['has_custom_text']) ? 'checked' : '' ?>
+                               style="width:16px; height:16px; accent-color:var(--color-primary)">
+                        Has custom text (ribbon)
+                    </label>
+                    <p style="font-size:0.78rem; color:#999; margin-top:0.35rem; margin-left:1.625rem">
+                        Check if the customer should supply a short message for this add-on (e.g. a ribbon inscription).
+                    </p>
+                </div>
+            </div>
+
             <!-- Save button -->
             <button type="submit" class="admin-btn admin-btn-primary" style="width:100%; justify-content:center; padding:0.875rem">
                 <?= $isNew ? 'Save Add-On' : 'Update Add-On' ?>

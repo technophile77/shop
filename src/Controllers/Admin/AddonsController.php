@@ -251,8 +251,14 @@ final class AddonsController extends BaseController
      * Does not handle image_path — that is resolved separately so create() and
      * update() can apply different fallback logic.
      *
+     * price is parsed as a non-negative float and clamped to 0 when negative.
+     * has_custom_text is derived from the checkbox: 1 when the field is present,
+     * 0 when absent (unchecked checkboxes are not submitted by browsers).
+     *
      * @param Request $request The current HTTP request.
      * @return array<string, mixed> Sanitised field map for Addon::create()/update().
+     *
+     * @see \App\Support\Shop::normalizePrice()
      */
     private function collectAddonData(Request $request): array
     {
@@ -261,11 +267,16 @@ final class AddonsController extends BaseController
         $nullable = fn (string $key): ?string =>
             ($v = strip_tags(trim((string) $request->post($key, '')))) !== '' ? $v : null;
 
+        $rawPrice = $request->post('price', 0);
+        $price    = max(0.0, round((float) $rawPrice, 2));
+
         return [
-            'name_en'    => $str('name_en'),
-            'name_es'    => $nullable('name_es'),
-            'sort_order' => (int) $request->post('sort_order', 0),
-            'active'     => $request->post('active') !== null ? 1 : 0,
+            'name_en'         => $str('name_en'),
+            'name_es'         => $nullable('name_es'),
+            'sort_order'      => (int) $request->post('sort_order', 0),
+            'active'          => $request->post('active') !== null ? 1 : 0,
+            'price'           => $price,
+            'has_custom_text' => $request->post('has_custom_text') !== null ? 1 : 0,
         ];
     }
 

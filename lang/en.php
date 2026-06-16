@@ -123,6 +123,10 @@ return [
     'occasion.sympathy'  => 'Sympathy',
     'occasion.birthday'  => 'Birthday',
 
+    // ── Shop — occasion bouquet pages ─────────────────────────────────────────
+    'shop.add_to_cart'  => 'Add to Cart',
+    'shop.customize'    => 'Customize this bouquet',
+
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Loading...',
     'general.error'    => 'An error occurred.',

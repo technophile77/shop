@@ -40,6 +40,7 @@
                     <th style="width:80px; padding-left:1.5rem">Photo</th>
                     <th>Name (EN)</th>
                     <th>Name (ES)</th>
+                    <th style="text-align:right">Price</th>
                     <th style="text-align:center">Sort</th>
                     <th>Status</th>
                     <th style="padding-right:1.5rem">Actions</th>
@@ -65,6 +66,13 @@
                             <?= htmlspecialchars($a['name_es']) ?>
                         <?php else: ?>
                             <span style="color:var(--color-muted)">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td style="text-align:right; color:#555; white-space:nowrap">
+                        <?php if (isset($a['price']) && (float) $a['price'] > 0): ?>
+                            $<?= number_format((float) $a['price'], 2) ?>
+                        <?php else: ?>
+                            <span style="color:var(--color-muted)">Free</span>
                         <?php endif; ?>
                     </td>
                     <td style="text-align:center; color:#555"><?= (int) $a['sort_order'] ?></td>
@@ -94,7 +102,7 @@
                 <?php endforeach; ?>
                 <?php if (empty($addons)): ?>
                 <tr>
-                    <td colspan="6" style="text-align:center; padding:3rem 1.5rem; color:var(--color-muted)">
+                    <td colspan="7" style="text-align:center; padding:3rem 1.5rem; color:var(--color-muted)">
                         No add-ons yet.
                         <a href="/admin/addons/new" style="color:var(--color-primary); text-decoration:underline">Add your first add-on.</a>
                     </td>

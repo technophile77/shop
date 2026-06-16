@@ -14,7 +14,8 @@ use App\Core\Database;
  * form.  Read operations use the read-only PDO connection; writes use the
  * read-write connection.  All queries use prepared statements.
  *
- * Expected schema: see migrations/005_add_addons.sql.
+ * Expected schema: see migrations/005_add_addons.sql and
+ * migrations/008_addon_pricing.sql (adds price and has_custom_text).
  *
  * @see \App\Core\Database
  */
@@ -83,25 +84,27 @@ final class Addon
      * Insert a new add-on and return its auto-increment ID.
      *
      * @param array<string, mixed> $data Recognised keys: name_en (required),
-     *        name_es, image_path, active, sort_order.
+     *        name_es, image_path, active, sort_order, price, has_custom_text.
      * @return int Newly created primary key.
      *
      * @example
-     *   $id = Addon::create(['name_en' => 'Ribbon', 'name_es' => 'Lazo', 'active' => 1]);
+     *   $id = Addon::create(['name_en' => 'Ribbon', 'name_es' => 'Lazo', 'price' => 5.00, 'has_custom_text' => 1]);
      */
     public static function create(array $data): int
     {
         $db   = Database::rw();
         $stmt = $db->prepare(
-            'INSERT INTO addons (name_en, name_es, image_path, active, sort_order)
-             VALUES (:name_en, :name_es, :image_path, :active, :sort_order)'
+            'INSERT INTO addons (name_en, name_es, image_path, active, sort_order, price, has_custom_text)
+             VALUES (:name_en, :name_es, :image_path, :active, :sort_order, :price, :has_custom_text)'
         );
         $stmt->execute([
-            ':name_en'    => $data['name_en']    ?? '',
-            ':name_es'    => $data['name_es']    ?? null,
-            ':image_path' => $data['image_path'] ?? null,
-            ':active'     => (int) ($data['active']     ?? 1),
-            ':sort_order' => (int) ($data['sort_order'] ?? 0),
+            ':name_en'         => $data['name_en']         ?? '',
+            ':name_es'         => $data['name_es']         ?? null,
+            ':image_path'      => $data['image_path']      ?? null,
+            ':active'          => (int) ($data['active']          ?? 1),
+            ':sort_order'      => (int) ($data['sort_order']      ?? 0),
+            ':price'           => (float) ($data['price']         ?? 0),
+            ':has_custom_text' => (int) ($data['has_custom_text'] ?? 0),
         ]);
         return (int) $db->lastInsertId();
     }
@@ -110,18 +113,18 @@ final class Addon
      * Update an existing add-on by primary key.
      *
      * Only columns present in $data are updated.  Recognised keys: name_en,
-     * name_es, image_path, active, sort_order.
+     * name_es, image_path, active, sort_order, price, has_custom_text.
      *
      * @param int                  $id   Primary key.
      * @param array<string, mixed> $data Column => value pairs to update.
      * @return bool True when at least one row was matched.
      *
      * @example
-     *   Addon::update(3, ['sort_order' => 2, 'active' => 0]);
+     *   Addon::update(3, ['sort_order' => 2, 'active' => 0, 'price' => 5.00, 'has_custom_text' => 1]);
      */
     public static function update(int $id, array $data): bool
     {
-        $allowed    = ['name_en', 'name_es', 'image_path', 'active', 'sort_order'];
+        $allowed    = ['name_en', 'name_es', 'image_path', 'active', 'sort_order', 'price', 'has_custom_text'];
         $setClauses = [];
         $params     = [];
 

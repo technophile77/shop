@@ -123,6 +123,10 @@ return [
     'occasion.sympathy'  => 'Condolencias',
     'occasion.birthday'  => 'Cumpleaños',
 
+    // ── Shop — occasion bouquet pages ─────────────────────────────────────────
+    'shop.add_to_cart'  => 'Agregar al Carrito',
+    'shop.customize'    => 'Personaliza este ramo',
+
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Cargando...',
     'general.error'    => 'Ocurrió un error.',

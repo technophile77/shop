@@ -30,9 +30,14 @@ final class OrderController extends BaseController
     /**
      * Renders the custom bouquet request form.
      *
-     * Generates a CSRF token and optionally pre-fills the arrangement hint
-     * from the `arrangement` query parameter so product cards that link here
-     * can pre-populate the arrangement_style field.
+     * Generates a CSRF token and optionally pre-fills fields from query
+     * parameters so product cards on other pages can link here with context:
+     *
+     *   ?arrangement= — pre-fills the arrangement_style field (legacy param,
+     *                   kept for backwards compatibility with product cards).
+     *   ?product=     — pre-fills the arrangement_style field; takes precedence
+     *                   over ?arrangement= when both are present.
+     *   ?occasion=    — pre-fills the occasion field with a human-readable label.
      *
      * @param Request              $request HTTP request.
      * @param array<string, mixed> $params  Route parameters (unused).
@@ -42,20 +47,27 @@ final class OrderController extends BaseController
      * @see \App\Models\Addon::allActive()
      *
      * @example
+     *   // GET /order?product=Eternal+Roses&occasion=Birthday
      *   // GET /order?arrangement=Eternal+Roses
      */
     public function form(Request $request, array $params = []): Response
     {
-        $lang             = Lang::current();
-        $csrfToken        = $request->csrfToken();
-        $arrangementHint  = $request->query('arrangement', '');
-        $pageTitle        = (string) Settings::get('order_page_title_' . $lang, 'Request a Custom Bouquet');
-
+        $lang  = Lang::current();
         $addons = Addon::allActive();
 
+        // ?product= takes precedence over legacy ?arrangement= when both present.
+        $productHint      = $request->query('product', '');
+        $arrangementHint  = $productHint !== ''
+            ? $productHint
+            : $request->query('arrangement', '');
+
+        $occasionHint = $request->query('occasion', '');
+        $pageTitle    = (string) Settings::get('order_page_title_' . $lang, 'Request a Custom Bouquet');
+
         $html = $this->render('public/order', [
-            'csrfToken'       => $csrfToken,
+            'csrfToken'       => $request->csrfToken(),
             'arrangementHint' => $arrangementHint,
+            'occasionHint'    => $occasionHint,
             'lang'            => $lang,
             'pageTitle'       => $pageTitle,
             'addons'          => $addons,
