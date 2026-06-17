@@ -11,7 +11,8 @@ use PHPUnit\Framework\TestCase;
  * Unit tests for FlowerColorResolver — pure fixture-based, no DB.
  *
  * All tests exercise in-memory fixture data so they run without a database
- * connection and are fully deterministic.
+ * connection and are fully deterministic. The fifth argument is the per-type
+ * pictured-color map (flower_type_id => int[] color_ids).
  *
  * @see \App\Support\FlowerColorResolver
  */
@@ -61,10 +62,9 @@ final class FlowerColorResolverTest extends TestCase
     }
 
     /**
-     * When the pictured color is available for the type, the default equals
-     * the pictured color and differs_from_photo is false.
+     * A single pictured color available for the type becomes the sole default.
      */
-    public function testPicturedColorAvailableForType(): void
+    public function testSinglePicturedColorAvailable(): void
     {
         // Pink (id 2) is available for Roses (type 1)
         $result = FlowerColorResolver::availableColorsForProduct(
@@ -72,79 +72,112 @@ final class FlowerColorResolverTest extends TestCase
             $this->types(),
             $this->colorMap(),
             $this->colors(),
-            2
+            [1 => [2]]
         );
 
         self::assertCount(1, $result);
         $row = $result[0];
         self::assertSame(1, $row['flower_type_id']);
         self::assertSame('Roses', $row['name_en']);
-        self::assertSame(2, $row['default_color_id']);
+        self::assertSame([2], $row['default_color_ids']);
         self::assertFalse($row['differs_from_photo']);
         self::assertCount(3, $row['colors']);
     }
 
     /**
-     * When the pictured color is NOT available for a type, the default falls
-     * back to the first color for that type and differs_from_photo is true.
+     * Multiple pictured colors of the same type are all defaulted, in the
+     * type's available-color order (e.g. red + white roses).
      */
-    public function testPicturedColorNotAvailableForType(): void
+    public function testMultiplePicturedColorsAvailable(): void
     {
-        // Carnations (type 2) has Red(1), White(3), Purple(4) — NOT Pink(2)
+        // Roses pictured as Red(1) + White(3); available order is Red,Pink,White.
+        $result = FlowerColorResolver::availableColorsForProduct(
+            [1],
+            $this->types(),
+            $this->colorMap(),
+            $this->colors(),
+            [1 => [3, 1]] // order in the map should not matter
+        );
+
+        self::assertSame([1, 3], $result[0]['default_color_ids']);
+        self::assertFalse($result[0]['differs_from_photo']);
+    }
+
+    /**
+     * Pictured colors are intersected with availability — unavailable picks drop.
+     */
+    public function testPicturedSubsetWhenSomeUnavailable(): void
+    {
+        // Roses pictured Red(1) + Purple(4); Purple is not available for Roses.
+        $result = FlowerColorResolver::availableColorsForProduct(
+            [1],
+            $this->types(),
+            $this->colorMap(),
+            $this->colors(),
+            [1 => [1, 4]]
+        );
+
+        self::assertSame([1], $result[0]['default_color_ids']);
+        self::assertFalse($result[0]['differs_from_photo']);
+    }
+
+    /**
+     * When none of the pictured colors are available, the default falls back to
+     * the first color for the type and differs_from_photo is true.
+     */
+    public function testPicturedNoneAvailableFallsBack(): void
+    {
+        // Carnations (type 2) has Red(1), White(3), Purple(4) — pictured Pink(2) only.
         $result = FlowerColorResolver::availableColorsForProduct(
             [2],
             $this->types(),
             $this->colorMap(),
             $this->colors(),
-            2
+            [2 => [2]]
         );
 
-        self::assertCount(1, $result);
         $row = $result[0];
-        self::assertSame(2, $row['flower_type_id']);
-        self::assertSame(1, $row['default_color_id']); // first color for Carnations = Red(1)
+        self::assertSame([1], $row['default_color_ids']); // first color for Carnations = Red(1)
         self::assertTrue($row['differs_from_photo']);
     }
 
     /**
-     * When picturedFlowerColorId is null, the default falls back to the first
+     * With no pictured colors recorded, the default falls back to the first
      * available color and differs_from_photo is true.
      */
-    public function testPicturedColorNull(): void
+    public function testNoPicturedColors(): void
     {
         $result = FlowerColorResolver::availableColorsForProduct(
             [1],
             $this->types(),
             $this->colorMap(),
             $this->colors(),
-            null
+            []
         );
 
-        self::assertCount(1, $result);
         $row = $result[0];
-        self::assertSame(1, $row['default_color_id']); // first color = Red
+        self::assertSame([1], $row['default_color_ids']); // first color = Red
         self::assertTrue($row['differs_from_photo']);
     }
 
     /**
-     * When a product has multiple flower types and the pictured color exists in
-     * all of them, every type's default equals the pictured color and none differ.
+     * Multiple flower types each resolve their own pictured colors independently.
      */
     public function testMultipleFlowerTypes(): void
     {
-        // Red (id 1) is available for both Roses and Carnations
+        // Roses pictured Red+White; Carnations pictured White only.
         $result = FlowerColorResolver::availableColorsForProduct(
             [1, 2],
             $this->types(),
             $this->colorMap(),
             $this->colors(),
-            1
+            [1 => [1, 3], 2 => [3]]
         );
 
         self::assertCount(2, $result);
-        self::assertSame(1, $result[0]['default_color_id']);
+        self::assertSame([1, 3], $result[0]['default_color_ids']);
         self::assertFalse($result[0]['differs_from_photo']);
-        self::assertSame(1, $result[1]['default_color_id']);
+        self::assertSame([3], $result[1]['default_color_ids']);
         self::assertFalse($result[1]['differs_from_photo']);
     }
 
@@ -158,7 +191,7 @@ final class FlowerColorResolverTest extends TestCase
             $this->types(),
             $this->colorMap(),
             $this->colors(),
-            1
+            []
         );
 
         self::assertSame([], $result);
@@ -174,14 +207,14 @@ final class FlowerColorResolverTest extends TestCase
             $this->types(),
             $this->colorMap(),
             $this->colors(),
-            1
+            []
         );
 
         self::assertSame([], $result);
     }
 
     /**
-     * When a flower type has no colors configured, default_color_id is null
+     * When a flower type has no colors configured, default_color_ids is empty
      * and differs_from_photo is false (nothing to differ from).
      */
     public function testTypeWithNoColors(): void
@@ -193,11 +226,11 @@ final class FlowerColorResolverTest extends TestCase
             $this->types(),
             $colorMap,
             $this->colors(),
-            1
+            [1 => [1]]
         );
 
         self::assertCount(1, $result);
-        self::assertNull($result[0]['default_color_id']);
+        self::assertSame([], $result[0]['default_color_ids']);
         self::assertFalse($result[0]['differs_from_photo']);
     }
 
@@ -232,7 +265,7 @@ final class FlowerColorResolverTest extends TestCase
             $this->types(),
             $this->colorMap(),
             $this->colors(),
-            1
+            [1 => [1]]
         );
 
         $color = $result[0]['colors'][0];

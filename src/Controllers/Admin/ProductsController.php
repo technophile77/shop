@@ -12,9 +12,11 @@ use App\Models\Occasion;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductFlowerType;
+use App\Models\ProductFlowerTypeColor;
 use App\Models\ProductOccasion;
 use App\Models\FlowerColor;
 use App\Models\FlowerType;
+use App\Models\FlowerTypeColor;
 use App\Models\PaperColor;
 use App\Support\FlowerColorResolver;
 
@@ -122,6 +124,8 @@ final class ProductsController extends BaseController
                 'paperColors'           => PaperColor::allActive(),
                 'selectedOccasionIds'   => [],
                 'selectedFlowerTypeIds' => [],
+                'flowerTypeColorOptions' => $this->flowerTypeColorOptions(),
+                'picturedColorsByType'  => [],
             ], 'admin')
         );
     }
@@ -177,6 +181,7 @@ final class ProductsController extends BaseController
         $flowerTypeIds = FlowerColorResolver::normalizeIdList((array) $request->post('flower_type_ids', []));
         ProductOccasion::setForProduct($newId, $occasionIds);
         ProductFlowerType::setForProduct($newId, $flowerTypeIds);
+        ProductFlowerTypeColor::setForProduct($newId, $this->collectPicturedColors($request, $flowerTypeIds));
 
         $this->setFlash('success', 'Product created successfully.');
         return $this->redirect('/admin/products');
@@ -224,6 +229,8 @@ final class ProductsController extends BaseController
                 'paperColors'           => PaperColor::allActive(),
                 'selectedOccasionIds'   => ProductOccasion::occasionIdsForProduct($id),
                 'selectedFlowerTypeIds' => ProductFlowerType::flowerTypeIdsForProduct($id),
+                'flowerTypeColorOptions' => $this->flowerTypeColorOptions(),
+                'picturedColorsByType'  => ProductFlowerTypeColor::mapForProduct($id),
             ], 'admin')
         );
     }
@@ -287,6 +294,7 @@ final class ProductsController extends BaseController
         $flowerTypeIds = FlowerColorResolver::normalizeIdList((array) $request->post('flower_type_ids', []));
         ProductOccasion::setForProduct($id, $occasionIds);
         ProductFlowerType::setForProduct($id, $flowerTypeIds);
+        ProductFlowerTypeColor::setForProduct($id, $this->collectPicturedColors($request, $flowerTypeIds));
 
         $this->setFlash('success', 'Product updated successfully.');
         return $this->redirect('/admin/products');
@@ -364,9 +372,70 @@ final class ProductsController extends BaseController
             'featured'                  => $request->post('featured') !== null ? 1 : 0,
             'active'                    => $request->post('active') !== null ? 1 : 0,
             'flower_count'              => ($v = trim((string) $request->post('flower_count', ''))) !== '' ? (int) $v : null,
-            'pictured_flower_color_id'  => ($v = trim((string) $request->post('pictured_flower_color_id', ''))) !== '' ? (int) $v : null,
+            // Legacy single pictured flower color is superseded by the per-type
+            // product_flower_type_colors join — always cleared now.
+            'pictured_flower_color_id'  => null,
             'pictured_paper_color_id'   => ($v = trim((string) $request->post('pictured_paper_color_id', ''))) !== '' ? (int) $v : null,
         ];
+    }
+
+    /**
+     * Build the per-flower-type available-color options for the product form.
+     *
+     * Returns, for each flower type, the full color rows it is available in
+     * (from the flower_type_colors matrix), so the form can render per-type
+     * pictured-color checkboxes.
+     *
+     * @return array<int, array<int, array<string, mixed>>> Map of flower_type_id => list of color rows.
+     */
+    private function flowerTypeColorOptions(): array
+    {
+        $colorsById = [];
+        foreach (FlowerColor::allActive() as $color) {
+            $colorsById[(int) $color['id']] = $color;
+        }
+
+        $options = [];
+        foreach (FlowerTypeColor::map() as $typeId => $colorIds) {
+            $rows = [];
+            foreach ((array) $colorIds as $cid) {
+                if (isset($colorsById[(int) $cid])) {
+                    $rows[] = $colorsById[(int) $cid];
+                }
+            }
+            $options[(int) $typeId] = $rows;
+        }
+
+        return $options;
+    }
+
+    /**
+     * Collect the submitted per-flower-type pictured colors, keeping only types
+     * the product actually contains.
+     *
+     * @param Request $request          The HTTP request (reads pictured_colors[typeId][]).
+     * @param int[]   $selectedTypeIds  Flower type IDs the product was tagged with.
+     *
+     * @return array<int, int[]> Map of flower_type_id => list of flower_color_id.
+     */
+    private function collectPicturedColors(Request $request, array $selectedTypeIds): array
+    {
+        $raw = $request->post('pictured_colors', []);
+        $raw = is_array($raw) ? $raw : [];
+
+        $out = [];
+        foreach ($raw as $typeId => $colorIds) {
+            $typeId = (int) $typeId;
+            if (!in_array($typeId, $selectedTypeIds, true)) {
+                continue;
+            }
+            $ids = FlowerColorResolver::normalizeIdList(is_array($colorIds) ? $colorIds : []);
+            if ($ids !== []) {
+                $out[$typeId] = $ids;
+            }
+        }
+
+        return $out;
     }
 
     /**

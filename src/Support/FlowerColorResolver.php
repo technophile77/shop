@@ -24,40 +24,45 @@ final class FlowerColorResolver
      * Compute selectable colors per flower type for a given product.
      *
      * For each flower type the product is tagged with, returns the colors
-     * available for that type with a default color (the pictured color if
-     * available for the type, otherwise the first available color) and a
-     * differs_from_photo flag indicating when the default does not match the
-     * product photo.
+     * available for that type, the default selection (the product's pictured
+     * colors for that type that are actually available — possibly several, e.g.
+     * red + white roses), and a differs_from_photo flag.
+     *
+     * The default is the intersection of the type's pictured colors with its
+     * available colors. When that intersection is empty (no pictured colors
+     * recorded, or none of them are available) the default falls back to the
+     * first available color and differs_from_photo is true. When a type has no
+     * colors at all the default is an empty array.
      *
      * When a flower type ID is not found in $flowerTypesById the entry is
-     * silently skipped. When a type has no colors configured, default_color_id
-     * is null and differs_from_photo is false (nothing to differ from).
+     * silently skipped.
      *
-     * @param int[]  $productFlowerTypeIds  IDs of flower types the product uses.
-     * @param array  $flowerTypesById       Map of id => flower_type row.
-     * @param array  $flowerTypeColorMap    Map of flower_type_id => int[] color_ids
+     * @param int[]  $productFlowerTypeIds IDs of flower types the product uses.
+     * @param array  $flowerTypesById      Map of id => flower_type row.
+     * @param array  $flowerTypeColorMap   Map of flower_type_id => int[] color_ids
      *                                     (from FlowerTypeColor::map()).
-     * @param array  $flowerColorsById      Map of id => flower_color row.
-     * @param int|null $picturedFlowerColorId The color shown in the product photo; may be null.
+     * @param array  $flowerColorsById     Map of id => flower_color row.
+     * @param array  $picturedColorsByType Map of flower_type_id => int[] pictured color_ids
+     *                                     (from ProductFlowerTypeColor::mapForProduct()).
      *
      * @return array<int, array{
      *     flower_type_id: int,
      *     name_en: string,
      *     name_es: string|null,
      *     colors: array<int, array{id: int, name_en: string, name_es: string|null, hex: string|null}>,
-     *     default_color_id: int|null,
+     *     default_color_ids: int[],
      *     differs_from_photo: bool
      * }> One entry per flower type, empty array when product has no flower types.
      *
      * @example
      *   $result = FlowerColorResolver::availableColorsForProduct(
-     *       [1, 2],
+     *       [1],
      *       $flowerTypesById,
      *       $flowerTypeColorMap,
      *       $flowerColorsById,
-     *       5   // pictured color id
+     *       [1 => [3, 7]]   // pictured: red + white roses
      *   );
-     *   // $result[0]['default_color_id'] === 5 if color 5 is available for type 1
+     *   // $result[0]['default_color_ids'] === [3, 7] if both are available for type 1
      *   // $result[0]['differs_from_photo'] === false in that case
      */
     public static function availableColorsForProduct(
@@ -65,7 +70,7 @@ final class FlowerColorResolver
         array $flowerTypesById,
         array $flowerTypeColorMap,
         array $flowerColorsById,
-        ?int $picturedFlowerColorId
+        array $picturedColorsByType
     ): array {
         $result = [];
 
@@ -90,27 +95,34 @@ final class FlowerColorResolver
                 }
             }
 
-            // Determine default color and whether it differs from the photo.
-            $defaultColorId   = null;
+            // Default = the type's pictured colors that are actually available
+            // (in available order); fall back to the first available color.
+            $defaultColorIds  = [];
             $differsFromPhoto = false;
 
             if ($colors !== []) {
                 $availableIds = array_column($colors, 'id');
-                if ($picturedFlowerColorId !== null && in_array($picturedFlowerColorId, $availableIds, true)) {
-                    $defaultColorId   = $picturedFlowerColorId;
+                $pictured     = array_map('intval', (array) ($picturedColorsByType[$typeId] ?? []));
+                $picturedAvailable = array_values(array_filter(
+                    $availableIds,
+                    static fn (int $id): bool => in_array($id, $pictured, true)
+                ));
+
+                if ($picturedAvailable !== []) {
+                    $defaultColorIds  = $picturedAvailable;
                     $differsFromPhoto = false;
                 } else {
-                    $defaultColorId   = $colors[0]['id'];
+                    $defaultColorIds  = [$colors[0]['id']];
                     $differsFromPhoto = true;
                 }
             }
 
             $result[] = [
-                'flower_type_id'    => (int) $typeId,
-                'name_en'           => (string) ($type['name_en'] ?? ''),
-                'name_es'           => isset($type['name_es']) ? (string) $type['name_es'] : null,
-                'colors'            => $colors,
-                'default_color_id'  => $defaultColorId,
+                'flower_type_id'     => (int) $typeId,
+                'name_en'            => (string) ($type['name_en'] ?? ''),
+                'name_es'            => isset($type['name_es']) ? (string) $type['name_es'] : null,
+                'colors'             => $colors,
+                'default_color_ids'  => $defaultColorIds,
                 'differs_from_photo' => $differsFromPhoto,
             ];
         }
