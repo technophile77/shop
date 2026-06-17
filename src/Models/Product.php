@@ -425,6 +425,41 @@ final class Product
     }
 
     /**
+     * Returns the image_path of the first active product tagged with an occasion.
+     *
+     * Used for the Shop-by-Occasion tile thumbnails (occasions themselves have no
+     * image). Ordered by sort_order then id so the choice is stable.
+     *
+     * @param string $slug The occasion slug.
+     *
+     * @return string|null The product's image_path, or null when none is tagged/has an image.
+     *
+     * @throws \PDOException When the database query fails.
+     *
+     * @example
+     *   Product::firstImageByOccasion('birthday'); // 'abc123.jpg' or null
+     */
+    public static function firstImageByOccasion(string $slug): ?string
+    {
+        $stmt = Database::ro()->prepare(
+            'SELECT p.image_path
+             FROM products p
+             JOIN product_occasions po ON po.product_id = p.id
+             JOIN occasions o ON o.id = po.occasion_id
+             WHERE o.slug = ?
+               AND p.active = 1
+               AND p.image_path IS NOT NULL
+               AND p.image_path <> \'\'
+             ORDER BY p.sort_order ASC, p.id ASC
+             LIMIT 1'
+        );
+        $stmt->execute([$slug]);
+        $val = $stmt->fetchColumn();
+
+        return ($val === false || $val === null) ? null : (string) $val;
+    }
+
+    /**
      * Returns active products tagged with ANY of the given occasion slugs.
      *
      * Used for combined occasion pages (e.g. the hospital page unions get-well

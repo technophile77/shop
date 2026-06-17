@@ -185,6 +185,7 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
         <!-- Desktop nav links -->
         <ul class="nav-links" role="list">
             <li><a href="/<?= $lang ?>"><?= htmlspecialchars(__t('nav.home')) ?></a></li>
+            <li><a href="/<?= $lang ?>/flowers/occasions"><?= htmlspecialchars(__t('nav.occasions')) ?></a></li>
             <li><a href="/<?= $lang ?>/products"><?= htmlspecialchars(__t('nav.products')) ?></a></li>
             <li>
                 <a href="/<?= $lang ?>/order" class="btn btn-accent btn-sm">
@@ -239,6 +240,7 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
 <div id="nav-mobile" class="nav-mobile" role="dialog" aria-label="Mobile navigation">
     <nav class="nav-mobile-links" role="list">
         <a href="/<?= $lang ?>"><?= htmlspecialchars(__t('nav.home')) ?></a>
+        <a href="/<?= $lang ?>/flowers/occasions"><?= htmlspecialchars(__t('nav.occasions')) ?></a>
         <a href="/<?= $lang ?>/products"><?= htmlspecialchars(__t('nav.products')) ?></a>
         <a href="/<?= $lang ?>/order"><?= htmlspecialchars(\App\Core\Settings::get('order_button_text_' . $lang, __t('nav.order'))) ?></a>
         <a href="/<?= $lang ?>/about"><?= htmlspecialchars(__t('nav.about')) ?></a>

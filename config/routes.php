@@ -25,6 +25,7 @@ return [
     ['GET',  '/',                           'HomeController',              'index'],
     ['GET',  '/products',                   'ProductController',           'index'],
     ['GET',  '/products/{slug}',            'ProductController',           'byCategory'],
+    ['GET',  '/flowers/occasions',          'ShopController',              'occasions'],
     ['GET',  '/flowers/occasion/{slug}',    'ShopController',              'occasion'],
     ['GET',  '/flowers/{ref}',              'ShopController',              'product'],
     ['GET',  '/cart',                       'CartController',              'view'],

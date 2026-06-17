@@ -10,6 +10,7 @@ use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Settings;
+use App\Services\OccasionMenu;
 
 /**
  * Handles the public home page of Perla's Flowers.
@@ -72,7 +73,8 @@ class HomeController extends BaseController
 
         return Response::html(
             $this->render('public/home', [
-                'products'  => $products,
+                'products'      => $products,
+                'occasionTiles' => OccasionMenu::tiles($lang),
                 'csrfToken' => $csrfToken,
                 'pageTitle' => (string) Settings::get('home_page_title_' . $lang, Config::get('BUSINESS_NAME', '')),
                 'metaDesc'  => $metaDesc,

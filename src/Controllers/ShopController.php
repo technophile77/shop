@@ -17,6 +17,7 @@ use App\Models\PaperColor;
 use App\Models\Product;
 use App\Models\ProductFlowerType;
 use App\Models\ProductFlowerTypeColor;
+use App\Services\OccasionMenu;
 use App\Support\Destination;
 use App\Support\FlowerColorResolver;
 use App\Support\Shop;
@@ -325,6 +326,37 @@ final class ShopController extends BaseController
             'pageTitle'    => $name,
             'metaDesc'     => $metaDesc,
             'ogImage'      => $image,
+        ]);
+
+        return Response::html($html);
+    }
+
+    /**
+     * Render the "Shop by Occasion" hub — a grid of occasion tiles.
+     *
+     * The on-site entry point for browsing by occasion (the occasion pages were
+     * previously reachable only from venue links + the sitemap).
+     *
+     * @param Request              $request The current HTTP request.
+     * @param array<string, mixed> $params  Route parameters (none).
+     *
+     * @return Response HTML hub page.
+     *
+     * @example
+     *   // Matched by: GET /flowers/occasions
+     *   (new ShopController())->occasions($request, []);
+     */
+    public function occasions(Request $request, array $params = []): Response
+    {
+        $lang = Lang::current();
+
+        $html = $this->render('public/occasions', [
+            'lang'          => $lang,
+            'occasionTiles' => OccasionMenu::tiles($lang),
+            'pageTitle'     => $lang === 'es' ? 'Comprar Flores por Ocasión' : 'Shop Flowers by Occasion',
+            'metaDesc'      => $lang === 'es'
+                ? 'Compra flores por ocasión — cumpleaños, aniversario, condolencias, pronta recuperación, nuevo bebé y más. Entrega el mismo día en Tulsa, OK.'
+                : 'Shop flowers by occasion — birthday, anniversary, sympathy, get well, new baby and more. Same-day delivery in Tulsa, OK.',
         ]);
 
         return Response::html($html);

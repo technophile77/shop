@@ -12,6 +12,7 @@ return [
 
     // ── Navigation ───────────────────────────────────────────────────────────
     'nav.home'        => 'Home',
+    'nav.occasions'   => 'Occasions',
     'nav.products'    => 'Flowers',
     'nav.order'       => 'Order Now',
     'nav.about'       => 'About',
