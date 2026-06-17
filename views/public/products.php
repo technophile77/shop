@@ -82,18 +82,21 @@ use App\Core\Settings;
     <div class="product-grid">
 
       <?php foreach ($products as $product): ?>
+      <?php $detailUrl = '/' . $lang . '/flowers/' . \App\Support\Slug::productRef($product); ?>
       <div class="product-card"
            data-category="<?= htmlspecialchars($product['category_slug'] ?? '') ?>">
 
         <!-- Product image -->
-        <img class="product-card-img"
-             src="<?= $product['image_path']
-                 ? htmlspecialchars('/public/uploads/products/' . $product['image_path'])
-                 : '/public/assets/images/placeholder-flower.jpg' ?>"
-             alt="<?= htmlspecialchars($product['name_' . $lang] ?? $product['name_en']) ?>"
-             loading="lazy"
-             width="400"
-             height="300">
+        <a href="<?= htmlspecialchars($detailUrl) ?>">
+          <img class="product-card-img"
+               src="<?= $product['image_path']
+                   ? htmlspecialchars('/public/uploads/products/' . $product['image_path'])
+                   : '/public/assets/images/placeholder-flower.jpg' ?>"
+               alt="<?= htmlspecialchars($product['name_' . $lang] ?? $product['name_en']) ?>"
+               loading="lazy"
+               width="400"
+               height="300">
+        </a>
 
         <div class="product-card-body">
 
@@ -104,7 +107,7 @@ use App\Core\Settings;
 
           <!-- Product name -->
           <h3 class="product-card-name">
-            <?= htmlspecialchars($product['name_' . $lang] ?? $product['name_en']) ?>
+            <a href="<?= htmlspecialchars($detailUrl) ?>" style="color:inherit; text-decoration:none"><?= htmlspecialchars($product['name_' . $lang] ?? $product['name_en']) ?></a>
           </h3>
 
           <!-- Optional description -->

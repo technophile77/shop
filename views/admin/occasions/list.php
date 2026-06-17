@@ -33,16 +33,20 @@
                     <th style="padding-right:1.5rem">Actions</th>
                 </tr>
             </thead>
-            <tbody>
                 <?php foreach ($occasions as $occ): ?>
-                <tr x-data="<?= htmlspecialchars(json_encode([
+                <tbody x-data="<?= htmlspecialchars(json_encode([
                         'editing'   => false,
                         'nameEn'    => $occ['name_en'],
                         'nameEs'    => $occ['name_es'] ?? '',
                         'slug'      => $occ['slug'],
                         'sortOrder' => (int) $occ['sort_order'],
                         'active'    => (bool) $occ['active'],
+                        'headingEn' => $occ['heading_en'] ?? '',
+                        'headingEs' => $occ['heading_es'] ?? '',
+                        'blurbEn'   => $occ['blurb_en'] ?? '',
+                        'blurbEs'   => $occ['blurb_es'] ?? '',
                     ]), ENT_QUOTES, 'UTF-8') ?>">
+                <tr>
 
                     <td style="padding-left:1.5rem">
                         <strong x-show="!editing" x-text="nameEn"></strong>
@@ -99,6 +103,10 @@
                             <input type="hidden" name="slug" :value="slug">
                             <input type="hidden" name="sort_order" :value="sortOrder">
                             <input type="hidden" name="active" :value="active ? '1' : '0'">
+                            <input type="hidden" name="heading_en" :value="headingEn">
+                            <input type="hidden" name="heading_es" :value="headingEs">
+                            <input type="hidden" name="blurb_en"   :value="blurbEn">
+                            <input type="hidden" name="blurb_es"   :value="blurbEs">
                             <button type="submit"
                                     class="admin-btn admin-btn-primary"
                                     style="padding:0.4rem 0.875rem; font-size:0.7rem">
@@ -129,16 +137,42 @@
 
                     </td>
                 </tr>
+
+                <!-- Inline copy editor (shares the row's Alpine state) -->
+                <tr x-show="editing" x-cloak>
+                    <td colspan="6" style="padding:0.25rem 1.5rem 1.25rem; background:#fafbfc">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem 1rem">
+                            <div class="admin-form-group" style="margin:0">
+                                <label>Heading (EN) <span style="color:#999; font-weight:400; text-transform:none; letter-spacing:0">— page title; defaults to the name</span></label>
+                                <input type="text" x-model="headingEn" placeholder="Anniversary Flowers" style="width:100%">
+                            </div>
+                            <div class="admin-form-group" style="margin:0">
+                                <label>Heading (ES)</label>
+                                <input type="text" x-model="headingEs" placeholder="Flores de Aniversario" style="width:100%">
+                            </div>
+                            <div class="admin-form-group" style="margin:0">
+                                <label>Blurb (EN) <span style="color:#999; font-weight:400; text-transform:none; letter-spacing:0">— intro / meta description</span></label>
+                                <textarea x-model="blurbEn" rows="2" style="width:100%"></textarea>
+                            </div>
+                            <div class="admin-form-group" style="margin:0">
+                                <label>Blurb (ES)</label>
+                                <textarea x-model="blurbEs" rows="2" style="width:100%"></textarea>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                </tbody>
                 <?php endforeach; ?>
 
                 <?php if (empty($occasions)): ?>
+                <tbody>
                 <tr>
                     <td colspan="6" style="text-align:center; padding:3rem 1.5rem; color:var(--color-muted)">
                         No occasions yet. Use the form below to add one.
                     </td>
                 </tr>
+                </tbody>
                 <?php endif; ?>
-            </tbody>
         </table>
     </div>
 </div>
@@ -185,12 +219,32 @@
                 </div>
             </div>
 
-            <div style="padding-bottom:1px">
-                <button type="submit" class="admin-btn admin-btn-primary">
-                    Add Occasion
-                </button>
-            </div>
+        </div>
 
+        <!-- Optional page copy (heading + blurb, EN/ES) shown on the occasion page -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem 1rem; margin-top:1rem">
+            <div class="admin-form-group" style="margin:0">
+                <label for="new_heading_en">Heading (EN) <span style="color:#999; font-weight:400; text-transform:none; letter-spacing:0">— page title; defaults to the name</span></label>
+                <input type="text" id="new_heading_en" name="heading_en" placeholder="Birthday Flowers">
+            </div>
+            <div class="admin-form-group" style="margin:0">
+                <label for="new_heading_es">Heading (ES)</label>
+                <input type="text" id="new_heading_es" name="heading_es" placeholder="Flores de Cumpleaños">
+            </div>
+            <div class="admin-form-group" style="margin:0">
+                <label for="new_blurb_en">Blurb (EN) <span style="color:#999; font-weight:400; text-transform:none; letter-spacing:0">— intro / meta description</span></label>
+                <textarea id="new_blurb_en" name="blurb_en" rows="2"></textarea>
+            </div>
+            <div class="admin-form-group" style="margin:0">
+                <label for="new_blurb_es">Blurb (ES)</label>
+                <textarea id="new_blurb_es" name="blurb_es" rows="2"></textarea>
+            </div>
+        </div>
+
+        <div style="margin-top:1.25rem">
+            <button type="submit" class="admin-btn admin-btn-primary">
+                Add Occasion
+            </button>
         </div>
     </form>
 </div>

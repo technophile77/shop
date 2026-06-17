@@ -149,14 +149,21 @@ final class Occasion
     {
         $db   = Database::rw();
         $stmt = $db->prepare(
-            'INSERT INTO occasions (slug, name_en, name_es, active, sort_order)
-             VALUES (:slug, :name_en, :name_es, :active, :sort_order)'
+            'INSERT INTO occasions (slug, name_en, name_es, heading_en, heading_es, blurb_en, blurb_es, active, sort_order)
+             VALUES (:slug, :name_en, :name_es, :heading_en, :heading_es, :blurb_en, :blurb_es, :active, :sort_order)'
         );
+
+        $nullable = static fn (string $k): ?string =>
+            isset($data[$k]) && $data[$k] !== '' ? (string) $data[$k] : null;
 
         $stmt->execute([
             ':slug'       => $data['slug']       ?? '',
             ':name_en'    => $data['name_en']    ?? '',
-            ':name_es'    => isset($data['name_es']) && $data['name_es'] !== '' ? $data['name_es'] : null,
+            ':name_es'    => $nullable('name_es'),
+            ':heading_en' => $nullable('heading_en'),
+            ':heading_es' => $nullable('heading_es'),
+            ':blurb_en'   => $nullable('blurb_en'),
+            ':blurb_es'   => $nullable('blurb_es'),
             ':active'     => (int) ($data['active']     ?? 1),
             ':sort_order' => (int) ($data['sort_order'] ?? 0),
         ]);
@@ -183,7 +190,7 @@ final class Occasion
      */
     public static function update(int $id, array $data): bool
     {
-        $allowed    = ['slug', 'name_en', 'name_es', 'active', 'sort_order'];
+        $allowed    = ['slug', 'name_en', 'name_es', 'heading_en', 'heading_es', 'blurb_en', 'blurb_es', 'active', 'sort_order'];
         $setClauses = [];
         $params     = [];
 

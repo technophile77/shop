@@ -18,12 +18,6 @@ namespace App\Support;
 final class Shop
 {
     /**
-     * Map of occasion slug => per-language heading and blurb copy.
-     *
-     * Used by occasionCopy() to return display text without a database round-
-     * trip. Extend this map whenever a new occasion slug is seeded.
-     */
-    /**
      * Virtual occasion "groups" that combine several real occasion slugs onto a
      * single public page. Keyed by the group slug; values are the member
      * occasion slugs whose products are unioned on that page.
@@ -34,7 +28,12 @@ final class Shop
         'hospital' => ['get-well', 'new-baby'],
     ];
 
-    private const OCCASION_COPY = [
+    /**
+     * Per-language heading/blurb for virtual GROUP pages only (no occasions row).
+     * Single occasions store their copy in the database (admin-editable); see
+     * {@see occasionCopyFromRow()}.
+     */
+    private const GROUP_COPY = [
         'hospital' => [
             'en' => [
                 'heading' => 'Hospital Flowers',
@@ -43,46 +42,6 @@ final class Shop
             'es' => [
                 'heading' => 'Flores para el Hospital',
                 'blurb'   => 'Deseos de pronta recuperación y felicitaciones por el nuevo bebé — ramos alegres y hechos a mano, entregados al hospital con cariño.',
-            ],
-        ],
-        'birthday' => [
-            'en' => [
-                'heading' => 'Birthday Flowers',
-                'blurb'   => 'Make someone\'s birthday unforgettable with a vibrant, hand-crafted arrangement tailored just for them.',
-            ],
-            'es' => [
-                'heading' => 'Flores de Cumpleaños',
-                'blurb'   => 'Haz el cumpleaños de alguien inolvidable con un arreglo vibrante y hecho a mano especialmente para esa persona.',
-            ],
-        ],
-        'get-well' => [
-            'en' => [
-                'heading' => 'Get Well Flowers',
-                'blurb'   => 'Brighten someone\'s day and speed their recovery with a cheerful bouquet delivered with care.',
-            ],
-            'es' => [
-                'heading' => 'Flores para Que te Mejores',
-                'blurb'   => 'Alegra el día de alguien y ayuda a su recuperación con un ramo alegre entregado con cariño.',
-            ],
-        ],
-        'new-baby' => [
-            'en' => [
-                'heading' => 'New Baby Flowers',
-                'blurb'   => 'Welcome a new arrival with a fresh, beautiful arrangement that celebrates this joyful milestone.',
-            ],
-            'es' => [
-                'heading' => 'Flores para Nuevo Bebé',
-                'blurb'   => 'Da la bienvenida a un nuevo bebé con un arreglo fresco y hermoso que celebra este momento tan especial.',
-            ],
-        ],
-        'sympathy' => [
-            'en' => [
-                'heading' => 'Sympathy Flowers',
-                'blurb'   => 'Express your deepest condolences with a thoughtful, elegant arrangement crafted with compassion.',
-            ],
-            'es' => [
-                'heading' => 'Flores de Condolencias',
-                'blurb'   => 'Expresa tus más sentidas condolencias con un arreglo elegante y pensativo elaborado con compasión.',
             ],
         ],
     ];
@@ -135,34 +94,77 @@ final class Shop
     }
 
     /**
-     * Return the display heading and blurb for an occasion slug in a given language.
+     * Return the heading/blurb for a virtual GROUP page (e.g. hospital).
      *
-     * Data is sourced from the in-class OCCASION_COPY constant so no database
-     * call is needed. For unknown slugs a generic fallback is returned so callers
-     * never receive an empty array.
+     * Group pages have no occasions row, so their copy is defined in code. A
+     * generic fallback is returned for an unknown group slug so callers never
+     * receive an empty array.
      *
-     * @param string $slug Occasion URL slug, e.g. 'birthday' or 'get-well'.
-     * @param string $lang Locale code: 'en' or 'es'. Falls back to 'en' for
-     *                     any unrecognised code.
+     * @param string $slug Group slug, e.g. 'hospital'.
+     * @param string $lang Locale code: 'en' or 'es' (falls back to 'en').
      *
-     * @return array{heading: string, blurb: string} Display heading and blurb text.
+     * @return array{heading: string, blurb: string} Display heading and blurb.
      *
      * @example
-     *   Shop::occasionCopy('birthday', 'en');
-     *   // ['heading' => 'Birthday Flowers', 'blurb' => 'Make someone\'s…']
-     *
-     *   Shop::occasionCopy('unknown-slug', 'es');
-     *   // ['heading' => 'Flores Especiales', 'blurb' => 'Explora nuestra…']
+     *   Shop::occasionGroupCopy('hospital', 'en'); // ['heading'=>'Hospital Flowers', 'blurb'=>'…']
      */
-    public static function occasionCopy(string $slug, string $lang): array
+    public static function occasionGroupCopy(string $slug, string $lang): array
     {
         $langKey = ($lang === 'es') ? 'es' : 'en';
 
-        if (isset(self::OCCASION_COPY[$slug][$langKey])) {
-            return self::OCCASION_COPY[$slug][$langKey];
+        if (isset(self::GROUP_COPY[$slug][$langKey])) {
+            return self::GROUP_COPY[$slug][$langKey];
         }
 
-        // Graceful fallback for unknown or future slugs.
+        return self::genericCopy($langKey);
+    }
+
+    /**
+     * Return the heading/blurb for a single occasion from its database row.
+     *
+     * Uses the admin-editable heading_{lang}/blurb_{lang} columns when present,
+     * falling back to the occasion's name for the heading and a generic blurb,
+     * so a brand-new occasion always renders sensible copy.
+     *
+     * @param array<string, mixed> $occasion Occasion row (name_*, heading_*, blurb_*).
+     * @param string               $lang     Locale code: 'en' or 'es' (falls back to 'en').
+     *
+     * @return array{heading: string, blurb: string} Display heading and blurb.
+     *
+     * @example
+     *   Shop::occasionCopyFromRow(['name_en'=>'Anniversary','heading_en'=>'Anniversary Flowers','blurb_en'=>'…'], 'en');
+     *   // ['heading' => 'Anniversary Flowers', 'blurb' => '…']
+     */
+    public static function occasionCopyFromRow(array $occasion, string $lang): array
+    {
+        $langKey = ($lang === 'es') ? 'es' : 'en';
+        $pick    = static fn (string $k): string => trim((string) ($occasion[$k] ?? ''));
+
+        $heading = $pick('heading_' . $langKey);
+        if ($heading === '') {
+            $heading = $pick('name_' . $langKey);
+        }
+        if ($heading === '') {
+            $heading = $pick('name_en');
+        }
+
+        $blurb = $pick('blurb_' . $langKey);
+        if ($blurb === '') {
+            $blurb = self::genericCopy($langKey)['blurb'];
+        }
+
+        return ['heading' => $heading, 'blurb' => $blurb];
+    }
+
+    /**
+     * Generic fallback heading/blurb for a language.
+     *
+     * @param string $langKey 'en' or 'es'.
+     *
+     * @return array{heading: string, blurb: string}
+     */
+    private static function genericCopy(string $langKey): array
+    {
         return $langKey === 'es'
             ? ['heading' => 'Flores Especiales', 'blurb' => 'Explora nuestra selección de arreglos florales hermosos y hechos a mano.']
             : ['heading' => 'Special Occasion Flowers', 'blurb' => 'Explore our selection of beautiful, hand-crafted floral arrangements.'];

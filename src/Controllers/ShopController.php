@@ -20,6 +20,7 @@ use App\Models\ProductFlowerTypeColor;
 use App\Support\Destination;
 use App\Support\FlowerColorResolver;
 use App\Support\Shop;
+use App\Support\Slug;
 
 /**
  * Handles public-facing occasion bouquet pages.
@@ -27,7 +28,9 @@ use App\Support\Shop;
  * Routes served:
  *   GET /flowers/occasion/{slug} — product grid filtered by occasion.
  *
- * Each page shows an occasion-specific heading + blurb (from Shop::occasionCopy()),
+ * Each page shows an occasion-specific heading + blurb (admin-editable per
+ * occasion via Shop::occasionCopyFromRow(), or Shop::occasionGroupCopy() for
+ * virtual group pages),
  * a product grid with per-card CTAs, and a JSON-LD ItemList block for SEO.
  *
  * Product cards carry two CTAs:
@@ -37,7 +40,7 @@ use App\Support\Shop;
  *
  * @see \App\Models\Occasion     Provides occasion lookup by slug.
  * @see \App\Models\Product      Provides products filtered by occasion.
- * @see \App\Support\Shop        Provides isBuyable() and occasionCopy().
+ * @see \App\Support\Shop        Provides isBuyable() and occasion copy resolution.
  * @see \App\Controllers\BaseController::render()
  */
 final class ShopController extends BaseController
@@ -67,18 +70,19 @@ final class ShopController extends BaseController
 
         if ($group !== null) {
             // Virtual group page (e.g. hospital = get-well + new-baby) — union the
-            // member occasions' products under one page.
+            // member occasions' products under one page; copy lives in code.
             $occasion = ['slug' => $slug, 'name_en' => ucfirst($slug), 'name_es' => ucfirst($slug), 'active' => 1];
             $products = Product::byOccasions($group);
+            $copy     = Shop::occasionGroupCopy($slug, $lang);
         } else {
             $occasion = Occasion::findBySlug($slug);
             if ($occasion === null || !(bool) $occasion['active']) {
                 return Response::notFound();
             }
             $products = Product::byOccasion($slug);
+            $copy     = Shop::occasionCopyFromRow($occasion, $lang);
         }
 
-        $copy   = Shop::occasionCopy($slug, $lang);
         $appUrl = rtrim((string) Config::get('APP_URL', ''), '/');
 
         // Record the "send flowers to this venue" destination when arriving from
@@ -175,6 +179,152 @@ final class ShopController extends BaseController
             'addons'              => $addons,
             'destination'         => Destination::get(),
             'csrfToken'           => $request->csrfToken(),
+        ]);
+
+        return Response::html($html);
+    }
+
+    /**
+     * Render the individual bouquet (product) detail page.
+     *
+     * URLs are id-anchored: `/flowers/{name-slug}-{id}`. The trailing id is
+     * authoritative, so a stale slug (after a rename) 301-redirects to the
+     * canonical URL. Returns 404 for a missing or inactive product. Buyable
+     * products get the full add-to-cart panel; unpriced ones get only the
+     * "Customize this bouquet" quote link. Emits Product + BreadcrumbList JSON-LD.
+     *
+     * @param Request              $request The current HTTP request.
+     * @param array<string, mixed> $params  Route parameters; expects $params['ref'].
+     *
+     * @return Response HTML page, a 301 to the canonical URL, or 404.
+     *
+     * @example
+     *   // Matched by: GET /flowers/whisper-of-love-12
+     *   (new ShopController())->product($request, ['ref' => 'whisper-of-love-12']);
+     */
+    public function product(Request $request, array $params = []): Response
+    {
+        $ref = (string) ($params['ref'] ?? '');
+        $id  = Slug::parseId($ref);
+        if ($id <= 0) {
+            return Response::notFound();
+        }
+
+        $lang    = Lang::current();
+        $product = Product::findActive($id);
+        if ($product === null) {
+            return Response::notFound();
+        }
+
+        // Canonicalise: 301 a stale/incorrect slug to the current canonical ref.
+        $canonical = Slug::productRef($product);
+        if ($ref !== $canonical) {
+            return $this->redirect('/' . $lang . '/flowers/' . $canonical, 301);
+        }
+
+        $appUrl       = rtrim((string) Config::get('APP_URL', ''), '/');
+        $canonicalUrl = $appUrl . '/' . $lang . '/flowers/' . $canonical;
+        $buyable      = Shop::isBuyable($product);
+
+        // Per-flower-type color options for the add-to-cart panel (buyable only).
+        $colorOptions = [];
+        if ($buyable) {
+            $flowerTypesById = [];
+            foreach (FlowerType::allActive() as $_ft) {
+                $flowerTypesById[(int) $_ft['id']] = $_ft;
+            }
+            $flowerColorsById = [];
+            foreach (FlowerColor::allActive() as $_fc) {
+                $flowerColorsById[(int) $_fc['id']] = $_fc;
+            }
+            $colorOptions = FlowerColorResolver::availableColorsForProduct(
+                ProductFlowerType::flowerTypeIdsForProduct($id),
+                $flowerTypesById,
+                FlowerTypeColor::map(),
+                $flowerColorsById,
+                ProductFlowerTypeColor::mapForProduct($id)
+            );
+        }
+
+        $name  = (string) ($product['name_' . $lang] ?? $product['name_en'] ?? '');
+        $desc  = (string) ($product['description_' . $lang] ?? $product['description_en'] ?? '');
+        $image = !empty($product['image_path'])
+            ? $appUrl . '/public/uploads/products/' . $product['image_path']
+            : $appUrl . '/public/assets/images/placeholder-flower.jpg';
+        $categoryName = (string) ($product['category_name_' . $lang] ?? $product['category_name_en'] ?? '');
+        $categorySlug = (string) ($product['category_slug'] ?? '');
+
+        // Product JSON-LD.
+        $productNode = [
+            '@type'       => 'Product',
+            'name'        => $name,
+            'description' => $desc !== '' ? $desc : ($name . ' — handcrafted by ' . Config::get('BUSINESS_NAME', '') . ', Tulsa, OK.'),
+            'image'       => $image,
+            'sku'         => (string) $id,
+            'brand'       => ['@type' => 'Brand', 'name' => (string) Config::get('BUSINESS_NAME', '')],
+        ];
+        if ($categoryName !== '') {
+            $productNode['category'] = $categoryName;
+        }
+        if (!empty($product['price_from'])) {
+            $productNode['offers'] = [
+                '@type'         => 'Offer',
+                'priceCurrency' => 'USD',
+                'price'         => number_format((float) $product['price_from'], 2, '.', ''),
+                'availability'  => 'https://schema.org/InStock',
+                'url'           => $canonicalUrl,
+            ];
+        }
+
+        // BreadcrumbList JSON-LD: Home → Products → Category → Name.
+        $crumbs = [
+            ['name' => $lang === 'es' ? 'Inicio' : 'Home',    'url' => $appUrl . '/' . $lang . '/'],
+            ['name' => __t('nav.products'),                    'url' => $appUrl . '/' . $lang . '/products'],
+        ];
+        if ($categoryName !== '' && $categorySlug !== '') {
+            $crumbs[] = ['name' => $categoryName, 'url' => $appUrl . '/' . $lang . '/products/' . $categorySlug];
+        }
+        $crumbs[] = ['name' => $name, 'url' => $canonicalUrl];
+
+        $breadcrumbNode = [
+            '@type'           => 'BreadcrumbList',
+            'itemListElement' => array_map(
+                static fn (int $i, array $c): array => [
+                    '@type'    => 'ListItem',
+                    'position' => $i + 1,
+                    'name'     => $c['name'],
+                    'item'     => $c['url'],
+                ],
+                array_keys($crumbs),
+                $crumbs
+            ),
+        ];
+
+        $jsonLd = ['@context' => 'https://schema.org', '@graph' => [$productNode, $breadcrumbNode]];
+
+        $metaDesc = $desc !== ''
+            ? mb_substr($desc, 0, 155)
+            : sprintf(
+                $lang === 'es'
+                    ? '%s — ramo hecho a mano de %s, entrega en Tulsa, OK.'
+                    : '%s — a handcrafted bouquet from %s, delivered in Tulsa, OK.',
+                $name,
+                (string) Config::get('BUSINESS_NAME', '')
+            );
+
+        $html = $this->render('public/product', [
+            'product'      => $product,
+            'lang'         => $lang,
+            'buyable'      => $buyable,
+            'colorOptions' => $colorOptions,
+            'paperColors'  => PaperColor::allActive(),
+            'addons'       => Addon::allActive(),
+            'csrfToken'    => $request->csrfToken(),
+            'crumbs'       => $crumbs,
+            'jsonLd'       => $jsonLd,
+            'pageTitle'    => $name,
+            'metaDesc'     => $metaDesc,
+            'ogImage'      => $image,
         ]);
 
         return Response::html($html);

@@ -134,6 +134,59 @@ final class LocalAreaController extends BaseController
     }
 
     /**
+     * Per-city hub: lists all services (funeral / hospital / birthday) for one city.
+     *
+     * Route: GET /flower-delivery-{city}. Lets visitors choose a service instead of
+     * assuming one, and adds an indexable city landing page. 404 for unknown cities.
+     *
+     * @param Request              $request The current HTTP request.
+     * @param array<string,string> $params  Route params; expects 'city'.
+     *
+     * @return Response Rendered HTML, or 404 for an unknown city.
+     *
+     * @example
+     *   // Matched by: GET /flower-delivery-bixby
+     *   (new LocalAreaController())->cityHub($request, ['city' => 'bixby']);
+     */
+    public function cityHub(Request $request, array $params = []): Response
+    {
+        $lang     = Lang::current();
+        $areas    = LocalArea::areas();
+        $services = LocalArea::services();
+
+        $slug = $params['city'] ?? '';
+        $city = LocalArea::cityBySlug($slug, $areas);
+        if ($city === null) {
+            return Response::notFound();
+        }
+
+        $coords    = LocalArea::coords();
+        $bizLat    = (float) Config::get('BUSINESS_LAT', 36.0814);
+        $bizLng    = (float) Config::get('BUSINESS_LNG', -95.9987);
+        $cityMiles = LocalArea::cityMilesRange($city, $coords, $bizLat, $bizLng);
+
+        $cityName  = (string) $city['name'];
+        $pageTitle = $lang === 'es'
+            ? "Entrega de Flores en {$cityName}, OK"
+            : "Flower Delivery to {$cityName}, OK";
+        $metaDesc  = $lang === 'es'
+            ? "Entrega de flores hechas a mano en {$cityName}, OK — funerarias, hospitales y cumpleaños. Elige un servicio."
+            : "Hand-crafted flower delivery to {$cityName}, OK — funeral homes, hospitals, and birthdays. Choose a service.";
+
+        $html = $this->render('public/local-city-hub', [
+            'lang'      => $lang,
+            'city'      => $city,
+            'citySlug'  => $slug,
+            'services'  => $services,
+            'cityMiles' => $cityMiles,
+            'pageTitle' => $pageTitle,
+            'metaDesc'  => $metaDesc,
+        ]);
+
+        return Response::html($html);
+    }
+
+    /**
      * Shared rendering path for the three service pages.
      *
      * Looks up the city, returns 404 if unknown, then builds the localized
