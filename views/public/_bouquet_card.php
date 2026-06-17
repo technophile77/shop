@@ -143,6 +143,7 @@ $customizeUrl  = '/' . $lang . '/order'
             </span>
             <?php foreach ($addons as $addon):
               $hasText = !empty($addon['has_custom_text']);
+              $hasQty  = !empty($addon['has_quantity']);
               $aid     = (int) $addon['id'];
               $aprice  = (float) ($addon['price'] ?? 0);
             ?>
@@ -150,7 +151,9 @@ $customizeUrl  = '/' . $lang . '/order'
               <label style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.85rem">
                 <input type="checkbox" name="addon_ids[]" value="<?= $aid ?>" x-model="checked">
                 <?= htmlspecialchars($addon['name_' . $lang] ?? $addon['name_en'] ?? '') ?>
-                <?php if ($aprice > 0): ?><span style="color:var(--color-muted)">(+$<?= number_format($aprice, 2) ?>)</span><?php endif; ?>
+                <?php if ($aprice > 0): ?><span style="color:var(--color-muted)">(<?= $hasQty
+                    ? '$' . number_format($aprice, 2) . ' ' . htmlspecialchars(__t('shop.each'))
+                    : '+$' . number_format($aprice, 2) ?>)</span><?php endif; ?>
               </label>
               <?php if ($hasText): ?>
               <input type="text"
@@ -159,6 +162,13 @@ $customizeUrl  = '/' . $lang . '/order'
                      x-show="checked" x-cloak
                      placeholder="<?= htmlspecialchars(__t('shop.ribbon_message')) ?> (<?= $ribbonLimit ?>)"
                      style="display:block; width:100%; margin-top:0.3rem; padding:0.35rem">
+              <?php endif; ?>
+              <?php if ($hasQty): ?>
+              <label x-show="checked" x-cloak style="display:flex; align-items:center; gap:0.4rem; margin-top:0.3rem; font-size:0.8rem; color:var(--color-muted)">
+                <?= htmlspecialchars(__t('shop.quantity')) ?>:
+                <input type="number" name="addon_qty[<?= $aid ?>]" value="1" min="1" max="99"
+                       style="width:4.5rem; padding:0.3rem">
+              </label>
               <?php endif; ?>
             </div>
             <?php endforeach; ?>

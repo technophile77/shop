@@ -25,22 +25,27 @@ final class CartPricing
     /**
      * Return the sum of all add-on prices for a single line item.
      *
-     * Each add-on row must carry a 'price' key (float). Items without add-ons
-     * yield 0.00.
+     * Each add-on row must carry a 'price' key (float) and may carry a
+     * 'quantity' (int, default 1) for per-unit add-ons such as chocolates.
+     * The per-bouquet add-on total is sum(price × quantity). Items without
+     * add-ons yield 0.00.
      *
      * @param array $line Canonical line-item array.
      *
-     * @return float Total add-on price (not multiplied by qty), rounded to 2 dp.
+     * @return float Total add-on price per bouquet (not multiplied by bouquet qty), rounded to 2 dp.
      *
      * @example
-     *   CartPricing::addonsTotal(['addons' => [['price' => 5.00], ['price' => 3.50]]]); // 8.50
-     *   CartPricing::addonsTotal(['addons' => []]);                                      // 0.00
+     *   CartPricing::addonsTotal(['addons' => [['price' => 5.00], ['price' => 3.50]]]);            // 8.50
+     *   CartPricing::addonsTotal(['addons' => [['price' => 2.00, 'quantity' => 3]]]);              // 6.00
+     *   CartPricing::addonsTotal(['addons' => []]);                                                 // 0.00
      */
     public static function addonsTotal(array $line): float
     {
         $total = 0.0;
         foreach ((array) ($line['addons'] ?? []) as $addon) {
-            $total += (float) ($addon['price'] ?? 0.0);
+            $price    = (float) ($addon['price'] ?? 0.0);
+            $quantity = max(1, (int) ($addon['quantity'] ?? 1));
+            $total   += $price * $quantity;
         }
         return round($total, 2);
     }

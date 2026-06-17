@@ -167,6 +167,8 @@ final class CartController extends BaseController
         $rawAddonIds  = is_array($rawAddonIds) ? $rawAddonIds : [];
         $rawAddonText = $request->post('addon_text', []);
         $rawAddonText = is_array($rawAddonText) ? $rawAddonText : [];
+        $rawAddonQty  = $request->post('addon_qty', []);
+        $rawAddonQty  = is_array($rawAddonQty) ? $rawAddonQty : [];
 
         $paperColorIdRaw = $request->post('paper_color_id', '');
         $paperColorId    = ($paperColorIdRaw !== '' && $paperColorIdRaw !== null)
@@ -195,9 +197,11 @@ final class CartController extends BaseController
             $customText = isset($rawAddonText[$addonId])
                 ? trim((string) $rawAddonText[$addonId])
                 : null;
+            $quantity = isset($rawAddonQty[$addonId]) ? max(1, (int) $rawAddonQty[$addonId]) : 1;
             $addonsSelection[] = [
                 'addon_id'    => $addonId,
                 'custom_text' => ($customText !== '') ? $customText : null,
+                'quantity'    => $quantity,
             ];
         }
 
@@ -246,11 +250,15 @@ final class CartController extends BaseController
             $addonId    = (int) ($a['addon_id'] ?? 0);
             $addonRow   = $addonsById[$addonId] ?? [];
             $customText = $a['custom_text'] ?? null;
+            // Only quantity-enabled add-ons keep a quantity; others are forced to 1.
+            $hasQuantity = !empty($addonRow['has_quantity']);
+            $quantity    = $hasQuantity ? max(1, (int) ($a['quantity'] ?? 1)) : 1;
             $addonSnapshots[] = [
                 'addon_id'    => $addonId,
                 'name_en'     => (string) ($addonRow['name_en'] ?? ''),
                 'name_es'     => isset($addonRow['name_es']) ? (string) $addonRow['name_es'] : null,
                 'price'       => (float) ($addonRow['price'] ?? 0.0),
+                'quantity'    => $quantity,
                 'custom_text' => $customText,
             ];
         }

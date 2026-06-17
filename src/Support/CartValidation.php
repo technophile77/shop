@@ -22,6 +22,8 @@ namespace App\Support;
  *  - When an addon has_custom_text and custom_text is provided, its length must
  *    not exceed ribbonCharLimit(flowerCount).
  *  - custom_text on an addon without has_custom_text is rejected.
+ *  - An addon quantity must be ≥ 1; only add-ons flagged has_quantity may carry
+ *    a quantity other than 1, and it may not exceed 99.
  *
  * @see \App\Support\Ribbon::ribbonCharLimit()   Provides the ribbon text limit.
  * @see \App\Controllers\CartController::add()   Primary consumer.
@@ -148,6 +150,7 @@ final class CartValidation
 
             $addon         = $addonsById[$addonId];
             $hasCustomText = (bool) ($addon['has_custom_text'] ?? false);
+            $hasQuantity   = (bool) ($addon['has_quantity'] ?? false);
 
             if ($customText !== null && $customText !== '') {
                 if (!$hasCustomText) {
@@ -155,6 +158,15 @@ final class CartValidation
                 } elseif (mb_strlen($customText) > $ribbonLimit) {
                     $errors[] = "Ribbon text must be {$ribbonLimit} characters or fewer.";
                 }
+            }
+
+            $addonQty = isset($addonEntry['quantity']) ? (int) $addonEntry['quantity'] : 1;
+            if ($addonQty < 1) {
+                $errors[] = "Add-on quantity must be at least 1.";
+            } elseif (!$hasQuantity && $addonQty !== 1) {
+                $errors[] = "This add-on does not support a quantity.";
+            } elseif ($hasQuantity && $addonQty > 99) {
+                $errors[] = "Add-on quantity may not exceed 99.";
             }
         }
 

@@ -130,6 +130,7 @@ return [
     'shop.addons'          => 'Add-ons',
     'shop.ribbon_message'  => 'Ribbon message',
     'shop.quantity'        => 'Quantity',
+    'shop.each'            => 'each',
     'shop.mixed'           => '(mixed)',
     'shop.color_hint'      => 'Pick one color, or select several for a mixed arrangement.',
     'shop.colors_may_differ' => 'Delivered colors may differ slightly from the photo based on availability.',

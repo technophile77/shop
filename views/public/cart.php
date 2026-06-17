@@ -102,11 +102,15 @@ declare(strict_types=1);
           <?php endif; ?>
 
           <!-- Add-ons -->
-          <?php foreach ((array) ($item['addons'] ?? []) as $a): ?>
+          <?php foreach ((array) ($item['addons'] ?? []) as $a):
+            $aQty   = max(1, (int) ($a['quantity'] ?? 1));
+            $aPrice = (float) ($a['price'] ?? 0);
+          ?>
           <p style="margin:0; font-size:0.82rem; color:var(--color-muted)">
             + <?= htmlspecialchars($a['name_' . $lang] ?? $a['name_en'] ?? '') ?><?php
+              if ($aQty > 1): ?> &times; <?= $aQty ?><?php endif;
               if (!empty($a['custom_text'])): ?> — &ldquo;<?= htmlspecialchars((string) $a['custom_text']) ?>&rdquo;<?php endif;
-              if (!empty($a['price']) && (float) $a['price'] > 0): ?> (+$<?= number_format((float) $a['price'], 2) ?>)<?php endif; ?>
+              if ($aPrice > 0): ?> (+$<?= number_format($aPrice * $aQty, 2) ?>)<?php endif; ?>
           </p>
           <?php endforeach; ?>
 

@@ -14,7 +14,8 @@ namespace App\Support;
  * Rules:
  *  - One line per bouquet (product name, unit_price * 100 cents, qty).
  *  - One line per add-on per cart line: unit_amount = addon.price * 100 cents,
- *    quantity = the bouquet's qty (so each guest's bouquet carries the add-on).
+ *    quantity = the add-on's quantity × the bouquet's qty (so per-unit add-ons
+ *    such as chocolates ×3 across 2 bouquets bill 6 units).
  *    Add-ons priced at 0 are included only when they carry a custom_text value.
  *  - A single Delivery line when deliveryFee > 0.
  *  - A single Sales Tax line when taxAmount > 0.
@@ -68,6 +69,7 @@ final class StripeLineItems
 
             foreach ((array) ($item['addons'] ?? []) as $addon) {
                 $addonPrice      = (float) ($addon['price'] ?? 0.0);
+                $addonQty        = max(1, (int) ($addon['quantity'] ?? 1));
                 $addonCustomText = isset($addon['custom_text']) ? trim((string) $addon['custom_text']) : '';
 
                 // Skip zero-price add-ons that carry no custom text.
@@ -81,13 +83,15 @@ final class StripeLineItems
                     $addonLabel .= ': ' . $addonCustomText;
                 }
 
+                // Per-unit price; total units = the add-on's quantity across each
+                // bouquet in the line (addon qty × bouquet qty).
                 $lineItems[] = [
                     'price_data' => [
                         'currency'     => 'usd',
                         'unit_amount'  => $addonCents,
                         'product_data' => ['name' => $addonLabel],
                     ],
-                    'quantity' => $qty,
+                    'quantity' => $addonQty * $qty,
                 ];
             }
         }

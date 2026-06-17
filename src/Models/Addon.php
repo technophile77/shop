@@ -94,8 +94,8 @@ final class Addon
     {
         $db   = Database::rw();
         $stmt = $db->prepare(
-            'INSERT INTO addons (name_en, name_es, image_path, active, sort_order, price, has_custom_text)
-             VALUES (:name_en, :name_es, :image_path, :active, :sort_order, :price, :has_custom_text)'
+            'INSERT INTO addons (name_en, name_es, image_path, active, sort_order, price, has_custom_text, has_quantity)
+             VALUES (:name_en, :name_es, :image_path, :active, :sort_order, :price, :has_custom_text, :has_quantity)'
         );
         $stmt->execute([
             ':name_en'         => $data['name_en']         ?? '',
@@ -105,6 +105,7 @@ final class Addon
             ':sort_order'      => (int) ($data['sort_order']      ?? 0),
             ':price'           => (float) ($data['price']         ?? 0),
             ':has_custom_text' => (int) ($data['has_custom_text'] ?? 0),
+            ':has_quantity'    => (int) ($data['has_quantity']    ?? 0),
         ]);
         return (int) $db->lastInsertId();
     }
@@ -124,7 +125,7 @@ final class Addon
      */
     public static function update(int $id, array $data): bool
     {
-        $allowed    = ['name_en', 'name_es', 'image_path', 'active', 'sort_order', 'price', 'has_custom_text'];
+        $allowed    = ['name_en', 'name_es', 'image_path', 'active', 'sort_order', 'price', 'has_custom_text', 'has_quantity'];
         $setClauses = [];
         $params     = [];
 

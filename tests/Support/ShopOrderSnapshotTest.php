@@ -206,6 +206,27 @@ class ShopOrderSnapshotTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // Add-on quantity
+    // -------------------------------------------------------------------------
+
+    public function testAddonQuantityPreservedAndDefaultsToOne(): void
+    {
+        $line = $this->makeLine([
+            'addons' => [
+                ['addon_id' => 5, 'name_en' => 'Chocolates', 'name_es' => null, 'price' => 2.50, 'quantity' => 4, 'custom_text' => null],
+                ['addon_id' => 1, 'name_en' => 'Ribbon', 'name_es' => null, 'price' => 5.00, 'custom_text' => null],
+            ],
+        ]);
+        $snapshot = ShopOrderSnapshot::itemsSnapshot(
+            [$line], $this->typeNames(), $this->colorNames(), $this->paperNames(), 'en'
+        );
+
+        $this->assertSame(4, $snapshot[0]['addons'][0]['quantity']);
+        // Missing quantity defaults to 1.
+        $this->assertSame(1, $snapshot[0]['addons'][1]['quantity']);
+    }
+
+    // -------------------------------------------------------------------------
     // Empty cart
     // -------------------------------------------------------------------------
 
