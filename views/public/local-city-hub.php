@@ -57,10 +57,17 @@ $state    = (string) ($city['state'] ?? 'OK');
     <div class="container">
         <div class="grid-3" style="gap:1.5rem">
             <?php foreach ($services as $def):
-                $label  = (string) ($def['label_' . ($lang === 'es' ? 'es' : 'en')] ?? '');
-                $prefix = (string) ($def['prefix'] ?? '');
+                $isVenue = ($def['entities'] ?? null) !== null;
+                $prefix  = (string) ($def['prefix'] ?? '');
                 if ($prefix === '') { continue; }
-                $url = '/' . $lang . '/' . $prefix . '-' . $citySlug;
+                // Non-venue (birthday) service is home/office delivery; the order flow
+                // captures the recipient address, so point it at the products catalog.
+                $label = $isVenue
+                    ? (string) ($def['label_' . ($lang === 'es' ? 'es' : 'en')] ?? '')
+                    : ($lang === 'es' ? 'Entrega a Casa u Oficina' : 'Home/Office Delivery');
+                $url   = $isVenue
+                    ? '/' . $lang . '/' . $prefix . '-' . $citySlug
+                    : '/' . $lang . '/products';
             ?>
             <a href="<?= htmlspecialchars($url) ?>"
                style="display:block; background:#fff; border:1px solid var(--color-border); border-radius:8px; padding:1.5rem; text-decoration:none; color:inherit">

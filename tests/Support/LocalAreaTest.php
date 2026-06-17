@@ -149,8 +149,52 @@ final class LocalAreaTest extends TestCase
         self::assertContains('/delivery-areas', $paths);
         self::assertContains('/flower-delivery-testville', $paths);
         self::assertContains('/flower-delivery-exampleburg', $paths);
-        // hub + (3 services × 2 cities) + (1 city hub × 2 cities)
-        self::assertCount(1 + 3 * 2 + 2, $paths);
+        // A representative per-venue path is enumerated for the sitemap.
+        self::assertContains('/funeral-flowers-testville/acme-funeral-home', $paths);
+        self::assertContains('/hospital-flower-delivery-exampleburg/exampleburg-medical', $paths);
+        // hub(1) + (3 services × 2 cities) + (1 city hub × 2 cities) + venue paths.
+        // Venue paths: funeral (2 + 1) + hospital (1 + 1) = 5 across the two cities.
+        self::assertCount(1 + 3 * 2 + 2 + 5, $paths);
+    }
+
+    public function testVenueSlug(): void
+    {
+        self::assertSame('acme-funeral-home', LocalArea::venueSlug('Acme Funeral Home'));
+        self::assertSame('saint-francis-hospital', LocalArea::venueSlug('Saint Francis Hospital'));
+        // Accents transliterate and punctuation collapses to single hyphens.
+        self::assertSame('ninos-co', LocalArea::venueSlug('Niños & Co.'));
+    }
+
+    public function testVenuePath(): void
+    {
+        $svc = $this->servicesFixture();
+
+        self::assertSame(
+            '/funeral-flowers-testville/acme-funeral-home',
+            LocalArea::venuePath('funeral', 'testville', 'acme-funeral-home', $svc),
+        );
+        self::assertSame(
+            '/hospital-flower-delivery-exampleburg/exampleburg-medical',
+            LocalArea::venuePath('hospital', 'exampleburg', 'exampleburg-medical', $svc),
+        );
+        // Unknown service code yields an empty path (no prefix to build from).
+        self::assertSame('', LocalArea::venuePath('nope', 'testville', 'x', $svc));
+    }
+
+    public function testVenueBySlugHitAndMiss(): void
+    {
+        $areas = $this->areasFixture();
+        $svc   = $this->servicesFixture();
+        $city  = $areas['testville'];
+
+        $hit = LocalArea::venueBySlug('funeral', $city, 'rest-easy-chapel', $svc);
+        self::assertNotNull($hit);
+        self::assertSame('Rest Easy Chapel', $hit['name']);
+
+        // A funeral-home slug must not match against the hospital list.
+        self::assertNull(LocalArea::venueBySlug('hospital', $city, 'acme-funeral-home', $svc));
+        // Unknown slug → null.
+        self::assertNull(LocalArea::venueBySlug('funeral', $city, 'no-such-venue', $svc));
     }
 
     public function testFaqItemsIncludeCityAndServiceSpecificQuestion(): void
