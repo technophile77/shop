@@ -74,4 +74,24 @@ final class CartPricingTest extends TestCase
     {
         self::assertSame(45.0, CartPricing::lineTotal(['unit_price' => 45.0, 'addons' => []]));
     }
+
+    /**
+     * A per-unit add-on (e.g. chocolates) is priced price × its own quantity.
+     */
+    public function testAddonQuantityMultipliesPrice(): void
+    {
+        self::assertSame(6.0, CartPricing::addonsTotal(['addons' => [['price' => 2.0, 'quantity' => 3]]]));
+        // Missing quantity behaves as 1.
+        self::assertSame(2.0, CartPricing::addonsTotal(['addons' => [['price' => 2.0]]]));
+    }
+
+    /**
+     * Add-on quantity and bouquet qty compound in the line total.
+     */
+    public function testAddonQuantityCompoundsWithBouquetQty(): void
+    {
+        // (bouquet 30 + chocolates 2.50×4) × 2 bouquets = (30 + 10) × 2 = 80
+        $line = ['unit_price' => 30.0, 'addons' => [['price' => 2.50, 'quantity' => 4]], 'qty' => 2];
+        self::assertSame(80.0, CartPricing::lineTotal($line));
+    }
 }

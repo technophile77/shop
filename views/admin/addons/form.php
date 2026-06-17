@@ -446,6 +446,20 @@ function addonForm(initial, csrf) {
                         Check if the customer should supply a short message for this add-on (e.g. a ribbon inscription).
                     </p>
                 </div>
+
+                <div style="margin-bottom:0; margin-top:1rem">
+                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-family:'Lato',sans-serif; font-size:0.9rem; text-transform:none; letter-spacing:0; color:#333; font-weight:400">
+                        <input type="checkbox"
+                               name="has_quantity"
+                               value="1"
+                               <?= !empty($addon['has_quantity']) ? 'checked' : '' ?>
+                               style="width:16px; height:16px; accent-color:var(--color-primary)">
+                        Has quantity (priced per unit)
+                    </label>
+                    <p style="font-size:0.78rem; color:#999; margin-top:0.35rem; margin-left:1.625rem">
+                        Check if the customer chooses an amount of this add-on (e.g. chocolates). The price above is charged per unit.
+                    </p>
+                </div>
             </div>
 
             <!-- Save button -->

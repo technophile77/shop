@@ -33,8 +33,9 @@ final class CartValidationTest extends TestCase
             'flowerTypeColorMap'   => [1 => [1, 2, 3]],
             'paperColorIds'        => [10, 11],
             'addonsById'           => [
-                2 => ['id' => 2, 'has_custom_text' => 1, 'price' => 5.0],
-                3 => ['id' => 3, 'has_custom_text' => 0, 'price' => 3.0],
+                2 => ['id' => 2, 'has_custom_text' => 1, 'has_quantity' => 0, 'price' => 5.0],
+                3 => ['id' => 3, 'has_custom_text' => 0, 'has_quantity' => 0, 'price' => 3.0],
+                4 => ['id' => 4, 'has_custom_text' => 0, 'has_quantity' => 1, 'price' => 2.5],
             ],
             'flowerCount'          => $flowerCount,
         ];
@@ -181,5 +182,38 @@ final class CartValidationTest extends TestCase
             'addons' => [['addon_id' => 2, 'custom_text' => str_repeat('a', $limit + 1)]],
         ];
         self::assertNotEmpty(CartValidation::validateSelection($overLimit, $this->context(20)));
+    }
+
+    /**
+     * A quantity-enabled add-on accepts a quantity in the 1..99 range.
+     */
+    public function testQuantityAddonValid(): void
+    {
+        $sel = ['qty' => 1, 'colors' => [], 'addons' => [['addon_id' => 4, 'quantity' => 5]]];
+        self::assertSame([], CartValidation::validateSelection($sel, $this->context()));
+    }
+
+    /**
+     * A quantity other than 1 on a non-quantity add-on is rejected.
+     */
+    public function testQuantityOnNonQuantityAddonRejected(): void
+    {
+        $sel = ['qty' => 1, 'colors' => [], 'addons' => [['addon_id' => 3, 'quantity' => 2]]];
+        self::assertNotEmpty(CartValidation::validateSelection($sel, $this->context()));
+    }
+
+    /**
+     * Quantity below 1 and above 99 are both rejected.
+     */
+    public function testQuantityOutOfRangeRejected(): void
+    {
+        $below = ['qty' => 1, 'colors' => [], 'addons' => [['addon_id' => 4, 'quantity' => 0]]];
+        self::assertNotEmpty(CartValidation::validateSelection($below, $this->context()));
+
+        $above = ['qty' => 1, 'colors' => [], 'addons' => [['addon_id' => 4, 'quantity' => 100]]];
+        self::assertNotEmpty(CartValidation::validateSelection($above, $this->context()));
+
+        $max = ['qty' => 1, 'colors' => [], 'addons' => [['addon_id' => 4, 'quantity' => 99]]];
+        self::assertSame([], CartValidation::validateSelection($max, $this->context()));
     }
 }

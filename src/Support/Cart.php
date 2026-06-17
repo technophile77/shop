@@ -78,11 +78,15 @@ final class Cart
         }
         ksort($colors);
 
-        // Normalise addons: sort by addon_id.
+        // Normalise addons: sort by addon_id; quantity + custom text are part of
+        // the line identity (chocolates ×2 and ×3 are distinct lines).
         $addons = [];
         foreach ((array) ($line['addons'] ?? []) as $a) {
             $addonId = (int) ($a['addon_id'] ?? 0);
-            $addons[$addonId] = $a['custom_text'] ?? null;
+            $addons[$addonId] = [
+                'custom_text' => $a['custom_text'] ?? null,
+                'quantity'    => max(1, (int) ($a['quantity'] ?? 1)),
+            ];
         }
         ksort($addons);
 

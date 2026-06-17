@@ -99,6 +99,7 @@ final class ShopOrderSnapshot
                     'name_en'     => $addonNameEn,
                     'name_es'     => $addonNameEs,
                     'price'       => (float) ($addon['price'] ?? 0.0),
+                    'quantity'    => max(1, (int) ($addon['quantity'] ?? 1)),
                     'custom_text' => isset($addon['custom_text']) ? (string) $addon['custom_text'] : null,
                 ];
             }

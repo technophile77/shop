@@ -277,6 +277,7 @@ final class AddonsController extends BaseController
             'active'          => $request->post('active') !== null ? 1 : 0,
             'price'           => $price,
             'has_custom_text' => $request->post('has_custom_text') !== null ? 1 : 0,
+            'has_quantity'    => $request->post('has_quantity') !== null ? 1 : 0,
         ];
     }
 

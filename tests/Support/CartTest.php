@@ -70,6 +70,17 @@ final class CartTest extends TestCase
     }
 
     /**
+     * Differing per-unit add-on quantity produces a different signature
+     * (chocolates ×2 and ×3 are distinct cart lines).
+     */
+    public function testSignatureDiffersOnAddonQuantity(): void
+    {
+        $a = Cart::signature($this->line(['addons' => [['addon_id' => 2, 'quantity' => 2]]]));
+        $b = Cart::signature($this->line(['addons' => [['addon_id' => 2, 'quantity' => 3]]]));
+        self::assertNotSame($a, $b);
+    }
+
+    /**
      * Adding to an empty cart appends one line and stamps the signature.
      */
     public function testAddToEmptyCart(): void

@@ -127,6 +127,19 @@ class StripeLineItemsTest extends TestCase
         $this->assertSame(500, $result[1]['price_data']['unit_amount']);
     }
 
+    public function testPerUnitAddonQuantityTimesBouquetQty(): void
+    {
+        $addon = ['addon_id' => 5, 'name_en' => 'Chocolates', 'price' => 2.50, 'quantity' => 3, 'custom_text' => null];
+        $line  = $this->makeLine('Bouquet', 45.00, 2, [$addon]); // 2 bouquets
+
+        $result = StripeLineItems::fromCart([$line], 0.00, 0.00);
+
+        // Line 1 = chocolates: per-unit 250 cents, quantity = 3 × 2 = 6.
+        $this->assertCount(2, $result);
+        $this->assertSame(250, $result[1]['price_data']['unit_amount']);
+        $this->assertSame(6,   $result[1]['quantity']);
+    }
+
     public function testZeroPriceAddonSkippedWithoutCustomText(): void
     {
         $addon = ['addon_id' => 2, 'name_en' => 'Free Card', 'price' => 0.00, 'custom_text' => null];

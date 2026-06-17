@@ -130,6 +130,7 @@ return [
     'shop.addons'          => 'Complementos',
     'shop.ribbon_message'  => 'Mensaje del listón',
     'shop.quantity'        => 'Cantidad',
+    'shop.each'            => 'c/u',
     'shop.mixed'           => '(mezclado)',
     'shop.color_hint'      => 'Elige un color, o selecciona varios para un arreglo mezclado.',
     'shop.colors_may_differ' => 'Los colores entregados pueden variar ligeramente de la foto según la disponibilidad.',
