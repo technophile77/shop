@@ -25,10 +25,13 @@ use App\Support\Shop;
  * Serves the local-SEO city landing pages and their hub.
  *
  * Routes:
- *   GET /funeral-flowers-{city}          → funeral()
- *   GET /hospital-flower-delivery-{city} → hospital()
- *   GET /birthday-delivery-{city}        → birthday()
- *   GET /delivery-areas                  → hub()
+ *   GET /funeral-flowers-{city}                  → funeral()
+ *   GET /hospital-flower-delivery-{city}         → hospital()
+ *   GET /birthday-delivery-{city}                → birthday()
+ *   GET /funeral-flowers-{city}/{venue}          → funeralVenue()
+ *   GET /hospital-flower-delivery-{city}/{venue} → hospitalVenue()
+ *   GET /flower-delivery-{city}                  → cityHub()
+ *   GET /delivery-areas                          → hub()
  *
  * Each service action is a thin wrapper over {@see renderService()}, which
  * delegates all SEO logic (title/meta/JSON-LD) to the pure
@@ -181,6 +184,159 @@ final class LocalAreaController extends BaseController
             'cityMiles' => $cityMiles,
             'pageTitle' => $pageTitle,
             'metaDesc'  => $metaDesc,
+        ]);
+
+        return Response::html($html);
+    }
+
+    /**
+     * Per-venue funeral-flowers landing page.
+     *
+     * Route: GET /funeral-flowers-{city}/{venue}
+     *
+     * @param Request              $request The current HTTP request.
+     * @param array<string,string> $params  Route params; expects 'city' and 'venue'.
+     *
+     * @return Response Rendered HTML, or 404 for an unknown city or venue.
+     *
+     * @example
+     *   // Matched by: GET /funeral-flowers-bixby/smith-funeral-home
+     *   (new LocalAreaController())->funeralVenue($request, ['city' => 'bixby', 'venue' => 'smith-funeral-home']);
+     */
+    public function funeralVenue(Request $request, array $params = []): Response
+    {
+        return $this->renderVenue($request, 'funeral', $params);
+    }
+
+    /**
+     * Per-venue hospital flower-delivery landing page.
+     *
+     * Route: GET /hospital-flower-delivery-{city}/{venue}
+     *
+     * @param Request              $request The current HTTP request.
+     * @param array<string,string> $params  Route params; expects 'city' and 'venue'.
+     *
+     * @return Response Rendered HTML, or 404 for an unknown city or venue.
+     */
+    public function hospitalVenue(Request $request, array $params = []): Response
+    {
+        return $this->renderVenue($request, 'hospital', $params);
+    }
+
+    /**
+     * Shared rendering path for the per-venue landing pages.
+     *
+     * Resolves the city (404 if unknown) and the venue by its URL slug within the
+     * service's venue list (404 if unmatched), enriches the venue with a real
+     * straight-line distance + estimated delivery fee, and renders the focused
+     * `public/local-venue` page with a "Send flowers" CTA that pre-fills the venue
+     * as the delivery destination.
+     *
+     * @param Request              $request The current HTTP request (for CSRF token).
+     * @param string               $service 'funeral' or 'hospital' (venue-based services only).
+     * @param array<string,string> $params  Route params; expects 'city' and 'venue'.
+     *
+     * @return Response Rendered HTML, or 404 when the city or venue is unknown.
+     */
+    private function renderVenue(Request $request, string $service, array $params): Response
+    {
+        $lang     = Lang::current();
+        $areas    = LocalArea::areas();
+        $services = LocalArea::services();
+
+        $citySlug  = $params['city'] ?? '';
+        $venueSlug = $params['venue'] ?? '';
+        $city      = LocalArea::cityBySlug($citySlug, $areas);
+        if ($city === null || !isset($services[$service])) {
+            return Response::notFound();
+        }
+
+        $venue = LocalArea::venueBySlug($service, $city, $venueSlug, $services);
+        if ($venue === null) {
+            return Response::notFound();
+        }
+
+        // Enrich the single matched venue with distance + estimated fee.
+        $coords = LocalArea::coords();
+        $bizLat = (float) Config::get('BUSINESS_LAT', 36.0814);
+        $bizLng = (float) Config::get('BUSINESS_LNG', -95.9987);
+        $venue  = LocalArea::enrichVenues(
+            [$venue],
+            $coords,
+            $bizLat,
+            $bizLng,
+            (float) Config::get('BUSINESS_DELIVERY_BASE_MILES', 5),
+            (float) Config::get('BUSINESS_DELIVERY_BASE_FEE', 10),
+            (float) Config::get('BUSINESS_DELIVERY_PER_MILE_FEE', 1),
+        )[0];
+
+        $cityName    = (string) $city['name'];
+        $state       = (string) ($city['state'] ?? 'OK');
+        $venueName   = (string) $venue['name'];
+        $occasionSlug = (string) LocalArea::occasionSlugForService($service);
+
+        // "Send flowers" CTA → the occasion bouquet page, pre-filling this venue
+        // as the delivery destination (mirrors the city-page venue cards).
+        $sendUrl = '/' . $lang . '/flowers/occasion/' . $occasionSlug
+            . '?dest_service='  . urlencode($service)
+            . '&dest_city='     . urlencode($citySlug)
+            . '&venue_name='    . urlencode($venueName)
+            . '&venue_address=' . urlencode((string) $venue['address']);
+
+        $mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' . urlencode((string) $venue['address']);
+
+        $pageTitle = $lang === 'es'
+            ? "Entrega de Flores a {$venueName} — {$cityName}, {$state}"
+            : "Flower Delivery to {$venueName} — {$cityName}, {$state}";
+
+        if ($service === 'funeral') {
+            $metaDesc = $lang === 'es'
+                ? "Envíe flores fúnebres y de condolencia a {$venueName} en {$cityName}, {$state}. Arreglos hechos a mano por Perla's Flowers, entregados a tiempo para el servicio."
+                : "Send funeral and sympathy flowers to {$venueName} in {$cityName}, {$state}. Locally handcrafted arrangements from Perla's Flowers, delivered ahead of the service.";
+        } else {
+            $metaDesc = $lang === 'es'
+                ? "Envíe flores de pronta recuperación a {$venueName} en {$cityName}, {$state}. Ramos hechos a mano por Perla's Flowers, entregados el mismo día cuando es posible."
+                : "Send get-well flowers to {$venueName} in {$cityName}, {$state}. Locally handcrafted bouquets from Perla's Flowers, delivered same-day when possible.";
+        }
+
+        // Focused schema.org Service node naming the venue as the place served.
+        $appUrl  = rtrim((string) Config::get('APP_URL', ''), '/');
+        $pageUrl = $appUrl . '/' . $lang
+            . LocalArea::venuePath($service, $citySlug, $venueSlug, $services);
+        $jsonLd  = [
+            '@context'    => 'https://schema.org',
+            '@type'       => 'Service',
+            'serviceType' => (string) ($services[$service]['service_type'] ?? 'Flower delivery'),
+            'name'        => $pageTitle,
+            'url'         => $pageUrl,
+            'provider'    => [
+                '@type'     => 'Florist',
+                'name'      => (string) Config::get('BUSINESS_NAME', ''),
+                'telephone' => (string) Config::get('BUSINESS_PHONE', ''),
+                'url'       => $appUrl,
+            ],
+            'areaServed'  => [
+                '@type'   => 'Place',
+                'name'    => $venueName,
+                'address' => (string) $venue['address'],
+            ],
+        ];
+
+        $html = $this->render('public/local-venue', [
+            'lang'         => $lang,
+            'service'      => $service,
+            'serviceDef'   => $services[$service],
+            'citySlug'     => $citySlug,
+            'city'         => $city,
+            'venue'        => $venue,
+            'venueSlug'    => $venueSlug,
+            'occasionSlug' => $occasionSlug,
+            'sendUrl'      => $sendUrl,
+            'mapsUrl'      => $mapsUrl,
+            'jsonLd'       => $jsonLd,
+            'pageTitle'    => $pageTitle,
+            'metaDesc'     => $metaDesc,
+            'csrfToken'    => $request->csrfToken(),
         ]);
 
         return Response::html($html);

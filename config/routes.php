@@ -56,6 +56,9 @@ return [
     ['GET',  '/funeral-flowers-{city}',          'LocalAreaController',    'funeral'],
     ['GET',  '/hospital-flower-delivery-{city}', 'LocalAreaController',    'hospital'],
     ['GET',  '/birthday-delivery-{city}',        'LocalAreaController',    'birthday'],
+    // Per-venue landing pages (funeral homes + hospitals), nested under the city page.
+    ['GET',  '/funeral-flowers-{city}/{venue}',          'LocalAreaController', 'funeralVenue'],
+    ['GET',  '/hospital-flower-delivery-{city}/{venue}', 'LocalAreaController', 'hospitalVenue'],
 
     // -----------------------------------------------------------------------
     // Admin — unauthenticated (login form; no 'auth' middleware)

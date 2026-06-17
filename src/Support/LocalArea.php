@@ -365,6 +365,75 @@ final class LocalArea
     }
 
     /**
+     * The URL slug for a venue name (funeral home / hospital).
+     *
+     * A thin wrapper over {@see Slug::make()} so venue URLs and the controller's
+     * reverse lookup share one canonical slugging rule.
+     *
+     * @param string $name The venue display name.
+     *
+     * @return string The slug, e.g. 'saint-francis-hospital'.
+     *
+     * @example
+     *   LocalArea::venueSlug('Saint Francis Hospital'); // 'saint-francis-hospital'
+     */
+    public static function venueSlug(string $name): string
+    {
+        return Slug::make($name);
+    }
+
+    /**
+     * The URL path (no language prefix) for a per-venue landing page.
+     *
+     * Nests the venue slug under its service+city path, e.g.
+     * '/funeral-flowers-bixby/smith-funeral-home'.
+     *
+     * @param string               $service   Service code ('funeral'|'hospital').
+     * @param string               $citySlug  City slug.
+     * @param string               $venueSlug Venue slug (from {@see self::venueSlug()}).
+     * @param array<string, mixed> $services  Service definitions.
+     *
+     * @return string The path, or '' when the service code is unknown.
+     *
+     * @example
+     *   LocalArea::venuePath('hospital', 'tulsa', 'saint-francis-hospital', $services);
+     *   // '/hospital-flower-delivery-tulsa/saint-francis-hospital'
+     */
+    public static function venuePath(string $service, string $citySlug, string $venueSlug, array $services): string
+    {
+        $base = self::path($service, $citySlug, $services);
+        return $base === '' ? '' : $base . '/' . $venueSlug;
+    }
+
+    /**
+     * Find a city's venue for a service by its URL slug.
+     *
+     * Matches the first venue whose slugged name equals $venueSlug, so the
+     * controller can resolve a per-venue URL back to its {name,address} record.
+     *
+     * @param string               $service   Service code ('funeral'|'hospital').
+     * @param array<string, mixed>  $city      A city record.
+     * @param string               $venueSlug The slug from the URL.
+     * @param array<string, mixed>  $services  Service definitions.
+     *
+     * @return array{name: string, address: string}|null The venue, or null when
+     *         no venue in the service's list slugs to $venueSlug.
+     *
+     * @example
+     *   LocalArea::venueBySlug('funeral', $bixby, 'smith-funeral-home', $services);
+     *   // ['name' => 'Smith Funeral Home', 'address' => '…']
+     */
+    public static function venueBySlug(string $service, array $city, string $venueSlug, array $services): ?array
+    {
+        foreach (self::venues($service, $city, $services) as $venue) {
+            if (self::venueSlug((string) $venue['name']) === $venueSlug) {
+                return $venue;
+            }
+        }
+        return null;
+    }
+
+    /**
      * The per-city hub path (no language prefix) that lists all services for a city.
      *
      * @param string $citySlug The city slug (e.g. 'tulsa').
@@ -389,8 +458,9 @@ final class LocalArea
      * @param array<string, array<string, mixed>> $services Service definitions.
      *
      * @return list<string> Paths such as '/delivery-areas', '/funeral-flowers-jenks',
-     *                      '/flower-delivery-jenks', … (hub, then service-then-city,
-     *                      then per-city hubs).
+     *                      '/flower-delivery-jenks', '/funeral-flowers-jenks/some-home',
+     *                      … (hub, then service-then-city, then per-city hubs, then
+     *                      every per-venue page for venue-based services).
      */
     public static function allPaths(array $areas, array $services): array
     {
@@ -402,6 +472,17 @@ final class LocalArea
         }
         foreach (array_keys($areas) as $slug) {
             $paths[] = self::cityHubPath($slug);
+        }
+        // Per-venue pages: one URL per named venue of every venue-based service.
+        foreach ($services as $code => $def) {
+            if (($def['entities'] ?? null) === null) {
+                continue;
+            }
+            foreach ($areas as $slug => $city) {
+                foreach (self::venues($code, $city, $services) as $venue) {
+                    $paths[] = self::venuePath($code, $slug, self::venueSlug((string) $venue['name']), $services);
+                }
+            }
         }
         return $paths;
     }

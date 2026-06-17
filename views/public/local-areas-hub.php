@@ -75,10 +75,19 @@ $bandLabels = [
                     <ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:0.5rem">
                         <?php foreach ($services as $def): ?>
                         <li>
+                            <?php if (($def['entities'] ?? null) === null): ?>
+                            <?php // Non-venue (birthday) service is home/office delivery — the
+                                  // order flow captures the recipient address, so link to the
+                                  // general products catalog rather than a fixed-venue page. ?>
+                            <a href="/<?= $lang ?>/products" style="color:var(--color-primary)">
+                                <?= $lang === 'es' ? 'Entrega a Casa u Oficina' : 'Home/Office Delivery' ?> &rarr;
+                            </a>
+                            <?php else: ?>
                             <a href="/<?= $lang ?>/<?= htmlspecialchars($def['prefix']) ?>-<?= htmlspecialchars($slug) ?>"
                                style="color:var(--color-primary)">
                                 <?= htmlspecialchars(($def['label_' . ($lang === 'es' ? 'es' : 'en')] ?? '')) ?> &rarr;
                             </a>
+                            <?php endif; ?>
                         </li>
                         <?php endforeach; ?>
                     </ul>

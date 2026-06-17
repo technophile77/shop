@@ -110,7 +110,10 @@ $fmtFee = static fn (float $f): string => '$' . (fmod($f, 1.0) === 0.0 ? number_
                     ? htmlspecialchars("A diferencia de los servicios nacionales por catálogo, cada arreglo lo hacemos nosotros aquí mismo y lo entregamos en persona. Lo que pide es lo que recibe.")
                     : htmlspecialchars("Unlike national order-gatherer sites, every arrangement is made by us here in town and delivered in person. What you see is what arrives.") ?></p>
 
-                <?php if (!empty($cityMiles)):
+                <?php if (!empty($cityMiles) && ($serviceDef['entities'] ?? null) !== null):
+                    // Only venue-based services (funeral/hospital) deliver to the fixed
+                    // addresses this range is computed from. Birthday is home/office
+                    // delivery, so the "miles from our shop" line would be misleading.
                     $rngMin = number_format((float) $cityMiles['min'], 1);
                     $rngMax = number_format((float) $cityMiles['max'], 1);
                     $rngTxt = (float) $cityMiles['min'] === (float) $cityMiles['max'] ? $rngMin : $rngMin . '–' . $rngMax;
@@ -171,10 +174,21 @@ $fmtFee = static fn (float $f): string => '$' . (fmod($f, 1.0) === 0.0 ? number_
                 : 'Just name the venue when you order and we\'ll coordinate the delivery.' ?>
         </p>
         <div class="grid-3" style="gap:1.25rem">
-            <?php foreach ($venues as $venue): ?>
+            <?php foreach ($venues as $venue):
+                // Each venue links to its own deeper landing page (city → venue →
+                // occasion → cart). The "Send flowers" CTA lives on the venue page.
+                $venueUrl = '/' . $lang . \App\Support\LocalArea::venuePath(
+                    $service,
+                    $citySlug,
+                    \App\Support\LocalArea::venueSlug((string) $venue['name']),
+                    $services,
+                );
+            ?>
             <div style="background:#fff; border:1px solid var(--color-border); border-radius:8px; padding:1.25rem">
-                <p style="font-family:'Cormorant Garamond',serif; font-size:1.25rem; font-weight:600; margin:0 0 0.35rem; color:var(--color-text-dark)">
-                    <?= htmlspecialchars($venue['name']) ?>
+                <p style="font-family:'Cormorant Garamond',serif; font-size:1.25rem; font-weight:600; margin:0 0 0.35rem">
+                    <a href="<?= htmlspecialchars($venueUrl) ?>" style="color:var(--color-text-dark)">
+                        <?= htmlspecialchars($venue['name']) ?>
+                    </a>
                 </p>
                 <p style="font-size:0.9rem; color:var(--color-muted); margin:0 0 0.75rem; line-height:1.5">
                     <?= htmlspecialchars($venue['address']) ?>
@@ -188,15 +202,7 @@ $fmtFee = static fn (float $f): string => '$' . (fmod($f, 1.0) === 0.0 ? number_
                     <strong><?= htmlspecialchars($fmtFee((float) $venue['fee'])) ?></strong>
                 </p>
                 <?php endif; ?>
-                <?php
-                $sendSlug = \App\Support\LocalArea::occasionSlugForService($service);
-                $sendUrl  = '/' . $lang . '/flowers/occasion/' . $sendSlug
-                    . '?dest_service='  . urlencode($service)
-                    . '&dest_city='     . urlencode($citySlug)
-                    . '&venue_name='    . urlencode($venue['name'])
-                    . '&venue_address=' . urlencode($venue['address']);
-                ?>
-                <a href="<?= htmlspecialchars($sendUrl) ?>"
+                <a href="<?= htmlspecialchars($venueUrl) ?>"
                    class="btn btn-primary btn-sm"
                    style="margin-top:0.25rem">
                     <?= $lang === 'es' ? 'Enviar flores' : 'Send flowers' ?> &rarr;
