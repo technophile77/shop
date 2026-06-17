@@ -12,6 +12,7 @@ return [
 
     // ── Navigation ───────────────────────────────────────────────────────────
     'nav.home'        => 'Inicio',
+    'nav.occasions'   => 'Ocasiones',
     'nav.products'    => 'Flores',
     'nav.order'       => 'Pedir Ahora',
     'nav.about'       => 'Nosotros',

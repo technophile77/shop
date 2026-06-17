@@ -53,6 +53,26 @@ use App\Core\Settings;
 </section>
 
 <!-- ============================================================
+     SECTION 1.5: SHOP BY OCCASION
+     ============================================================ -->
+<?php if (!empty($occasionTiles)): ?>
+<section class="section section--light">
+    <div class="container">
+        <div class="section-heading">
+            <span class="eyebrow label"><?= $lang === 'es' ? 'Comprar por Ocasión' : 'Shop by Occasion' ?></span>
+            <h2><?= $lang === 'es' ? 'Flores para Cada Ocasión' : 'Flowers for Every Occasion' ?></h2>
+        </div>
+        <?php include __DIR__ . '/_occasion_tiles.php'; ?>
+        <div class="text-center" style="margin-top:2.5rem">
+            <a href="/<?= $lang ?>/flowers/occasions" class="btn btn-primary">
+                <?= $lang === 'es' ? 'Ver Todas las Ocasiones' : 'View All Occasions' ?>
+            </a>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
+
+<!-- ============================================================
      SECTION 2: FEATURED PRODUCTS
      ============================================================ -->
 <?php if (!empty($products)): ?>
