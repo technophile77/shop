@@ -108,7 +108,7 @@ $customizeUrl  = '/' . $lang . '/order'
                 <input type="checkbox"
                        name="color_ids[<?= (int) $opt['flower_type_id'] ?>][]"
                        value="<?= (int) $color['id'] ?>"
-                       <?= ((int) $color['id'] === (int) ($opt['default_color_id'] ?? 0)) ? 'checked' : '' ?>>
+                       <?= in_array((int) $color['id'], array_map('intval', (array) ($opt['default_color_ids'] ?? [])), true) ? 'checked' : '' ?>>
                 <?php if (!empty($color['hex'])): ?>
                 <span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:<?= htmlspecialchars($color['hex']) ?>; border:1px solid rgba(0,0,0,0.15)"></span>
                 <?php endif; ?>
@@ -122,12 +122,13 @@ $customizeUrl  = '/' . $lang . '/order'
           </fieldset>
           <?php endforeach; ?>
 
-          <?php if (!empty($paperColors)): ?>
+          <?php /* Paper picker only when the arrangement has paper (pictured paper set);
+                   products with no paper — vase or shape — omit it entirely. */ ?>
+          <?php if (!empty($paperColors) && $picturedPaper !== null): ?>
           <label style="display:block; font-weight:600; font-size:0.85rem; margin-bottom:0.25rem">
             <?= htmlspecialchars(__t('shop.paper_color')) ?>
           </label>
           <select name="paper_color_id" style="width:100%; margin-bottom:0.85rem; padding:0.4rem">
-            <option value=""><?= htmlspecialchars($lang === 'es' ? '— Ninguno —' : '— None —') ?></option>
             <?php foreach ($paperColors as $paper): ?>
             <option value="<?= (int) $paper['id'] ?>" <?= ((int) $paper['id'] === $picturedPaper) ? 'selected' : '' ?>>
               <?= htmlspecialchars($paper['name_' . $lang] ?? $paper['name_en'] ?? '') ?>

@@ -16,6 +16,7 @@ use App\Models\Occasion;
 use App\Models\PaperColor;
 use App\Models\Product;
 use App\Models\ProductFlowerType;
+use App\Models\ProductFlowerTypeColor;
 use App\Support\Destination;
 use App\Support\FlowerColorResolver;
 use App\Support\Shop;
@@ -118,7 +119,7 @@ final class ShopController extends BaseController
                 $flowerTypesById,
                 $flowerTypeColorMap,
                 $flowerColorsById,
-                isset($_p['pictured_flower_color_id']) ? (int) $_p['pictured_flower_color_id'] : null
+                ProductFlowerTypeColor::mapForProduct($pid)
             );
         }
 

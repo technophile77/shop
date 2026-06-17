@@ -368,6 +368,10 @@ function imagePicker(initial, csrf) {
                 </div>
             </div>
 
+            <style>[x-cloak]{display:none!important}</style>
+            <?php $initTypes = array_map('intval', $selectedFlowerTypeIds ?? []); ?>
+            <div x-data="{ selectedTypes: <?= htmlspecialchars(json_encode($initTypes), ENT_QUOTES, 'UTF-8') ?> }">
+
             <!-- Flower Types -->
             <div class="admin-card">
                 <p class="admin-card-title" style="margin-bottom:1.25rem">Flower Types</p>
@@ -377,6 +381,7 @@ function imagePicker(initial, csrf) {
                         <input type="checkbox" name="flower_type_ids[]"
                                value="<?= (int) $ft['id'] ?>"
                                <?= in_array((int) $ft['id'], $selectedFlowerTypeIds ?? [], true) ? 'checked' : '' ?>
+                               @change="$event.target.checked ? selectedTypes.push(<?= (int) $ft['id'] ?>) : (selectedTypes = selectedTypes.filter(t => t !== <?= (int) $ft['id'] ?>))"
                                style="width:15px; height:15px; accent-color:var(--color-primary)">
                         <?= htmlspecialchars($ft['name_en']) ?>
                     </label>
@@ -390,25 +395,46 @@ function imagePicker(initial, csrf) {
             <!-- Pictured Colors -->
             <div class="admin-card">
                 <p class="admin-card-title" style="margin-bottom:1.25rem">Photo Colors</p>
-                <p style="font-size:0.78rem; color:#888; margin-bottom:0.875rem">Colors shown in the product photo — used as defaults when customers customize.</p>
+                <p style="font-size:0.78rem; color:#888; margin-bottom:0.875rem">Mark the colors shown in the photo for each flower type — used as the defaults when customers customize. An arrangement can have several colors of the same flower (e.g. red + white roses). Color options appear for the flower types selected above.</p>
 
-                <div class="admin-form-group">
-                    <label for="pictured_flower_color_id">Flower Color in Photo</label>
-                    <select id="pictured_flower_color_id" name="pictured_flower_color_id">
-                        <option value="">— None —</option>
-                        <?php foreach ($flowerColors as $fc): ?>
-                        <option value="<?= (int) $fc['id'] ?>"
-                            <?= (isset($product['pictured_flower_color_id']) && (int) $product['pictured_flower_color_id'] === (int) $fc['id']) ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($fc['name_en']) ?><?= $fc['hex'] ? ' (' . htmlspecialchars($fc['hex']) . ')' : '' ?>
-                        </option>
+                <?php
+                $hasAnyTypeColors = false;
+                foreach ($flowerTypes as $ft) {
+                    if (!empty($flowerTypeColorOptions[(int) $ft['id']] ?? [])) { $hasAnyTypeColors = true; break; }
+                }
+                ?>
+
+                <?php foreach ($flowerTypes as $ft):
+                    $ftId = (int) $ft['id'];
+                    $opts = $flowerTypeColorOptions[$ftId] ?? [];
+                    if (empty($opts)) { continue; }
+                    $pic = array_map('intval', (array) ($picturedColorsByType[$ftId] ?? []));
+                ?>
+                <div x-show="selectedTypes.includes(<?= $ftId ?>)" x-cloak style="margin-bottom:1rem">
+                    <p style="font-weight:600; font-size:0.85rem; margin-bottom:0.4rem"><?= htmlspecialchars($ft['name_en']) ?></p>
+                    <div style="display:flex; flex-wrap:wrap; gap:0.4rem 0.9rem">
+                        <?php foreach ($opts as $co): $cid = (int) $co['id']; ?>
+                        <label style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.85rem; font-weight:400; text-transform:none; letter-spacing:0; color:#333; cursor:pointer">
+                            <input type="checkbox" name="pictured_colors[<?= $ftId ?>][]" value="<?= $cid ?>"
+                                   <?= in_array($cid, $pic, true) ? 'checked' : '' ?>
+                                   style="width:14px; height:14px; accent-color:var(--color-primary)">
+                            <?php if (!empty($co['hex'])): ?><span style="display:inline-block; width:11px; height:11px; border-radius:50%; background:<?= htmlspecialchars($co['hex']) ?>; border:1px solid rgba(0,0,0,0.15)"></span><?php endif; ?>
+                            <?= htmlspecialchars($co['name_en']) ?>
+                        </label>
                         <?php endforeach; ?>
-                    </select>
+                    </div>
                 </div>
+                <?php endforeach; ?>
 
-                <div class="admin-form-group" style="margin-bottom:0">
+                <p x-show="selectedTypes.length === 0" style="font-size:0.8rem; color:#999">Select a flower type above to set its photo colors.</p>
+                <?php if (!$hasAnyTypeColors): ?>
+                    <p style="font-size:0.8rem; color:#999">No flower-type colors configured yet — set them under Catalog → Flower Types.</p>
+                <?php endif; ?>
+
+                <div class="admin-form-group" style="margin:1.25rem 0 0">
                     <label for="pictured_paper_color_id">Paper Color in Photo</label>
                     <select id="pictured_paper_color_id" name="pictured_paper_color_id">
-                        <option value="">— None —</option>
+                        <option value="">— None (no paper — vase or shape) —</option>
                         <?php foreach ($paperColors as $pc): ?>
                         <option value="<?= (int) $pc['id'] ?>"
                             <?= (isset($product['pictured_paper_color_id']) && (int) $product['pictured_paper_color_id'] === (int) $pc['id']) ? 'selected' : '' ?>>
@@ -416,8 +442,11 @@ function imagePicker(initial, csrf) {
                         </option>
                         <?php endforeach; ?>
                     </select>
+                    <p style="font-size:0.78rem; color:#888; margin-top:0.35rem">Leave as <strong>None</strong> for arrangements with no paper (vase or shape) — customers won't be asked to choose a paper color.</p>
                 </div>
             </div>
+
+            </div><!-- /x-data flower-type/color wrapper -->
 
             <!-- Save button -->
             <button type="submit" class="admin-btn admin-btn-primary" style="width:100%; justify-content:center; padding:0.875rem">

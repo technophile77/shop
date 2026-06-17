@@ -15,6 +15,7 @@ use App\Models\FlowerTypeColor;
 use App\Models\PaperColor;
 use App\Models\Product;
 use App\Models\ProductFlowerType;
+use App\Models\ProductFlowerTypeColor;
 use App\Support\Destination;
 use App\Support\FlowerColorResolver;
 use App\Support\LocalArea;
@@ -227,7 +228,7 @@ final class LocalAreaController extends BaseController
                     $flowerTypesById,
                     $flowerTypeColorMap,
                     $flowerColorsById,
-                    isset($_bp['pictured_flower_color_id']) ? (int) $_bp['pictured_flower_color_id'] : null,
+                    ProductFlowerTypeColor::mapForProduct($pid),
                 );
             }
 
