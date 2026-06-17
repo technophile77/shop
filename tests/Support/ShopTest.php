@@ -288,4 +288,32 @@ final class ShopTest extends TestCase
             }
         }
     }
+
+    /**
+     * occasionGroup resolves the hospital group to get-well + new-baby and
+     * returns null for single occasions and unknown slugs.
+     */
+    public function testOccasionGroup(): void
+    {
+        self::assertSame(['get-well', 'new-baby'], Shop::occasionGroup('hospital'));
+        self::assertNull(Shop::occasionGroup('sympathy'));
+        self::assertNull(Shop::occasionGroup('birthday'));
+        self::assertNull(Shop::occasionGroup('get-well'));
+        self::assertNull(Shop::occasionGroup('unknown'));
+    }
+
+    /**
+     * The hospital group page has its own non-empty bilingual heading + blurb.
+     */
+    public function testHospitalOccasionCopy(): void
+    {
+        foreach (['en', 'es'] as $lang) {
+            $copy = Shop::occasionCopy('hospital', $lang);
+            self::assertNotSame('', $copy['heading']);
+            self::assertNotSame('', $copy['blurb']);
+            // Not the generic fallback heading.
+            self::assertNotSame('Special Occasion Flowers', $copy['heading']);
+            self::assertNotSame('Flores Especiales', $copy['heading']);
+        }
+    }
 }

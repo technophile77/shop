@@ -60,17 +60,25 @@ final class ShopController extends BaseController
      */
     public function occasion(Request $request, array $params = []): Response
     {
-        $slug     = (string) ($params['slug'] ?? '');
-        $occasion = Occasion::findBySlug($slug);
+        $slug  = (string) ($params['slug'] ?? '');
+        $group = Shop::occasionGroup($slug);
+        $lang  = Lang::current();
 
-        if ($occasion === null || !(bool) $occasion['active']) {
-            return Response::notFound();
+        if ($group !== null) {
+            // Virtual group page (e.g. hospital = get-well + new-baby) — union the
+            // member occasions' products under one page.
+            $occasion = ['slug' => $slug, 'name_en' => ucfirst($slug), 'name_es' => ucfirst($slug), 'active' => 1];
+            $products = Product::byOccasions($group);
+        } else {
+            $occasion = Occasion::findBySlug($slug);
+            if ($occasion === null || !(bool) $occasion['active']) {
+                return Response::notFound();
+            }
+            $products = Product::byOccasion($slug);
         }
 
-        $lang     = Lang::current();
-        $products = Product::byOccasion($slug);
-        $copy     = Shop::occasionCopy($slug, $lang);
-        $appUrl   = rtrim((string) Config::get('APP_URL', ''), '/');
+        $copy   = Shop::occasionCopy($slug, $lang);
+        $appUrl = rtrim((string) Config::get('APP_URL', ''), '/');
 
         // Record the "send flowers to this venue" destination when arriving from
         // a venue card on a city page (Phase 5 emits these query params). The

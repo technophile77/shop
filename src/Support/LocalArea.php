@@ -58,24 +58,24 @@ final class LocalArea
      *
      * Drives the per-venue "Send flowers" link and the birthday inline grid:
      *   - funeral  → 'sympathy'
-     *   - hospital → 'get-well' (the primary hospital occasion; new-baby is also
-     *                hospital-related but the landing page is get-well)
+     *   - hospital → 'hospital' (a virtual group page combining get-well + new-baby;
+     *                see {@see \App\Support\Shop::occasionGroup()})
      *   - birthday → 'birthday'
      *
      * @param string $service Service code: 'funeral' | 'hospital' | 'birthday'.
      *
-     * @return string|null The occasion slug, or null for an unknown service.
+     * @return string|null The occasion (or group) slug, or null for an unknown service.
      *
      * @example
      *   LocalArea::occasionSlugForService('funeral');  // 'sympathy'
-     *   LocalArea::occasionSlugForService('hospital');  // 'get-well'
+     *   LocalArea::occasionSlugForService('hospital');  // 'hospital'
      *   LocalArea::occasionSlugForService('unknown');   // null
      */
     public static function occasionSlugForService(string $service): ?string
     {
         return [
             'funeral'  => 'sympathy',
-            'hospital' => 'get-well',
+            'hospital' => 'hospital',
             'birthday' => 'birthday',
         ][$service] ?? null;
     }
