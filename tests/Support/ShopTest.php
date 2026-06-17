@@ -10,9 +10,9 @@ use PHPUnit\Framework\TestCase;
 /**
  * Unit tests for App\Support\Shop — pure fixture-based, no DB.
  *
- * Covers isBuyable(), normalizePrice(), and occasionCopy() for all four
- * seeded occasion slugs (birthday, get-well, new-baby, sympathy) in both
- * languages, plus unknown-slug fallback behaviour.
+ * Covers isBuyable(), normalizePrice(), occasionCopyFromRow() (DB-backed copy
+ * with name/blurb fallbacks), and occasionGroup()/occasionGroupCopy() for the
+ * virtual hospital group page.
  *
  * @see \App\Support\Shop
  */
@@ -147,147 +147,58 @@ final class ShopTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // occasionCopy — seeded slugs
+    // occasionCopyFromRow — DB-backed single-occasion copy
     // -------------------------------------------------------------------------
 
     /**
-     * birthday / en returns a non-empty heading and blurb.
+     * When the row has heading/blurb for the language, they are used verbatim.
      */
-    public function testOccasionCopyBirthdayEn(): void
+    public function testOccasionCopyFromRowUsesRowFields(): void
     {
-        $copy = Shop::occasionCopy('birthday', 'en');
-        self::assertNotEmpty($copy['heading']);
-        self::assertNotEmpty($copy['blurb']);
-        self::assertIsString($copy['heading']);
-        self::assertIsString($copy['blurb']);
+        $row = [
+            'name_en' => 'Anniversary', 'name_es' => 'Aniversario',
+            'heading_en' => 'Anniversary Flowers', 'heading_es' => 'Flores de Aniversario',
+            'blurb_en' => 'Celebrate years together.', 'blurb_es' => 'Celebra los años juntos.',
+        ];
+        $en = Shop::occasionCopyFromRow($row, 'en');
+        self::assertSame('Anniversary Flowers', $en['heading']);
+        self::assertSame('Celebrate years together.', $en['blurb']);
+
+        $es = Shop::occasionCopyFromRow($row, 'es');
+        self::assertSame('Flores de Aniversario', $es['heading']);
+        self::assertSame('Celebra los años juntos.', $es['blurb']);
     }
 
     /**
-     * birthday / es returns a non-empty heading and blurb in Spanish.
+     * An empty heading falls back to the localized name, then to name_en.
      */
-    public function testOccasionCopyBirthdayEs(): void
+    public function testOccasionCopyFromRowHeadingFallsBackToName(): void
     {
-        $copy = Shop::occasionCopy('birthday', 'es');
-        self::assertNotEmpty($copy['heading']);
-        self::assertNotEmpty($copy['blurb']);
-        // Verify it differs from the English copy (not just a passthrough).
-        $enCopy = Shop::occasionCopy('birthday', 'en');
-        self::assertNotSame($enCopy['heading'], $copy['heading']);
+        $row = ['name_en' => 'Anniversary', 'name_es' => 'Aniversario', 'heading_en' => '', 'heading_es' => ''];
+        self::assertSame('Anniversary',  Shop::occasionCopyFromRow($row, 'en')['heading']);
+        self::assertSame('Aniversario',  Shop::occasionCopyFromRow($row, 'es')['heading']);
+
+        // No name_es → es heading falls back to name_en.
+        $row2 = ['name_en' => 'Anniversary', 'name_es' => '', 'heading_en' => '', 'heading_es' => ''];
+        self::assertSame('Anniversary', Shop::occasionCopyFromRow($row2, 'es')['heading']);
     }
 
     /**
-     * get-well / en returns a non-empty heading and blurb.
+     * An empty blurb falls back to the generic blurb (language-specific).
      */
-    public function testOccasionCopyGetWellEn(): void
+    public function testOccasionCopyFromRowBlurbFallsBackToGeneric(): void
     {
-        $copy = Shop::occasionCopy('get-well', 'en');
-        self::assertNotEmpty($copy['heading']);
-        self::assertNotEmpty($copy['blurb']);
-    }
-
-    /**
-     * get-well / es returns a non-empty heading and blurb.
-     */
-    public function testOccasionCopyGetWellEs(): void
-    {
-        $copy = Shop::occasionCopy('get-well', 'es');
-        self::assertNotEmpty($copy['heading']);
-        self::assertNotEmpty($copy['blurb']);
-    }
-
-    /**
-     * new-baby / en returns a non-empty heading and blurb.
-     */
-    public function testOccasionCopyNewBabyEn(): void
-    {
-        $copy = Shop::occasionCopy('new-baby', 'en');
-        self::assertNotEmpty($copy['heading']);
-        self::assertNotEmpty($copy['blurb']);
-    }
-
-    /**
-     * new-baby / es returns a non-empty heading and blurb.
-     */
-    public function testOccasionCopyNewBabyEs(): void
-    {
-        $copy = Shop::occasionCopy('new-baby', 'es');
-        self::assertNotEmpty($copy['heading']);
-        self::assertNotEmpty($copy['blurb']);
-    }
-
-    /**
-     * sympathy / en returns a non-empty heading and blurb.
-     */
-    public function testOccasionCopySympathyEn(): void
-    {
-        $copy = Shop::occasionCopy('sympathy', 'en');
-        self::assertNotEmpty($copy['heading']);
-        self::assertNotEmpty($copy['blurb']);
-    }
-
-    /**
-     * sympathy / es returns a non-empty heading and blurb.
-     */
-    public function testOccasionCopySympathyEs(): void
-    {
-        $copy = Shop::occasionCopy('sympathy', 'es');
-        self::assertNotEmpty($copy['heading']);
-        self::assertNotEmpty($copy['blurb']);
+        $row = ['name_en' => 'Anniversary', 'blurb_en' => '', 'blurb_es' => ''];
+        $en  = Shop::occasionCopyFromRow($row, 'en');
+        $es  = Shop::occasionCopyFromRow($row, 'es');
+        self::assertNotSame('', $en['blurb']);
+        self::assertNotSame('', $es['blurb']);
+        self::assertNotSame($en['blurb'], $es['blurb']); // generic differs per language
     }
 
     // -------------------------------------------------------------------------
-    // occasionCopy — unknown slug fallback
+    // occasionGroup / occasionGroupCopy — virtual group pages
     // -------------------------------------------------------------------------
-
-    /**
-     * An unknown slug with 'en' lang returns a sane English fallback.
-     */
-    public function testOccasionCopyUnknownSlugEn(): void
-    {
-        $copy = Shop::occasionCopy('totally-unknown-slug', 'en');
-        self::assertNotEmpty($copy['heading']);
-        self::assertNotEmpty($copy['blurb']);
-        self::assertIsString($copy['heading']);
-        self::assertIsString($copy['blurb']);
-    }
-
-    /**
-     * An unknown slug with 'es' lang returns a sane Spanish fallback.
-     */
-    public function testOccasionCopyUnknownSlugEs(): void
-    {
-        $copy = Shop::occasionCopy('totally-unknown-slug', 'es');
-        self::assertNotEmpty($copy['heading']);
-        self::assertNotEmpty($copy['blurb']);
-        // Fallback for 'es' must differ from fallback for 'en'.
-        $enFallback = Shop::occasionCopy('totally-unknown-slug', 'en');
-        self::assertNotSame($enFallback['heading'], $copy['heading']);
-    }
-
-    /**
-     * An unrecognised lang code falls back to English copy.
-     */
-    public function testOccasionCopyUnknownLangFallsBackToEn(): void
-    {
-        $copy   = Shop::occasionCopy('birthday', 'fr');
-        $enCopy = Shop::occasionCopy('birthday', 'en');
-        self::assertSame($enCopy['heading'], $copy['heading']);
-        self::assertSame($enCopy['blurb'],   $copy['blurb']);
-    }
-
-    /**
-     * occasionCopy always returns an array with exactly the 'heading' and 'blurb' keys.
-     */
-    public function testOccasionCopyStructureKeys(): void
-    {
-        foreach (['birthday', 'get-well', 'new-baby', 'sympathy', 'unknown'] as $slug) {
-            foreach (['en', 'es'] as $lang) {
-                $copy = Shop::occasionCopy($slug, $lang);
-                self::assertArrayHasKey('heading', $copy, "Missing 'heading' for {$slug}/{$lang}");
-                self::assertArrayHasKey('blurb',   $copy, "Missing 'blurb' for {$slug}/{$lang}");
-            }
-        }
-    }
 
     /**
      * occasionGroup resolves the hospital group to get-well + new-baby and
@@ -305,15 +216,25 @@ final class ShopTest extends TestCase
     /**
      * The hospital group page has its own non-empty bilingual heading + blurb.
      */
-    public function testHospitalOccasionCopy(): void
+    public function testHospitalGroupCopy(): void
     {
         foreach (['en', 'es'] as $lang) {
-            $copy = Shop::occasionCopy('hospital', $lang);
+            $copy = Shop::occasionGroupCopy('hospital', $lang);
             self::assertNotSame('', $copy['heading']);
             self::assertNotSame('', $copy['blurb']);
-            // Not the generic fallback heading.
             self::assertNotSame('Special Occasion Flowers', $copy['heading']);
             self::assertNotSame('Flores Especiales', $copy['heading']);
         }
+    }
+
+    /**
+     * An unknown group slug returns the generic fallback (en differs from es).
+     */
+    public function testOccasionGroupCopyUnknownFallsBack(): void
+    {
+        $en = Shop::occasionGroupCopy('nope', 'en');
+        $es = Shop::occasionGroupCopy('nope', 'es');
+        self::assertSame('Special Occasion Flowers', $en['heading']);
+        self::assertSame('Flores Especiales', $es['heading']);
     }
 }

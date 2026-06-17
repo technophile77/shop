@@ -110,7 +110,7 @@ final class OccasionsController extends BaseController
             'name_es'    => $nameEs !== '' ? $nameEs : null,
             'active'     => $active,
             'sort_order' => $sortOrder,
-        ]);
+        ] + $this->collectCopy($request));
 
         $this->setFlash('success', 'Occasion created successfully.');
         return $this->redirect('/admin/occasions');
@@ -165,7 +165,7 @@ final class OccasionsController extends BaseController
             'name_es'    => $nameEs !== '' ? $nameEs : null,
             'active'     => $active,
             'sort_order' => $sortOrder,
-        ]);
+        ] + $this->collectCopy($request));
 
         $this->setFlash('success', 'Occasion updated successfully.');
         return $this->redirect('/admin/occasions');
@@ -206,6 +206,29 @@ final class OccasionsController extends BaseController
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Collect the optional per-occasion display copy (heading + blurb, EN/ES).
+     *
+     * Empty fields are passed through as '' and stored as NULL by the model,
+     * so the occasion page falls back to its name + a generic blurb.
+     *
+     * @param Request $request The HTTP request containing POST data.
+     *
+     * @return array{heading_en:string, heading_es:string, blurb_en:string, blurb_es:string}
+     */
+    private function collectCopy(Request $request): array
+    {
+        $clean = static fn (string $key): string =>
+            strip_tags(trim((string) $request->post($key, '')));
+
+        return [
+            'heading_en' => $clean('heading_en'),
+            'heading_es' => $clean('heading_es'),
+            'blurb_en'   => $clean('blurb_en'),
+            'blurb_es'   => $clean('blurb_es'),
+        ];
+    }
 
     /**
      * Return true when $slug contains only lowercase letters, digits, and hyphens

@@ -196,6 +196,90 @@ final class Product
         return $row !== false ? $row : null;
     }
 
+    /**
+     * Finds a single ACTIVE product by primary key, joined with its category.
+     *
+     * Intended for the public product detail page: returns null for missing or
+     * inactive (soft-deleted) products so they 404 rather than render.
+     *
+     * @param int $id The product's primary key.
+     *
+     * @return array|null The product row (all columns + category_name_en/es/slug),
+     *                    or null when not found or inactive.
+     *
+     * @throws \PDOException When the database query fails.
+     *
+     * @example
+     *   $product = Product::findActive(12);
+     *   if ($product === null) { return Response::notFound(); }
+     */
+    public static function findActive(int $id): ?array
+    {
+        $sql = self::baseSelect() . <<<SQL
+
+            WHERE p.id = ?
+              AND p.active = 1
+            LIMIT 1
+            SQL;
+
+        $stmt = Database::ro()->prepare($sql);
+        $stmt->execute([$id]);
+
+        $row = $stmt->fetch();
+
+        return $row !== false ? $row : null;
+    }
+
+    /**
+     * Returns the most recent updated_at across all active products.
+     *
+     * Used as the sitemap <lastmod> for catalog-wide pages (the products index
+     * and occasion pages).
+     *
+     * @return string|null A 'Y-m-d H:i:s' timestamp, or null when no active products exist.
+     *
+     * @throws \PDOException When the database query fails.
+     *
+     * @example
+     *   $lastmod = Product::maxUpdatedAt(); // '2026-06-17 14:02:11'
+     */
+    public static function maxUpdatedAt(): ?string
+    {
+        $stmt = Database::ro()->query('SELECT MAX(updated_at) FROM products WHERE active = 1');
+        $val  = $stmt->fetchColumn();
+
+        return ($val === false || $val === null) ? null : (string) $val;
+    }
+
+    /**
+     * Returns the most recent updated_at per category for active products.
+     *
+     * Used as the sitemap <lastmod> for category pages.
+     *
+     * @return array<int, string> Map of category_id => 'Y-m-d H:i:s' timestamp.
+     *
+     * @throws \PDOException When the database query fails.
+     *
+     * @example
+     *   $byCat = Product::maxUpdatedAtByCategory(); // [2 => '2026-06-17 14:02:11', …]
+     */
+    public static function maxUpdatedAtByCategory(): array
+    {
+        $stmt = Database::ro()->query(
+            'SELECT category_id, MAX(updated_at) AS m
+             FROM products
+             WHERE active = 1
+             GROUP BY category_id'
+        );
+
+        $out = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $out[(int) $row['category_id']] = (string) $row['m'];
+        }
+
+        return $out;
+    }
+
     // -----------------------------------------------------------------------
     // Write methods (use Database::rw())
     // -----------------------------------------------------------------------

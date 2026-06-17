@@ -365,15 +365,32 @@ final class LocalArea
     }
 
     /**
-     * Every service + city path (no language prefix), plus the hub page.
+     * The per-city hub path (no language prefix) that lists all services for a city.
+     *
+     * @param string $citySlug The city slug (e.g. 'tulsa').
+     *
+     * @return string The path, e.g. '/flower-delivery-tulsa'.
+     *
+     * @example
+     *   LocalArea::cityHubPath('bixby'); // '/flower-delivery-bixby'
+     */
+    public static function cityHubPath(string $citySlug): string
+    {
+        return '/flower-delivery-' . $citySlug;
+    }
+
+    /**
+     * Every service + city path (no language prefix), plus each city hub and the
+     * areas hub.
      *
      * Used by the SitemapController to enumerate all landing-page URLs.
      *
      * @param array<string, array<string, mixed>> $areas    City data.
      * @param array<string, array<string, mixed>> $services Service definitions.
      *
-     * @return list<string> Paths such as '/delivery-areas',
-     *                      '/funeral-flowers-jenks', … in service-then-city order.
+     * @return list<string> Paths such as '/delivery-areas', '/funeral-flowers-jenks',
+     *                      '/flower-delivery-jenks', … (hub, then service-then-city,
+     *                      then per-city hubs).
      */
     public static function allPaths(array $areas, array $services): array
     {
@@ -382,6 +399,9 @@ final class LocalArea
             foreach (array_keys($areas) as $slug) {
                 $paths[] = self::path($code, $slug, $services);
             }
+        }
+        foreach (array_keys($areas) as $slug) {
+            $paths[] = self::cityHubPath($slug);
         }
         return $paths;
     }

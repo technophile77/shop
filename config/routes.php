@@ -26,6 +26,7 @@ return [
     ['GET',  '/products',                   'ProductController',           'index'],
     ['GET',  '/products/{slug}',            'ProductController',           'byCategory'],
     ['GET',  '/flowers/occasion/{slug}',    'ShopController',              'occasion'],
+    ['GET',  '/flowers/{ref}',              'ShopController',              'product'],
     ['GET',  '/cart',                       'CartController',              'view'],
     ['POST', '/cart/add',                   'CartController',              'add'],
     ['POST', '/cart/update',                'CartController',              'update'],
@@ -50,6 +51,7 @@ return [
 
     // Local-SEO city landing pages (driven by config/local-areas.php)
     ['GET',  '/delivery-areas',                  'LocalAreaController',    'hub'],
+    ['GET',  '/flower-delivery-{city}',          'LocalAreaController',    'cityHub'],
     ['GET',  '/funeral-flowers-{city}',          'LocalAreaController',    'funeral'],
     ['GET',  '/hospital-flower-delivery-{city}', 'LocalAreaController',    'hospital'],
     ['GET',  '/birthday-delivery-{city}',        'LocalAreaController',    'birthday'],

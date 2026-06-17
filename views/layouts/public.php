@@ -377,7 +377,7 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
                 <ul class="footer-links" role="list">
                     <?php foreach (array_slice(\App\Support\LocalArea::areas(), 0, 4, true) as $_areaSlug => $_area): ?>
                     <li>
-                        <a href="/<?= $lang ?>/funeral-flowers-<?= htmlspecialchars($_areaSlug) ?>">
+                        <a href="/<?= $lang ?>/flower-delivery-<?= htmlspecialchars($_areaSlug) ?>">
                             <?= htmlspecialchars((string) $_area['name']) ?>
                         </a>
                     </li>

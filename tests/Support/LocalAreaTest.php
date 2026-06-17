@@ -143,10 +143,14 @@ final class LocalAreaTest extends TestCase
         self::assertSame('/funeral-flowers-testville', LocalArea::path('funeral', 'testville', $svc));
         self::assertSame('/hospital-flower-delivery-exampleburg', LocalArea::path('hospital', 'exampleburg', $svc));
 
+        self::assertSame('/flower-delivery-bixby', LocalArea::cityHubPath('bixby'));
+
         $paths = LocalArea::allPaths($areas, $svc);
         self::assertContains('/delivery-areas', $paths);
-        // hub + (3 services × 2 cities)
-        self::assertCount(1 + 3 * 2, $paths);
+        self::assertContains('/flower-delivery-testville', $paths);
+        self::assertContains('/flower-delivery-exampleburg', $paths);
+        // hub + (3 services × 2 cities) + (1 city hub × 2 cities)
+        self::assertCount(1 + 3 * 2 + 2, $paths);
     }
 
     public function testFaqItemsIncludeCityAndServiceSpecificQuestion(): void
