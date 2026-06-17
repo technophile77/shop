@@ -2,5 +2,7 @@ User-agent: *
 Disallow: /admin
 Disallow: /quote/
 Disallow: /lang/
+Disallow: /cart
+Disallow: /checkout
 
 Sitemap: https://flowers.cresswell.org/sitemap.xml

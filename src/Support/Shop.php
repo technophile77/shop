@@ -187,4 +187,20 @@ final class Shop
     {
         return self::OCCASION_GROUPS[$slug] ?? null;
     }
+
+    /**
+     * Return the slugs of every virtual occasion-group page (e.g. 'hospital').
+     *
+     * Used by the sitemap to list the combined occasion landing pages, which
+     * have no row in the occasions table.
+     *
+     * @return string[] Group slugs.
+     *
+     * @example
+     *   Shop::occasionGroupSlugs(); // ['hospital']
+     */
+    public static function occasionGroupSlugs(): array
+    {
+        return array_keys(self::OCCASION_GROUPS);
+    }
 }

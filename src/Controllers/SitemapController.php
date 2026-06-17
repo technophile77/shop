@@ -5,8 +5,10 @@ namespace App\Controllers;
 
 use App\Core\Config;
 use App\Core\Response;
+use App\Models\Occasion;
 use App\Models\ProductCategory;
 use App\Support\LocalArea;
+use App\Support\Shop;
 
 /**
  * Generates the XML sitemap dynamically from the database.
@@ -69,6 +71,22 @@ class SitemapController
             $xml .= self::urlBlock($base, $path, 'monthly', $priority);
         }
 
+        // Occasion bouquet pages: every active occasion plus the combined
+        // group pages (e.g. /flowers/occasion/hospital).
+        $occasionSlugs = [];
+        foreach (Occasion::allActive() as $occasion) {
+            $slug = $occasion['slug'] ?? '';
+            if ($slug !== '') {
+                $occasionSlugs[] = $slug;
+            }
+        }
+        foreach (Shop::occasionGroupSlugs() as $groupSlug) {
+            $occasionSlugs[] = $groupSlug;
+        }
+        foreach (array_unique($occasionSlugs) as $slug) {
+            $xml .= self::urlBlock($base, '/flowers/occasion/' . $slug, 'weekly', '0.7');
+        }
+
         $xml .= '</urlset>' . "\n";
 
         return (new Response($xml, 200))
@@ -99,6 +117,7 @@ class SitemapController
             $block .= '    <loc>' . htmlspecialchars($loc, ENT_XML1) . '</loc>' . "\n";
             $block .= '    <xhtml:link rel="alternate" hreflang="en" href="' . htmlspecialchars($enUrl, ENT_XML1) . '"/>' . "\n";
             $block .= '    <xhtml:link rel="alternate" hreflang="es" href="' . htmlspecialchars($esUrl, ENT_XML1) . '"/>' . "\n";
+            $block .= '    <xhtml:link rel="alternate" hreflang="x-default" href="' . htmlspecialchars($enUrl, ENT_XML1) . '"/>' . "\n";
             $block .= '    <changefreq>' . $changefreq . '</changefreq>' . "\n";
             $block .= '    <priority>' . $priority . '</priority>' . "\n";
             $block .= "  </url>\n";
