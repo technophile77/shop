@@ -176,9 +176,8 @@ final class FlowerColorsController extends BaseController
     /**
      * Permanently delete a flower color.
      *
-     * Products whose pictured_flower_color_id references this color will have
-     * that field set to NULL automatically by the ON DELETE SET NULL constraint.
-     * Associated flower_type_colors rows are removed by ON DELETE CASCADE.
+     * Associated flower_type_colors and product_flower_type_colors rows are
+     * removed automatically by their ON DELETE CASCADE foreign keys.
      *
      * @param Request              $request HTTP request.
      * @param array<string,string> $params  Route parameters; expects 'id'.

@@ -184,10 +184,8 @@ final class FlowerColor
     /**
      * Permanently delete a flower color by primary key.
      *
-     * Associated flower_type_colors rows are removed automatically by the
-     * ON DELETE CASCADE foreign key. Products whose pictured_flower_color_id
-     * references this color will be set to NULL by the ON DELETE SET NULL
-     * constraint on the products table.
+     * Associated flower_type_colors and product_flower_type_colors rows are
+     * removed automatically by their ON DELETE CASCADE foreign keys.
      *
      * @param int $id The flower color's primary key.
      *

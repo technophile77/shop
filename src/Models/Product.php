@@ -225,11 +225,11 @@ final class Product
             INSERT INTO products
                 (category_id, name_en, name_es, description_en, description_es,
                  image_path, price_from, price_to, featured, active, sort_order,
-                 flower_count, pictured_flower_color_id, pictured_paper_color_id)
+                 flower_count, pictured_paper_color_id)
             VALUES
                 (:category_id, :name_en, :name_es, :description_en, :description_es,
                  :image_path, :price_from, :price_to, :featured, :active, :sort_order,
-                 :flower_count, :pictured_flower_color_id, :pictured_paper_color_id)
+                 :flower_count, :pictured_paper_color_id)
             SQL;
 
         $db   = Database::rw();
@@ -248,7 +248,6 @@ final class Product
             ':active'                    => (int) ($data['active']             ?? 1),
             ':sort_order'                => (int) ($data['sort_order']         ?? 0),
             ':flower_count'              => isset($data['flower_count'])              ? (int) $data['flower_count']              : null,
-            ':pictured_flower_color_id'  => isset($data['pictured_flower_color_id'])  ? (int) $data['pictured_flower_color_id']  : null,
             ':pictured_paper_color_id'   => isset($data['pictured_paper_color_id'])   ? (int) $data['pictured_paper_color_id']   : null,
         ]);
 
@@ -280,7 +279,7 @@ final class Product
         $allowed = [
             'category_id', 'name_en', 'name_es', 'description_en', 'description_es',
             'image_path', 'price_from', 'price_to', 'featured', 'active', 'sort_order',
-            'flower_count', 'pictured_flower_color_id', 'pictured_paper_color_id',
+            'flower_count', 'pictured_paper_color_id',
         ];
 
         $setClauses = [];

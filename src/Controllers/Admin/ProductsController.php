@@ -372,9 +372,6 @@ final class ProductsController extends BaseController
             'featured'                  => $request->post('featured') !== null ? 1 : 0,
             'active'                    => $request->post('active') !== null ? 1 : 0,
             'flower_count'              => ($v = trim((string) $request->post('flower_count', ''))) !== '' ? (int) $v : null,
-            // Legacy single pictured flower color is superseded by the per-type
-            // product_flower_type_colors join — always cleared now.
-            'pictured_flower_color_id'  => null,
             'pictured_paper_color_id'   => ($v = trim((string) $request->post('pictured_paper_color_id', ''))) !== '' ? (int) $v : null,
         ];
     }
