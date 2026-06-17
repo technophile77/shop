@@ -323,7 +323,7 @@ final class LocalAreaTest extends TestCase
     public function testOccasionSlugForService(): void
     {
         self::assertSame('sympathy', LocalArea::occasionSlugForService('funeral'));
-        self::assertSame('get-well', LocalArea::occasionSlugForService('hospital'));
+        self::assertSame('hospital', LocalArea::occasionSlugForService('hospital'));
         self::assertSame('birthday', LocalArea::occasionSlugForService('birthday'));
         self::assertNull(LocalArea::occasionSlugForService('unknown'));
         self::assertNull(LocalArea::occasionSlugForService(''));

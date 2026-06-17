@@ -342,6 +342,55 @@ final class Product
     }
 
     /**
+     * Returns active products tagged with ANY of the given occasion slugs.
+     *
+     * Used for combined occasion pages (e.g. the hospital page unions get-well
+     * and new-baby). A product tagged with more than one of the slugs appears
+     * exactly once — deduplication is handled by the IN-subquery rather than a
+     * JOIN, so no GROUP BY / ONLY_FULL_GROUP_BY concerns arise.
+     *
+     * @param string[] $slugs Occasion slugs; empty or all-blank yields an empty result.
+     *
+     * @return array<int, array> Each row contains all product columns plus
+     *                           category_name_en, category_name_es, category_slug.
+     *
+     * @throws \PDOException When the database query fails.
+     *
+     * @example
+     *   $hospital = Product::byOccasions(['get-well', 'new-baby']);
+     */
+    public static function byOccasions(array $slugs): array
+    {
+        $slugs = array_values(array_filter(
+            array_map(static fn ($s): string => (string) $s, $slugs),
+            static fn (string $s): bool => $s !== '',
+        ));
+
+        if ($slugs === []) {
+            return [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($slugs), '?'));
+
+        $sql = self::baseSelect() . <<<SQL
+
+            WHERE p.active = 1
+              AND p.id IN (
+                  SELECT po.product_id
+                  FROM product_occasions po
+                  JOIN occasions o ON o.id = po.occasion_id
+                  WHERE o.slug IN ($placeholders)
+              )
+            ORDER BY p.sort_order ASC, p.id ASC
+            SQL;
+
+        $stmt = Database::ro()->prepare($sql);
+        $stmt->execute($slugs);
+
+        return $stmt->fetchAll();
+    }
+
+    /**
      * Soft-deletes a product by setting its active flag to 0.
      *
      * The row is preserved in the database so order history and admin audit

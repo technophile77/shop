@@ -23,7 +23,28 @@ final class Shop
      * Used by occasionCopy() to return display text without a database round-
      * trip. Extend this map whenever a new occasion slug is seeded.
      */
+    /**
+     * Virtual occasion "groups" that combine several real occasion slugs onto a
+     * single public page. Keyed by the group slug; values are the member
+     * occasion slugs whose products are unioned on that page.
+     *
+     * The hospital page shows both get-well and new-baby bouquets together.
+     */
+    private const OCCASION_GROUPS = [
+        'hospital' => ['get-well', 'new-baby'],
+    ];
+
     private const OCCASION_COPY = [
+        'hospital' => [
+            'en' => [
+                'heading' => 'Hospital Flowers',
+                'blurb'   => 'Get-well wishes and new-baby congratulations — bright, hand-crafted bouquets delivered to the hospital with care.',
+            ],
+            'es' => [
+                'heading' => 'Flores para el Hospital',
+                'blurb'   => 'Deseos de pronta recuperación y felicitaciones por el nuevo bebé — ramos alegres y hechos a mano, entregados al hospital con cariño.',
+            ],
+        ],
         'birthday' => [
             'en' => [
                 'heading' => 'Birthday Flowers',
@@ -145,5 +166,25 @@ final class Shop
         return $langKey === 'es'
             ? ['heading' => 'Flores Especiales', 'blurb' => 'Explora nuestra selección de arreglos florales hermosos y hechos a mano.']
             : ['heading' => 'Special Occasion Flowers', 'blurb' => 'Explore our selection of beautiful, hand-crafted floral arrangements.'];
+    }
+
+    /**
+     * Resolve a virtual occasion-group slug to its member occasion slugs.
+     *
+     * Returns null for a normal (single) occasion slug, so callers can branch:
+     * a non-null result means the page should union several occasions'
+     * products rather than load one.
+     *
+     * @param string $slug The page slug, e.g. 'hospital' or 'sympathy'.
+     *
+     * @return string[]|null Member occasion slugs for a group, or null otherwise.
+     *
+     * @example
+     *   Shop::occasionGroup('hospital'); // ['get-well', 'new-baby']
+     *   Shop::occasionGroup('sympathy'); // null
+     */
+    public static function occasionGroup(string $slug): ?array
+    {
+        return self::OCCASION_GROUPS[$slug] ?? null;
     }
 }
