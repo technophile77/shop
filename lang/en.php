@@ -117,6 +117,47 @@ return [
     'footer.delivery_info'  => 'Delivery',
     'footer.doordash_cta'   => 'Order on DoorDash',
 
+    // ── Occasions ─────────────────────────────────────────────────────────────
+    'occasion.get_well'  => 'Get Well',
+    'occasion.new_baby'  => 'New Baby',
+    'occasion.sympathy'  => 'Sympathy',
+    'occasion.birthday'  => 'Birthday',
+
+    // ── Shop — occasion bouquet pages ─────────────────────────────────────────
+    'shop.add_to_cart'     => 'Add to Cart',
+    'shop.customize'       => 'Customize this bouquet',
+    'shop.paper_color'     => 'Wrap / paper color',
+    'shop.addons'          => 'Add-ons',
+    'shop.ribbon_message'  => 'Ribbon message',
+    'shop.quantity'        => 'Quantity',
+    'shop.mixed'           => '(mixed)',
+    'shop.color_hint'      => 'Pick one color, or select several for a mixed arrangement.',
+    'shop.colors_may_differ' => 'Delivered colors may differ slightly from the photo based on availability.',
+
+    // ── Cart ──────────────────────────────────────────────────────────────────
+    'cart.heading'     => 'Your Cart',
+    'cart.empty'       => 'Your cart is empty.',
+    'cart.update'      => 'Update',
+    'cart.remove'      => 'Remove',
+    'cart.subtotal'    => 'Subtotal',
+    'cart.checkout'    => 'Proceed to Checkout',
+    'cart.totals_note' => 'Delivery fee and sales tax are calculated at checkout.',
+
+    // ── Checkout ──────────────────────────────────────────────────────────────
+    'checkout.heading'         => 'Checkout',
+    'checkout.order_summary'   => 'Order Summary',
+    'checkout.card_message'    => 'Card Message',
+    'checkout.card_message_ph' => 'A note to include with the flowers (optional)',
+    'checkout.delivery_fee'    => 'Delivery Fee',
+    'checkout.sales_tax'       => 'Sales Tax',
+    'checkout.total'           => 'Total',
+    'checkout.pay_button'      => 'Pay with Card',
+    'checkout.success_heading' => 'Thank You — Order Confirmed!',
+    'checkout.success_message' => "We've received your payment and will prepare your arrangement with care.",
+
+    // ── Navigation (cart) ──────────────────────────────────────────────────────
+    'nav.cart'         => 'Cart',
+
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Loading...',
     'general.error'    => 'An error occurred.',

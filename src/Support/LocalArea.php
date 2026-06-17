@@ -54,6 +54,33 @@ final class LocalArea
     }
 
     /**
+     * Map a city-page service code to the occasion bouquet-page slug it links to.
+     *
+     * Drives the per-venue "Send flowers" link and the birthday inline grid:
+     *   - funeral  → 'sympathy'
+     *   - hospital → 'get-well' (the primary hospital occasion; new-baby is also
+     *                hospital-related but the landing page is get-well)
+     *   - birthday → 'birthday'
+     *
+     * @param string $service Service code: 'funeral' | 'hospital' | 'birthday'.
+     *
+     * @return string|null The occasion slug, or null for an unknown service.
+     *
+     * @example
+     *   LocalArea::occasionSlugForService('funeral');  // 'sympathy'
+     *   LocalArea::occasionSlugForService('hospital');  // 'get-well'
+     *   LocalArea::occasionSlugForService('unknown');   // null
+     */
+    public static function occasionSlugForService(string $service): ?string
+    {
+        return [
+            'funeral'  => 'sympathy',
+            'hospital' => 'get-well',
+            'birthday' => 'birthday',
+        ][$service] ?? null;
+    }
+
+    /**
      * Load the geocoded venue-coordinate cache (config/local-areas-coords.php).
      *
      * Maps a venue's exact address string to its latitude/longitude. The cache

@@ -117,6 +117,47 @@ return [
     'footer.delivery_info'  => 'Entrega',
     'footer.doordash_cta'   => 'Pedir en DoorDash',
 
+    // ── Occasions ─────────────────────────────────────────────────────────────
+    'occasion.get_well'  => 'Que te mejores',
+    'occasion.new_baby'  => 'Nuevo Bebé',
+    'occasion.sympathy'  => 'Condolencias',
+    'occasion.birthday'  => 'Cumpleaños',
+
+    // ── Shop — occasion bouquet pages ─────────────────────────────────────────
+    'shop.add_to_cart'     => 'Agregar al Carrito',
+    'shop.customize'       => 'Personaliza este ramo',
+    'shop.paper_color'     => 'Color del papel',
+    'shop.addons'          => 'Complementos',
+    'shop.ribbon_message'  => 'Mensaje del listón',
+    'shop.quantity'        => 'Cantidad',
+    'shop.mixed'           => '(mezclado)',
+    'shop.color_hint'      => 'Elige un color, o selecciona varios para un arreglo mezclado.',
+    'shop.colors_may_differ' => 'Los colores entregados pueden variar ligeramente de la foto según la disponibilidad.',
+
+    // ── Cart ──────────────────────────────────────────────────────────────────
+    'cart.heading'     => 'Tu Carrito',
+    'cart.empty'       => 'Tu carrito está vacío.',
+    'cart.update'      => 'Actualizar',
+    'cart.remove'      => 'Eliminar',
+    'cart.subtotal'    => 'Subtotal',
+    'cart.checkout'    => 'Proceder al Pago',
+    'cart.totals_note' => 'La tarifa de entrega y el impuesto se calculan al finalizar la compra.',
+
+    // ── Checkout ──────────────────────────────────────────────────────────────
+    'checkout.heading'         => 'Pago',
+    'checkout.order_summary'   => 'Resumen del Pedido',
+    'checkout.card_message'    => 'Mensaje de la Tarjeta',
+    'checkout.card_message_ph' => 'Una nota para incluir con las flores (opcional)',
+    'checkout.delivery_fee'    => 'Tarifa de Entrega',
+    'checkout.sales_tax'       => 'Impuesto',
+    'checkout.total'           => 'Total',
+    'checkout.pay_button'      => 'Pagar con Tarjeta',
+    'checkout.success_heading' => '¡Gracias — Pedido Confirmado!',
+    'checkout.success_message' => 'Hemos recibido tu pago y prepararemos tu arreglo con cariño.',
+
+    // ── Navigation (cart) ──────────────────────────────────────────────────────
+    'nav.cart'         => 'Carrito',
+
     // ── General / shared ──────────────────────────────────────────────────────
     'general.loading'  => 'Cargando...',
     'general.error'    => 'Ocurrió un error.',

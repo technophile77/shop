@@ -9,6 +9,7 @@
  *   string $lang            Current locale ('en' or 'es').
  *   string $csrfToken       Session CSRF token.
  *   string $arrangementHint Pre-fill value for the arrangement_style field (may be empty).
+ *   string $occasionHint    Pre-fill value for the occasion field (may be empty).
  *   string $pageTitle       Localised page title from site settings.
  *   array  $addons          Active add-ons for the checkbox grid (may be empty).
  *
@@ -335,7 +336,7 @@ function orderForm(availableAddons = []) {
             email:             '',
             phone:             '',
             event_date:        '',
-            occasion:          '',
+            occasion:          '<?= htmlspecialchars(addslashes($occasionHint ?? ''), ENT_QUOTES) ?>',
             arrangement_style: '<?= htmlspecialchars(addslashes($arrangementHint ?? ''), ENT_QUOTES) ?>',
             color_preferences: '',
             budget_range:      '',

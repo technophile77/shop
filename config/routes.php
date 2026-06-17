@@ -25,6 +25,14 @@ return [
     ['GET',  '/',                           'HomeController',              'index'],
     ['GET',  '/products',                   'ProductController',           'index'],
     ['GET',  '/products/{slug}',            'ProductController',           'byCategory'],
+    ['GET',  '/flowers/occasion/{slug}',    'ShopController',              'occasion'],
+    ['GET',  '/cart',                       'CartController',              'view'],
+    ['POST', '/cart/add',                   'CartController',              'add'],
+    ['POST', '/cart/update',                'CartController',              'update'],
+    ['POST', '/cart/remove',                'CartController',              'remove'],
+    ['GET',  '/checkout',                   'CheckoutController',          'view'],
+    ['POST', '/checkout',                   'CheckoutController',          'submit'],
+    ['GET',  '/checkout/success',           'CheckoutController',          'success'],
     ['GET',  '/order',                      'OrderController',             'form'],
     ['POST', '/order',                      'OrderController',             'submit'],
     ['GET',  '/quote/{token}',              'QuoteController',             'show'],
@@ -73,6 +81,31 @@ return [
     ['POST', '/admin/categories',           'Admin\CategoriesController',  'create',          ['auth']],
     ['POST', '/admin/categories/{id}',      'Admin\CategoriesController',  'update',          ['auth']],
     ['POST', '/admin/categories/{id}/delete', 'Admin\CategoriesController', 'delete',         ['auth']],
+
+    // Occasions
+    ['GET',  '/admin/occasions',             'Admin\OccasionsController', 'index',  ['auth']],
+    ['POST', '/admin/occasions',             'Admin\OccasionsController', 'create', ['auth']],
+    ['POST', '/admin/occasions/{id}',        'Admin\OccasionsController', 'update', ['auth']],
+    ['POST', '/admin/occasions/{id}/delete', 'Admin\OccasionsController', 'delete', ['auth']],
+
+    // Flower Types
+    ['GET',  '/admin/flower-types',                   'Admin\FlowerTypesController', 'index',        ['auth']],
+    ['POST', '/admin/flower-types',                   'Admin\FlowerTypesController', 'create',       ['auth']],
+    ['POST', '/admin/flower-types/{id}',              'Admin\FlowerTypesController', 'update',       ['auth']],
+    ['POST', '/admin/flower-types/{id}/delete',       'Admin\FlowerTypesController', 'delete',       ['auth']],
+    ['POST', '/admin/flower-types/{id}/colors',       'Admin\FlowerTypesController', 'updateColors', ['auth']],
+
+    // Flower Colors
+    ['GET',  '/admin/flower-colors',             'Admin\FlowerColorsController', 'index',  ['auth']],
+    ['POST', '/admin/flower-colors',             'Admin\FlowerColorsController', 'create', ['auth']],
+    ['POST', '/admin/flower-colors/{id}',        'Admin\FlowerColorsController', 'update', ['auth']],
+    ['POST', '/admin/flower-colors/{id}/delete', 'Admin\FlowerColorsController', 'delete', ['auth']],
+
+    // Paper Colors
+    ['GET',  '/admin/paper-colors',             'Admin\PaperColorsController', 'index',  ['auth']],
+    ['POST', '/admin/paper-colors',             'Admin\PaperColorsController', 'create', ['auth']],
+    ['POST', '/admin/paper-colors/{id}',        'Admin\PaperColorsController', 'update', ['auth']],
+    ['POST', '/admin/paper-colors/{id}/delete', 'Admin\PaperColorsController', 'delete', ['auth']],
 
     // Add-Ons
     ['GET',  '/admin/addons',             'Admin\AddonsController', 'index',    ['auth']],

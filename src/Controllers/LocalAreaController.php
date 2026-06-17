@@ -8,7 +8,17 @@ use App\Core\Config;
 use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
+use App\Models\Addon;
+use App\Models\FlowerColor;
+use App\Models\FlowerType;
+use App\Models\FlowerTypeColor;
+use App\Models\PaperColor;
+use App\Models\Product;
+use App\Models\ProductFlowerType;
+use App\Support\Destination;
+use App\Support\FlowerColorResolver;
 use App\Support\LocalArea;
+use App\Support\Shop;
 
 /**
  * Serves the local-SEO city landing pages and their hub.
@@ -46,7 +56,7 @@ final class LocalAreaController extends BaseController
      */
     public function funeral(Request $request, array $params = []): Response
     {
-        return $this->renderService('funeral', $params);
+        return $this->renderService($request, 'funeral', $params);
     }
 
     /**
@@ -61,7 +71,7 @@ final class LocalAreaController extends BaseController
      */
     public function hospital(Request $request, array $params = []): Response
     {
-        return $this->renderService('hospital', $params);
+        return $this->renderService($request, 'hospital', $params);
     }
 
     /**
@@ -76,7 +86,7 @@ final class LocalAreaController extends BaseController
      */
     public function birthday(Request $request, array $params = []): Response
     {
-        return $this->renderService('birthday', $params);
+        return $this->renderService($request, 'birthday', $params);
     }
 
     /**
@@ -129,12 +139,13 @@ final class LocalAreaController extends BaseController
      * title/meta/JSON-LD via {@see LocalArea} and renders the shared
      * `public/local-area` view.
      *
+     * @param Request              $request The current HTTP request (for CSRF token).
      * @param string               $service One of 'funeral'|'hospital'|'birthday'.
      * @param array<string,string> $params  Route params; expects 'city'.
      *
      * @return Response Rendered HTML, or 404 when the city slug is unknown.
      */
-    private function renderService(string $service, array $params): Response
+    private function renderService(Request $request, string $service, array $params): Response
     {
         $lang     = Lang::current();
         $areas    = LocalArea::areas();
@@ -181,22 +192,75 @@ final class LocalAreaController extends BaseController
         // Real min/max distance to this city's venues, for the "miles from our shop" line.
         $cityMiles = LocalArea::cityMilesRange($city, $coords, $bizLat, $bizLng);
 
+        // Birthday pages have no venue list — instead they show the birthday-tagged
+        // bouquets inline with add-to-cart, recording the city as the destination.
+        $bouquetProducts     = [];
+        $productColorOptions = [];
+        $paperColors         = [];
+        $addons              = [];
+        $occasionLabel       = '';
+        if ($service === 'birthday') {
+            $occasionSlug    = LocalArea::occasionSlugForService('birthday');
+            $bouquetProducts = Product::byOccasion((string) $occasionSlug);
+            $occasionLabel   = $lang === 'es' ? 'Cumpleaños' : 'Birthday';
+
+            $paperColors = PaperColor::allActive();
+            $addons      = Addon::allActive();
+
+            $flowerTypesById = [];
+            foreach (FlowerType::allActive() as $_ft) {
+                $flowerTypesById[(int) $_ft['id']] = $_ft;
+            }
+            $flowerColorsById = [];
+            foreach (FlowerColor::allActive() as $_fc) {
+                $flowerColorsById[(int) $_fc['id']] = $_fc;
+            }
+            $flowerTypeColorMap = FlowerTypeColor::map();
+
+            foreach ($bouquetProducts as $_bp) {
+                if (!Shop::isBuyable($_bp)) {
+                    continue;
+                }
+                $pid = (int) $_bp['id'];
+                $productColorOptions[$pid] = FlowerColorResolver::availableColorsForProduct(
+                    ProductFlowerType::flowerTypeIdsForProduct($pid),
+                    $flowerTypesById,
+                    $flowerTypeColorMap,
+                    $flowerColorsById,
+                    isset($_bp['pictured_flower_color_id']) ? (int) $_bp['pictured_flower_color_id'] : null,
+                );
+            }
+
+            // Record the city itself (no specific venue) as the delivery destination.
+            Destination::set(Destination::normalize([
+                'service'  => 'birthday',
+                'city'     => $slug,
+                'occasion' => 'birthday',
+            ]));
+        }
+
         $html = $this->render('public/local-area', [
-            'lang'         => $lang,
-            'service'      => $service,
-            'serviceDef'   => $services[$service],
-            'services'     => $services,
-            'areas'        => $areas,
-            'citySlug'     => $slug,
-            'city'         => $city,
-            'cityMiles'    => $cityMiles,
-            'headline'     => LocalArea::serviceHeadline($service, $city, $lang, $services),
-            'venueHeading' => LocalArea::venueHeading($service, $city, $lang, $services),
-            'venues'       => $venues,
-            'faqItems'     => LocalArea::faqItems($service, $city, $lang),
-            'jsonLd'       => $jsonLd,
-            'pageTitle'    => LocalArea::serviceTitle($service, $city, $lang, $services),
-            'metaDesc'     => LocalArea::serviceMeta($service, $city, $lang, $services),
+            'lang'                => $lang,
+            'service'             => $service,
+            'serviceDef'          => $services[$service],
+            'services'            => $services,
+            'areas'               => $areas,
+            'citySlug'            => $slug,
+            'city'                => $city,
+            'cityMiles'           => $cityMiles,
+            'headline'            => LocalArea::serviceHeadline($service, $city, $lang, $services),
+            'venueHeading'        => LocalArea::venueHeading($service, $city, $lang, $services),
+            'venues'              => $venues,
+            'faqItems'            => LocalArea::faqItems($service, $city, $lang),
+            'jsonLd'              => $jsonLd,
+            'pageTitle'           => LocalArea::serviceTitle($service, $city, $lang, $services),
+            'metaDesc'            => LocalArea::serviceMeta($service, $city, $lang, $services),
+            'bouquetProducts'     => $bouquetProducts,
+            'productColorOptions' => $productColorOptions,
+            'paperColors'         => $paperColors,
+            'addons'              => $addons,
+            'occasionLabel'       => $occasionLabel,
+            'csrfToken'           => $request->csrfToken(),
         ]);
 
         return Response::html($html);

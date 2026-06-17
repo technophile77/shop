@@ -1,0 +1,418 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use App\Core\Config;
+use App\Core\Lang;
+use App\Core\Request;
+use App\Core\Response;
+use App\Models\Customer;
+use App\Models\FlowerColor;
+use App\Models\FlowerType;
+use App\Models\Order;
+use App\Models\PaperColor;
+use App\Services\MailService;
+use App\Services\StripeService;
+use App\Support\CartPricing;
+use App\Support\CartSession;
+use App\Support\CheckoutPricing;
+use App\Support\Destination;
+use App\Support\LocalArea;
+use App\Support\ShopOrderSnapshot;
+use App\Support\StripeLineItems;
+
+/**
+ * Handles the shop-cart checkout: review, Stripe pay-now, and success.
+ *
+ * Routes served:
+ *   GET  /checkout         — review cart, enter sender + card message + delivery address.
+ *   POST /checkout         — persist the order and redirect to Stripe Checkout.
+ *   GET  /checkout/success — verify payment, mark the order paid, clear the cart.
+ *
+ * Delivery fee is computed server-side via the Haversine distance from the
+ * business location to the customer-selected address (latitude/longitude
+ * captured client-side by Google Places, mirroring the order form). Sales tax
+ * applies to the merchandise subtotal only; totals come from
+ * {@see \App\Support\CheckoutPricing::compute()}.
+ *
+ * @see \App\Services\StripeService::createCartCheckoutSession()
+ * @see \App\Support\StripeLineItems::fromCart()
+ * @see \App\Models\Order
+ */
+final class CheckoutController extends BaseController
+{
+    /** Maximum delivery radius in miles (mirrors the order form). */
+    private const MAX_DELIVERY_MILES = 30.0;
+
+    // -------------------------------------------------------------------------
+    // GET /checkout
+    // -------------------------------------------------------------------------
+
+    /**
+     * Render the checkout review page.
+     *
+     * Redirects an empty cart back to /{lang}/cart. Pre-estimates the delivery
+     * fee when the session destination carries a venue address with cached
+     * coordinates; otherwise the fee is computed live as the customer selects an
+     * address. Sender contact, card message, and the address are collected here.
+     *
+     * @param Request              $request HTTP request.
+     * @param array<string, mixed> $params  Route parameters (none).
+     *
+     * @return Response Rendered checkout page, or a redirect to the cart.
+     *
+     * @example
+     *   (new CheckoutController())->view($request, []);
+     */
+    public function view(Request $request, array $params = []): Response
+    {
+        $lang  = Lang::current();
+        $items = CartSession::items();
+
+        if ($items === []) {
+            return $this->redirect('/' . $lang . '/cart');
+        }
+
+        $subtotal    = CartPricing::subtotal($items);
+        $taxRate     = (float) Config::get('BUSINESS_SALES_TAX_RATE', 0);
+        $destination = Destination::get();
+
+        // Pre-estimate the fee when the venue address has cached coordinates.
+        $estimatedFee = null;
+        if (!empty($destination['venue_address'])) {
+            $coords = LocalArea::coords();
+            $venue  = $coords[$destination['venue_address']] ?? null;
+            if ($venue !== null) {
+                $miles = LocalArea::haversineMiles(
+                    (float) Config::get('BUSINESS_LAT', 0),
+                    (float) Config::get('BUSINESS_LNG', 0),
+                    (float) $venue['lat'],
+                    (float) $venue['lng'],
+                );
+                $estimatedFee = LocalArea::deliveryFee(
+                    $miles,
+                    (float) Config::get('BUSINESS_DELIVERY_BASE_MILES', 5),
+                    (float) Config::get('BUSINESS_DELIVERY_BASE_FEE', 10),
+                    (float) Config::get('BUSINESS_DELIVERY_PER_MILE_FEE', 1),
+                );
+            }
+        }
+
+        $html = $this->render('public/checkout', [
+            'items'        => $items,
+            'subtotal'     => $subtotal,
+            'taxRate'      => $taxRate,
+            'destination'  => $destination,
+            'estimatedFee' => $estimatedFee,
+            'lang'         => $lang,
+            'csrfToken'    => $request->csrfToken(),
+            'pageTitle'    => __t('checkout.heading'),
+            'metaDesc'     => '',
+        ]);
+
+        return Response::html($html);
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /checkout
+    // -------------------------------------------------------------------------
+
+    /**
+     * Validate the checkout form, persist the order, and redirect to Stripe.
+     *
+     * Recomputes the delivery fee server-side from the posted latitude/longitude
+     * (never trusting a client-sent fee), rejects addresses beyond the delivery
+     * radius, snapshots the cart into items_json with resolved names, creates the
+     * order as unpaid, and starts a Stripe Checkout Session.
+     *
+     * @param Request              $request HTTP request with the checkout form body.
+     * @param array<string, mixed> $params  Route parameters (none).
+     *
+     * @return Response Redirect to Stripe's hosted page, or back to checkout/cart on error.
+     *
+     * @example
+     *   (new CheckoutController())->submit($request, []);
+     */
+    public function submit(Request $request, array $params = []): Response
+    {
+        $lang = Lang::current();
+
+        if (!$request->validateCsrf()) {
+            $this->setFlash('error', 'Invalid security token. Please try again.');
+            return $this->redirect('/' . $lang . '/checkout');
+        }
+
+        $items = CartSession::items();
+        if ($items === []) {
+            return $this->redirect('/' . $lang . '/cart');
+        }
+
+        $name        = trim((string) $request->post('name', ''));
+        $email        = trim((string) $request->post('email', ''));
+        $phone        = trim((string) $request->post('phone', ''));
+        $cardMessage  = trim((string) $request->post('card_message', ''));
+        $address      = trim((string) $request->post('delivery_address', ''));
+        $latRaw       = $request->post('latitude', '');
+        $lngRaw       = $request->post('longitude', '');
+
+        if ($name === '' || $email === '') {
+            $this->setFlash('error', 'Please provide your name and email.');
+            return $this->redirect('/' . $lang . '/checkout');
+        }
+
+        if ($address === '' || $latRaw === '' || $lngRaw === '') {
+            $this->setFlash('error', 'Please select your delivery address from the suggestions.');
+            return $this->redirect('/' . $lang . '/checkout');
+        }
+
+        // Recompute the delivery fee server-side from the selected coordinates.
+        $miles = LocalArea::haversineMiles(
+            (float) Config::get('BUSINESS_LAT', 0),
+            (float) Config::get('BUSINESS_LNG', 0),
+            (float) $latRaw,
+            (float) $lngRaw,
+        );
+
+        if ($miles > self::MAX_DELIVERY_MILES) {
+            $this->setFlash('error', __t('order.delivery_outside_range'));
+            return $this->redirect('/' . $lang . '/checkout');
+        }
+
+        $deliveryFee = LocalArea::deliveryFee(
+            $miles,
+            (float) Config::get('BUSINESS_DELIVERY_BASE_MILES', 5),
+            (float) Config::get('BUSINESS_DELIVERY_BASE_FEE', 10),
+            (float) Config::get('BUSINESS_DELIVERY_PER_MILE_FEE', 1),
+        );
+
+        $subtotal = CartPricing::subtotal($items);
+        $totals   = CheckoutPricing::compute(
+            $subtotal,
+            $deliveryFee,
+            (float) Config::get('BUSINESS_SALES_TAX_RATE', 0),
+        );
+
+        // Snapshot the cart with resolved names for a self-contained order record.
+        $nameOf = static function (array $rows) use ($lang): array {
+            $map = [];
+            foreach ($rows as $row) {
+                $map[(int) $row['id']] = $row['name_' . $lang] ?? $row['name_en'] ?? '';
+            }
+            return $map;
+        };
+        $snapshot = ShopOrderSnapshot::itemsSnapshot(
+            $items,
+            $nameOf(FlowerType::allActive()),
+            $nameOf(FlowerColor::allActive()),
+            $nameOf(PaperColor::allActive()),
+            $lang,
+        );
+
+        $destination = Destination::get();
+
+        $customerId = Customer::upsert([
+            'name'           => $name,
+            'email'          => $email,
+            'phone'          => $phone,
+            'source'         => 'shop_checkout',
+            'opted_in_email' => 0,
+            'opted_in_sms'   => 0,
+        ]);
+
+        $orderId = Order::createShopOrder([
+            'customer_id'         => $customerId,
+            'delivery_address'    => $address,
+            'delivery_fee'        => $totals['delivery_fee'],
+            'items_json'          => json_encode($snapshot, JSON_UNESCAPED_UNICODE),
+            'card_message'        => $cardMessage !== '' ? $cardMessage : null,
+            'delivery_venue_name' => $destination['venue_name'] ?? null,
+            'occasion_type'       => $destination['occasion'] ?? null,
+            'subtotal'            => $totals['subtotal'],
+            'tax_amount'          => $totals['tax_amount'],
+            'total'               => $totals['total'],
+        ]);
+
+        if (!StripeService::isConfigured()) {
+            $this->setFlash('error', 'Card payment is not available right now. Please contact us.');
+            return $this->redirect('/' . $lang . '/cart');
+        }
+
+        try {
+            $lineItems = StripeLineItems::fromCart($items, $totals['delivery_fee'], $totals['tax_amount']);
+            $session   = StripeService::createCartCheckoutSession($orderId, $lineItems, $email);
+            Order::setStripeCheckoutSession($orderId, $session['id']);
+            return $this->redirect($session['url']);
+        } catch (\Stripe\Exception\ApiErrorException $e) {
+            error_log('[CheckoutController] Stripe API error: ' . $e->getMessage());
+            $this->setFlash('error', 'Payment service error. Please try again.');
+            return $this->redirect('/' . $lang . '/cart');
+        } catch (\Exception $e) {
+            error_log('[CheckoutController] Unexpected error: ' . $e->getMessage());
+            $this->setFlash('error', 'An unexpected error occurred. Please try again.');
+            return $this->redirect('/' . $lang . '/cart');
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /checkout/success
+    // -------------------------------------------------------------------------
+
+    /**
+     * Verify the Stripe payment, mark the order paid, and clear the cart.
+     *
+     * Idempotent: when the order is already paid the cart/destination are simply
+     * cleared and the thank-you page is shown without re-notifying. The owner is
+     * notified once, on the first transition to paid (the webhook also confirms
+     * the order as a backstop).
+     *
+     * @param Request              $request HTTP request with ?session_id=.
+     * @param array<string, mixed> $params  Route parameters (none).
+     *
+     * @return Response Thank-you page, or a redirect to the cart on failure.
+     *
+     * @example
+     *   (new CheckoutController())->success($request, []);
+     */
+    public function success(Request $request, array $params = []): Response
+    {
+        $lang      = Lang::current();
+        $sessionId = (string) $request->query('session_id', '');
+
+        if ($sessionId === '') {
+            return $this->redirect('/' . $lang . '/cart');
+        }
+
+        $order = Order::findByStripeSessionId($sessionId);
+        if ($order === null) {
+            return $this->redirect('/' . $lang . '/cart');
+        }
+
+        // Already paid — clear and show thank-you without re-processing.
+        if (($order['payment_status'] ?? '') === 'paid') {
+            CartSession::clear();
+            Destination::clear();
+            return $this->renderSuccess($order, $lang);
+        }
+
+        try {
+            $session = StripeService::retrieveCheckoutSession($sessionId);
+
+            $metaOrderId = (int) ($session->metadata->shop_order_id ?? 0);
+            if ($metaOrderId === (int) $order['id'] && ($session->payment_status ?? '') === 'paid') {
+                $paymentIntentId = is_string($session->payment_intent)
+                    ? $session->payment_intent
+                    : (string) ($session->payment_intent->id ?? '');
+
+                Order::markPaid((int) $order['id'], $paymentIntentId);
+                $this->notifyOwner($order);
+
+                CartSession::clear();
+                Destination::clear();
+            }
+        } catch (\Exception $e) {
+            error_log('[CheckoutController] Error verifying session ' . $sessionId . ': ' . $e->getMessage());
+        }
+
+        return $this->renderSuccess($order, $lang);
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Render the order thank-you page.
+     *
+     * @param array<string, mixed> $order The order row.
+     * @param string               $lang  Active locale.
+     *
+     * @return Response Rendered HTML.
+     */
+    private function renderSuccess(array $order, string $lang): Response
+    {
+        return Response::html(
+            $this->render('public/checkout-success', [
+                'order'     => $order,
+                'lang'      => $lang,
+                'pageTitle' => __t('checkout.success_heading'),
+                'metaDesc'  => '',
+            ])
+        );
+    }
+
+    /**
+     * Email the business owner that a shop order has been paid.
+     *
+     * Failures are logged and swallowed so a mail misconfiguration never blocks
+     * the customer's success page.
+     *
+     * @param array<string, mixed> $order The paid order row (with customer_name).
+     *
+     * @return void
+     */
+    private function notifyOwner(array $order): void
+    {
+        $to = (string) Config::get('BUSINESS_EMAIL', '');
+        if ($to === '' || !MailService::isConfigured()) {
+            return;
+        }
+
+        $name  = (string) ($order['customer_name'] ?? 'Customer');
+        $total = '$' . number_format((float) ($order['total'] ?? 0), 2);
+        $venue = (string) ($order['delivery_venue_name'] ?? '');
+        $addr  = (string) ($order['delivery_address'] ?? '');
+
+        $html = MailService::buildHtml(
+            '<h2 style="margin:0 0 1rem;font-size:1.2rem">New Paid Order 🌸</h2>'
+            . '<table style="border-collapse:collapse;width:100%">'
+            . $this->mailRow('Customer', $name)
+            . $this->mailRow('Total Paid', $total)
+            . $this->mailRow('Card Message', (string) ($order['card_message'] ?? ''))
+            . $this->mailRow('Deliver To', $venue !== '' ? $venue . ' — ' . $addr : $addr)
+            . '</table>'
+            . '<p style="margin:1.5rem 0 0;font-size:0.85rem;color:#999">'
+            . 'View order #' . (int) $order['id'] . ' in the '
+            . '<a href="' . htmlspecialchars((string) Config::get('APP_URL', '')) . '/admin">admin panel</a>.'
+            . '</p>'
+        );
+
+        $result = MailService::send($to, '', 'New Paid Order - ' . ($name ?: 'Customer'), $html);
+        if (!$result['success']) {
+            error_log('[CheckoutController] Owner notification failed: ' . ($result['error'] ?? 'unknown'));
+        }
+    }
+
+    /**
+     * Build one label/value table row for the owner notification email.
+     *
+     * @param string $label Row label.
+     * @param string $value Row value; the row is omitted when empty.
+     *
+     * @return string HTML table row, or empty string when $value is blank.
+     */
+    private function mailRow(string $label, string $value): string
+    {
+        if ($value === '') {
+            return '';
+        }
+        return '<tr>'
+            . '<td style="padding:6px 12px;font-weight:600;color:#555;white-space:nowrap">' . htmlspecialchars($label) . '</td>'
+            . '<td style="padding:6px 12px;color:#1a1a1a">' . nl2br(htmlspecialchars($value)) . '</td>'
+            . '</tr>';
+    }
+
+    /**
+     * Store a flash message in the session for the next page render.
+     *
+     * @param 'success'|'error' $type    Severity level.
+     * @param string            $message Human-readable message.
+     *
+     * @return void
+     */
+    private function setFlash(string $type, string $message): void
+    {
+        $_SESSION['flash'] = ['type' => $type, 'message' => $message];
+    }
+}

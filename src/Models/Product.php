@@ -224,27 +224,32 @@ final class Product
         $sql = <<<SQL
             INSERT INTO products
                 (category_id, name_en, name_es, description_en, description_es,
-                 image_path, price_from, price_to, featured, active, sort_order)
+                 image_path, price_from, price_to, featured, active, sort_order,
+                 flower_count, pictured_flower_color_id, pictured_paper_color_id)
             VALUES
                 (:category_id, :name_en, :name_es, :description_en, :description_es,
-                 :image_path, :price_from, :price_to, :featured, :active, :sort_order)
+                 :image_path, :price_from, :price_to, :featured, :active, :sort_order,
+                 :flower_count, :pictured_flower_color_id, :pictured_paper_color_id)
             SQL;
 
         $db   = Database::rw();
         $stmt = $db->prepare($sql);
 
         $stmt->execute([
-            ':category_id'    => $data['category_id']    ?? null,
-            ':name_en'        => $data['name_en']        ?? '',
-            ':name_es'        => $data['name_es']        ?? null,
-            ':description_en' => $data['description_en'] ?? null,
-            ':description_es' => $data['description_es'] ?? null,
-            ':image_path'     => $data['image_path']     ?? null,
-            ':price_from'     => $data['price_from']     ?? null,
-            ':price_to'       => $data['price_to']       ?? null,
-            ':featured'       => (int) ($data['featured'] ?? 0),
-            ':active'         => (int) ($data['active']   ?? 1),
-            ':sort_order'     => (int) ($data['sort_order'] ?? 0),
+            ':category_id'               => $data['category_id']               ?? null,
+            ':name_en'                   => $data['name_en']                   ?? '',
+            ':name_es'                   => $data['name_es']                   ?? null,
+            ':description_en'            => $data['description_en']            ?? null,
+            ':description_es'            => $data['description_es']            ?? null,
+            ':image_path'                => $data['image_path']                ?? null,
+            ':price_from'                => $data['price_from']                ?? null,
+            ':price_to'                  => $data['price_to']                  ?? null,
+            ':featured'                  => (int) ($data['featured']           ?? 0),
+            ':active'                    => (int) ($data['active']             ?? 1),
+            ':sort_order'                => (int) ($data['sort_order']         ?? 0),
+            ':flower_count'              => isset($data['flower_count'])              ? (int) $data['flower_count']              : null,
+            ':pictured_flower_color_id'  => isset($data['pictured_flower_color_id'])  ? (int) $data['pictured_flower_color_id']  : null,
+            ':pictured_paper_color_id'   => isset($data['pictured_paper_color_id'])   ? (int) $data['pictured_paper_color_id']   : null,
         ]);
 
         return (int) $db->lastInsertId();
@@ -275,6 +280,7 @@ final class Product
         $allowed = [
             'category_id', 'name_en', 'name_es', 'description_en', 'description_es',
             'image_path', 'price_from', 'price_to', 'featured', 'active', 'sort_order',
+            'flower_count', 'pictured_flower_color_id', 'pictured_paper_color_id',
         ];
 
         $setClauses = [];
@@ -298,6 +304,41 @@ final class Product
         $stmt->execute($params);
 
         return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Returns active products tagged with a given occasion slug, ordered by
+     * sort_order ASC then id ASC.
+     *
+     * Uses the baseSelect() shape so each row includes the category columns
+     * (category_name_en, category_name_es, category_slug) in addition to all
+     * product columns.
+     *
+     * @param string $slug The occasion's URL slug, e.g. 'birthday'.
+     *
+     * @return array<int, array> Each row contains all product columns plus
+     *                           category_name_en, category_name_es, category_slug.
+     *
+     * @throws \PDOException When the database query fails.
+     *
+     * @example
+     *   $birthdayProducts = Product::byOccasion('birthday');
+     */
+    public static function byOccasion(string $slug): array
+    {
+        $sql = self::baseSelect() . <<<SQL
+
+            JOIN product_occasions po ON po.product_id = p.id
+            JOIN occasions o ON o.id = po.occasion_id
+            WHERE o.slug = ?
+              AND p.active = 1
+            ORDER BY p.sort_order ASC, p.id ASC
+            SQL;
+
+        $stmt = Database::ro()->prepare($sql);
+        $stmt->execute([$slug]);
+
+        return $stmt->fetchAll();
     }
 
     /**

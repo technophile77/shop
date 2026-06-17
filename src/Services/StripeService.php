@@ -127,6 +127,63 @@ final class StripeService
     }
 
     /**
+     * Creates a Stripe Checkout Session for a shop-cart order.
+     *
+     * The line items array must be pre-built by {@see \App\Support\StripeLineItems::fromCart()}
+     * so this method stays thin and does not re-implement pricing logic.
+     *
+     * Sets metadata['shop_order_id'] so the webhook handler can distinguish
+     * shop-cart sessions from quote sessions and look up the order row without
+     * trusting URL parameters.
+     *
+     * @param int     $orderId       Shop order primary key (stored in metadata).
+     * @param array[] $lineItems     Pre-built line_items array from StripeLineItems::fromCart().
+     * @param string  $customerEmail Pre-fills the email field on Stripe's hosted page;
+     *                               omitted from the request when empty.
+     *
+     * @return array{id: string, url: string}
+     *
+     * @throws \Stripe\Exception\ApiErrorException On Stripe API failure.
+     *
+     * @see \App\Support\StripeLineItems::fromCart()
+     *
+     * @example
+     *   $result = StripeService::createCartCheckoutSession($orderId, $lineItems, $email);
+     *   header('Location: ' . $result['url']);
+     */
+    public static function createCartCheckoutSession(
+        int    $orderId,
+        array  $lineItems,
+        string $customerEmail = '',
+    ): array {
+        $appUrl = rtrim((string) Config::get('APP_URL', ''), '/');
+
+        $params = [
+            'mode'        => 'payment',
+            'line_items'  => $lineItems,
+            'success_url' => $appUrl . '/checkout/success?session_id={CHECKOUT_SESSION_ID}',
+            'cancel_url'  => $appUrl . '/cart',
+            'metadata'    => [
+                'shop_order_id' => $orderId,
+            ],
+            'custom_text' => [
+                'after_submit' => [
+                    'message' => 'Thank you! We\'d love a Google review once your arrangement is ready: '
+                        . (string) Config::get('GOOGLE_REVIEW_URL', 'https://flowers.cresswell.org'),
+                ],
+            ],
+        ];
+
+        if ($customerEmail !== '') {
+            $params['customer_email'] = $customerEmail;
+        }
+
+        $session = self::client()->checkout->sessions->create($params);
+
+        return ['id' => $session->id, 'url' => $session->url];
+    }
+
+    /**
      * Retrieves a Stripe Checkout Session by ID.
      *
      * The caller should check $session->payment_status === 'paid' before

@@ -8,8 +8,15 @@ use App\Controllers\BaseController;
 use App\Core\Database;
 use App\Core\Request;
 use App\Core\Response;
+use App\Models\Occasion;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\ProductFlowerType;
+use App\Models\ProductOccasion;
+use App\Models\FlowerColor;
+use App\Models\FlowerType;
+use App\Models\PaperColor;
+use App\Support\FlowerColorResolver;
 
 /**
  * Admin controller for the Products CRUD section.
@@ -104,11 +111,17 @@ final class ProductsController extends BaseController
 
         return Response::html(
             $this->render('admin/products/form', [
-                'product'    => [],
-                'categories' => $categories,
-                'isNew'      => true,
-                'csrfToken'  => $csrfToken,
-                'pageTitle'  => 'New Product',
+                'product'               => [],
+                'categories'            => $categories,
+                'isNew'                 => true,
+                'csrfToken'             => $csrfToken,
+                'pageTitle'             => 'New Product',
+                'occasions'             => Occasion::allActive(),
+                'flowerTypes'           => FlowerType::allActive(),
+                'flowerColors'          => FlowerColor::allActive(),
+                'paperColors'           => PaperColor::allActive(),
+                'selectedOccasionIds'   => [],
+                'selectedFlowerTypeIds' => [],
             ], 'admin')
         );
     }
@@ -159,7 +172,11 @@ final class ProductsController extends BaseController
             $data['image_path'] = $imagePath;
         }
 
-        Product::create($data);
+        $newId         = Product::create($data);
+        $occasionIds   = FlowerColorResolver::normalizeIdList((array) $request->post('occasion_ids', []));
+        $flowerTypeIds = FlowerColorResolver::normalizeIdList((array) $request->post('flower_type_ids', []));
+        ProductOccasion::setForProduct($newId, $occasionIds);
+        ProductFlowerType::setForProduct($newId, $flowerTypeIds);
 
         $this->setFlash('success', 'Product created successfully.');
         return $this->redirect('/admin/products');
@@ -196,11 +213,17 @@ final class ProductsController extends BaseController
 
         return Response::html(
             $this->render('admin/products/form', [
-                'product'    => $product,
-                'categories' => $categories,
-                'isNew'      => false,
-                'csrfToken'  => $csrfToken,
-                'pageTitle'  => 'Edit Product',
+                'product'               => $product,
+                'categories'            => $categories,
+                'isNew'                 => false,
+                'csrfToken'             => $csrfToken,
+                'pageTitle'             => 'Edit Product',
+                'occasions'             => Occasion::allActive(),
+                'flowerTypes'           => FlowerType::allActive(),
+                'flowerColors'          => FlowerColor::allActive(),
+                'paperColors'           => PaperColor::allActive(),
+                'selectedOccasionIds'   => ProductOccasion::occasionIdsForProduct($id),
+                'selectedFlowerTypeIds' => ProductFlowerType::flowerTypeIdsForProduct($id),
             ], 'admin')
         );
     }
@@ -260,6 +283,10 @@ final class ProductsController extends BaseController
         }
 
         Product::update($id, $data);
+        $occasionIds   = FlowerColorResolver::normalizeIdList((array) $request->post('occasion_ids', []));
+        $flowerTypeIds = FlowerColorResolver::normalizeIdList((array) $request->post('flower_type_ids', []));
+        ProductOccasion::setForProduct($id, $occasionIds);
+        ProductFlowerType::setForProduct($id, $flowerTypeIds);
 
         $this->setFlash('success', 'Product updated successfully.');
         return $this->redirect('/admin/products');
@@ -326,16 +353,19 @@ final class ProductsController extends BaseController
             ($v = trim((string) $request->post($key, ''))) !== '' ? (float) $v : null;
 
         return [
-            'category_id'    => (int) $request->post('category_id', 0),
-            'name_en'        => $str('name_en'),
-            'name_es'        => $nullable('name_es'),
-            'description_en' => $nullable('description_en'),
-            'description_es' => $nullable('description_es'),
-            'price_from'     => $decimal('price_from'),
-            'price_to'       => $decimal('price_to'),
-            'sort_order'     => (int) $request->post('sort_order', 0),
-            'featured'       => $request->post('featured') !== null ? 1 : 0,
-            'active'         => $request->post('active') !== null ? 1 : 0,
+            'category_id'               => (int) $request->post('category_id', 0),
+            'name_en'                   => $str('name_en'),
+            'name_es'                   => $nullable('name_es'),
+            'description_en'            => $nullable('description_en'),
+            'description_es'            => $nullable('description_es'),
+            'price_from'                => $decimal('price_from'),
+            'price_to'                  => $decimal('price_to'),
+            'sort_order'                => (int) $request->post('sort_order', 0),
+            'featured'                  => $request->post('featured') !== null ? 1 : 0,
+            'active'                    => $request->post('active') !== null ? 1 : 0,
+            'flower_count'              => ($v = trim((string) $request->post('flower_count', ''))) !== '' ? (int) $v : null,
+            'pictured_flower_color_id'  => ($v = trim((string) $request->post('pictured_flower_color_id', ''))) !== '' ? (int) $v : null,
+            'pictured_paper_color_id'   => ($v = trim((string) $request->post('pictured_paper_color_id', ''))) !== '' ? (int) $v : null,
         ];
     }
 
