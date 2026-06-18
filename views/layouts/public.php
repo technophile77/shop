@@ -112,6 +112,33 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
         alt=""></noscript>
     <?php endif; ?>
 
+    <?php
+    // Ecommerce funnel events (view_item, add_to_cart, begin_checkout, purchase).
+    // Page-scoped events arrive via $analyticsEvents; events fired right before a
+    // redirect (e.g. add_to_cart) arrive via the one-time session queue. Both are
+    // normalized App\Support\Analytics specs.
+    $__ga4Id    = (string) \App\Core\Config::get('GA4_MEASUREMENT_ID', '');
+    $__pixelId  = (string) \App\Core\Config::get('META_PIXEL_ID', '');
+    $__events   = $analyticsEvents ?? [];
+    if (!empty($_SESSION['analytics_pending']) && is_array($_SESSION['analytics_pending'])) {
+        $__events = array_merge($__events, $_SESSION['analytics_pending']);
+        unset($_SESSION['analytics_pending']);
+    }
+    $__jsonFlags = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE;
+    ?>
+    <?php if ($__events !== [] && ($__ga4Id !== '' || $__pixelId !== '')): ?>
+    <script>
+    <?php foreach ($__events as $__ev): ?>
+    <?php if ($__ga4Id !== '' && !empty($__ev['ga4'])): ?>
+    if (typeof gtag === 'function') gtag('event', <?= json_encode($__ev['ga4']['name'], $__jsonFlags) ?>, <?= json_encode($__ev['ga4']['params'], $__jsonFlags) ?>);
+    <?php endif; ?>
+    <?php if ($__pixelId !== '' && !empty($__ev['pixel'])): ?>
+    if (typeof fbq === 'function') fbq('track', <?= json_encode($__ev['pixel']['event'], $__jsonFlags) ?>, <?= json_encode($__ev['pixel']['params'], $__jsonFlags) ?>);
+    <?php endif; ?>
+    <?php endforeach; ?>
+    </script>
+    <?php endif; ?>
+
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
