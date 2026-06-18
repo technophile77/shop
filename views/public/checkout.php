@@ -87,8 +87,25 @@ $prefillAddress = $destination['venue_address'] ?? '';
                     placeholder="<?= htmlspecialchars(__t('checkout.card_message_ph')) ?>"></textarea>
         </div>
 
-        <!-- Delivery address + live fee -->
-        <div class="form-group"
+        <!-- Delivery / Pickup toggle -->
+        <div class="form-group">
+          <label><?= htmlspecialchars($lang === 'es' ? '¿Cómo desea recibir su pedido?' : 'How would you like to receive your order?') ?></label>
+          <div style="display:flex; gap:0.75rem; flex-wrap:wrap">
+            <label style="flex:1; min-width:140px; display:flex; align-items:center; gap:0.5rem; border:1px solid rgba(0,0,0,0.15); border-radius:8px; padding:0.75rem 1rem; cursor:pointer"
+                   :style="fulfillType === 'delivery' ? 'border-color:var(--color-accent); background:rgba(0,0,0,0.02)' : ''">
+              <input type="radio" name="delivery_type" value="delivery" x-model="fulfillType">
+              <span><?= htmlspecialchars(__t('order.delivery')) ?></span>
+            </label>
+            <label style="flex:1; min-width:140px; display:flex; align-items:center; gap:0.5rem; border:1px solid rgba(0,0,0,0.15); border-radius:8px; padding:0.75rem 1rem; cursor:pointer"
+                   :style="fulfillType === 'pickup' ? 'border-color:var(--color-accent); background:rgba(0,0,0,0.02)' : ''">
+              <input type="radio" name="delivery_type" value="pickup" x-model="fulfillType">
+              <span><?= htmlspecialchars(__t('order.pickup')) ?></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Delivery address + live fee (delivery only) -->
+        <div class="form-group" x-show="fulfillType === 'delivery'"
              x-init="$nextTick(() => initAutocomplete($refs.addr, p => onPlace(p)))">
           <label><?= htmlspecialchars(__t('order.delivery_address')) ?> <span style="color:var(--color-accent)">*</span></label>
           <input type="text" x-ref="addr" id="checkout-address-input"
@@ -100,6 +117,44 @@ $prefillAddress = $destination['venue_address'] ?? '';
           <p x-show="feeError" style="color:#d32f2f; font-size:0.9rem; margin-top:0.5rem" x-text="feeError"></p>
         </div>
 
+        <!-- Pickup studio info (pickup only) -->
+        <div class="form-group" x-show="fulfillType === 'pickup'" x-cloak>
+          <label><?= htmlspecialchars($lang === 'es' ? 'Lugar de Recogida' : 'Pickup Location') ?></label>
+          <div style="border:1px solid rgba(0,0,0,0.08); border-radius:8px; padding:1rem; font-size:0.9rem; line-height:1.6">
+            <strong><?= htmlspecialchars((string) Config::get('BUSINESS_NAME', "Perla's Flowers")) ?></strong><br>
+            <?php if ($pickupAddress !== ''): ?>
+            <?= htmlspecialchars($pickupAddress) ?><br>
+            <?php endif; ?>
+            <span style="color:var(--color-muted)">
+              <?= htmlspecialchars($lang === 'es'
+                  ? 'Le enviaremos un mensaje de texto cuando su pedido esté listo. No se cobra tarifa de entrega.'
+                  : "We'll text you when your order is ready. No delivery fee.") ?>
+            </span>
+          </div>
+        </div>
+
+        <!-- Requested date + exact time -->
+        <div class="grid-2">
+          <div class="form-group">
+            <label x-text="fulfillType === 'pickup'
+                ? '<?= htmlspecialchars($lang === 'es' ? 'Fecha de recogida' : 'Pickup date', ENT_QUOTES) ?>'
+                : '<?= htmlspecialchars($lang === 'es' ? 'Fecha de entrega' : 'Delivery date', ENT_QUOTES) ?>'"></label>
+            <input type="date" name="fulfill_date" x-model="fulfillDate"
+                   min="<?= htmlspecialchars($earliestDate) ?>" required>
+          </div>
+          <div class="form-group">
+            <label x-text="fulfillType === 'pickup'
+                ? '<?= htmlspecialchars($lang === 'es' ? 'Hora de recogida' : 'Pickup time', ENT_QUOTES) ?>'
+                : '<?= htmlspecialchars($lang === 'es' ? 'Hora de entrega' : 'Delivery time', ENT_QUOTES) ?>'"></label>
+            <input type="time" name="fulfill_time" x-model="fulfillTime" required>
+          </div>
+        </div>
+        <p style="font-size:0.8rem; color:var(--color-muted); margin:-0.5rem 0 1.25rem">
+          <?= htmlspecialchars($lang === 'es'
+              ? 'Pedidos para el mismo día deben hacerse antes de las ' . $samedayCutoff . '.'
+              : 'Same-day orders must be placed before ' . $samedayCutoff . '.') ?>
+        </p>
+
         <!-- Totals -->
         <div style="border-top:1px solid rgba(0,0,0,0.08); padding-top:1rem; margin-bottom:1.5rem">
           <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem">
@@ -108,7 +163,9 @@ $prefillAddress = $destination['venue_address'] ?? '';
           </div>
           <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem">
             <span><?= htmlspecialchars(__t('checkout.delivery_fee')) ?></span>
-            <span x-text="fee === null ? '<?= htmlspecialchars($lang === 'es' ? 'según dirección' : 'set by address') ?>' : '$' + fee.toFixed(2)"></span>
+            <span x-text="fulfillType === 'pickup'
+                ? '<?= htmlspecialchars($lang === 'es' ? 'Gratis' : 'Free', ENT_QUOTES) ?>'
+                : (fee === null ? '<?= htmlspecialchars($lang === 'es' ? 'según dirección' : 'set by address', ENT_QUOTES) ?>' : '$' + fee.toFixed(2))"></span>
           </div>
           <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem">
             <span><?= htmlspecialchars(__t('checkout.sales_tax')) ?></span>
@@ -146,6 +203,9 @@ $prefillAddress = $destination['venue_address'] ?? '';
 function checkoutForm() {
     return {
         name: '',
+        fulfillType: 'delivery',
+        fulfillDate: '',
+        fulfillTime: '',
         address: <?= json_encode($prefillAddress) ?>,
         lat: '',
         lng: '',
@@ -154,9 +214,13 @@ function checkoutForm() {
         submitting: false,
         subtotal: <?= json_encode(round((float) $subtotal, 2)) ?>,
         taxRate: <?= json_encode((float) $taxRate) ?>,
+        // Pickup carries no delivery fee; delivery uses the address-derived fee.
+        get effectiveFee() {
+            if (this.fulfillType === 'pickup') return 0;
+            return this.fee === null ? 0 : this.fee;
+        },
         get total() {
-            const f = this.fee === null ? 0 : this.fee;
-            return Math.round((this.subtotal + f + this.subtotal * this.taxRate) * 100) / 100;
+            return Math.round((this.subtotal + this.effectiveFee + this.subtotal * this.taxRate) * 100) / 100;
         },
         onPlace(place) {
             if (!place || !place.geometry) {
@@ -185,9 +249,15 @@ function checkoutForm() {
             this.feeError = '';
         },
         onSubmit(e) {
-            if (!this.lat || !this.lng || !this.address) {
+            // Delivery requires a geocoded address; pickup does not.
+            if (this.fulfillType === 'delivery' && (!this.lat || !this.lng || !this.address)) {
                 e.preventDefault();
                 this.feeError = 'Please select your delivery address from the suggestions.';
+                return;
+            }
+            if (!this.fulfillDate || !this.fulfillTime) {
+                e.preventDefault();
+                this.feeError = '<?= htmlspecialchars($lang === 'es' ? 'Por favor elija una fecha y hora.' : 'Please choose a date and time.', ENT_QUOTES) ?>';
                 return;
             }
             this.submitting = true;

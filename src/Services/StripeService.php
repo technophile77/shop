@@ -140,6 +140,9 @@ final class StripeService
      * @param array[] $lineItems     Pre-built line_items array from StripeLineItems::fromCart().
      * @param string  $customerEmail Pre-fills the email field on Stripe's hosted page;
      *                               omitted from the request when empty.
+     * @param array<string, scalar> $extraMetadata Additional key/value pairs merged
+     *                               into session metadata (e.g. delivery_type,
+     *                               fulfill_at). shop_order_id always takes precedence.
      *
      * @return array{id: string, url: string}
      *
@@ -148,13 +151,16 @@ final class StripeService
      * @see \App\Support\StripeLineItems::fromCart()
      *
      * @example
-     *   $result = StripeService::createCartCheckoutSession($orderId, $lineItems, $email);
+     *   $result = StripeService::createCartCheckoutSession($orderId, $lineItems, $email, [
+     *       'delivery_type' => 'pickup', 'fulfill_at' => '2026-06-20 14:00:00',
+     *   ]);
      *   header('Location: ' . $result['url']);
      */
     public static function createCartCheckoutSession(
         int    $orderId,
         array  $lineItems,
         string $customerEmail = '',
+        array  $extraMetadata = [],
     ): array {
         $appUrl = rtrim((string) Config::get('APP_URL', ''), '/');
 
@@ -163,9 +169,9 @@ final class StripeService
             'line_items'  => $lineItems,
             'success_url' => $appUrl . '/checkout/success?session_id={CHECKOUT_SESSION_ID}',
             'cancel_url'  => $appUrl . '/cart',
-            'metadata'    => [
+            'metadata'    => array_merge($extraMetadata, [
                 'shop_order_id' => $orderId,
-            ],
+            ]),
             'custom_text' => [
                 'after_submit' => [
                     'message' => 'Thank you! We\'d love a Google review once your arrangement is ready: '

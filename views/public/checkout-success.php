@@ -16,6 +16,16 @@ declare(strict_types=1);
  */
 
 $paid = ($order['payment_status'] ?? '') === 'paid';
+
+$isPickup = ($order['delivery_type'] ?? 'delivery') === 'pickup';
+
+// Format the requested fulfillment time from the stored 'Y-m-d H:i:s', if any.
+$fulfillRaw = (string) ($order['fulfill_at'] ?? '');
+$fulfillAt  = '';
+if ($fulfillRaw !== '') {
+    $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $fulfillRaw);
+    $fulfillAt = $dt !== false ? $dt->format('D, M j \a\t g:i A') : $fulfillRaw;
+}
 ?>
 
 <div class="section section--light" style="padding: 4rem 0">
@@ -31,6 +41,18 @@ $paid = ($order['payment_status'] ?? '') === 'paid';
         <span style="color:var(--color-muted)"><?= htmlspecialchars($lang === 'es' ? 'Pedido' : 'Order') ?></span>
         <span>#<?= (int) ($order['id'] ?? 0) ?></span>
       </div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem">
+        <span style="color:var(--color-muted)"><?= htmlspecialchars($lang === 'es' ? 'Tipo' : 'Type') ?></span>
+        <span><?= $isPickup
+            ? htmlspecialchars($lang === 'es' ? 'Recoger' : 'Pickup')
+            : htmlspecialchars($lang === 'es' ? 'Entrega' : 'Delivery') ?></span>
+      </div>
+      <?php if ($fulfillAt !== ''): ?>
+      <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem">
+        <span style="color:var(--color-muted)"><?= htmlspecialchars($lang === 'es' ? 'Cuándo' : 'When') ?></span>
+        <span><?= htmlspecialchars($fulfillAt) ?></span>
+      </div>
+      <?php endif; ?>
       <?php if ($paid): ?>
       <div style="display:flex; justify-content:space-between; font-weight:700">
         <span><?= htmlspecialchars(__t('checkout.total')) ?></span>
