@@ -14,6 +14,7 @@ use App\Models\FlowerTypeColor;
 use App\Models\PaperColor;
 use App\Models\Product;
 use App\Models\ProductFlowerType;
+use App\Support\Analytics;
 use App\Support\CartPricing;
 use App\Support\CartSession;
 use App\Support\CartValidation;
@@ -277,6 +278,10 @@ final class CartController extends BaseController
         ];
 
         CartSession::addLine($line);
+
+        // Queue an add_to_cart / AddToCart event to fire on the /cart page this
+        // redirects to (the one-time session queue survives the redirect).
+        $_SESSION['analytics_pending'][] = Analytics::addToCart($line);
 
         return $this->redirect('/' . $lang . '/cart');
     }

@@ -18,6 +18,7 @@ use App\Models\Product;
 use App\Models\ProductFlowerType;
 use App\Models\ProductFlowerTypeColor;
 use App\Services\OccasionMenu;
+use App\Support\Analytics;
 use App\Support\Destination;
 use App\Support\FlowerColorResolver;
 use App\Support\Shop;
@@ -326,6 +327,7 @@ final class ShopController extends BaseController
             'pageTitle'    => $name,
             'metaDesc'     => $metaDesc,
             'ogImage'      => $image,
+            'analyticsEvents' => [Analytics::viewItem($product)],
         ]);
 
         return Response::html($html);

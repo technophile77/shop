@@ -15,6 +15,7 @@ use App\Models\Order;
 use App\Models\PaperColor;
 use App\Services\MailService;
 use App\Services\StripeService;
+use App\Support\Analytics;
 use App\Support\CartPricing;
 use App\Support\CartSession;
 use App\Support\CheckoutPricing;
@@ -116,6 +117,7 @@ final class CheckoutController extends BaseController
             'earliestDate' => Fulfillment::earliestDate($now, $cutoff),
             'samedayCutoff' => $cutoff,
             'pickupAddress' => (string) Config::get('BUSINESS_ADDRESS', ''),
+            'analyticsEvents' => [Analytics::beginCheckout($items, $subtotal)],
             'pageTitle'    => __t('checkout.heading'),
             'metaDesc'     => '',
         ]);
@@ -279,6 +281,8 @@ final class CheckoutController extends BaseController
                 'fulfill_at'    => $fulfillAt ?? '',
             ]);
             Order::setStripeCheckoutSession($orderId, $session['id']);
+            // Remember this order so the success page fires `purchase` exactly once.
+            $_SESSION['pending_purchase_order_id'] = $orderId;
             return $this->redirect($session['url']);
         } catch (\Stripe\Exception\ApiErrorException $e) {
             error_log('[CheckoutController] Stripe API error: ' . $e->getMessage());
@@ -329,9 +333,10 @@ final class CheckoutController extends BaseController
         if (($order['payment_status'] ?? '') === 'paid') {
             CartSession::clear();
             Destination::clear();
-            return $this->renderSuccess($order, $lang);
+            return $this->renderSuccess($order, $lang, true);
         }
 
+        $paid = false;
         try {
             $session = StripeService::retrieveCheckoutSession($sessionId);
 
@@ -346,12 +351,13 @@ final class CheckoutController extends BaseController
 
                 CartSession::clear();
                 Destination::clear();
+                $paid = true;
             }
         } catch (\Exception $e) {
             error_log('[CheckoutController] Error verifying session ' . $sessionId . ': ' . $e->getMessage());
         }
 
-        return $this->renderSuccess($order, $lang);
+        return $this->renderSuccess($order, $lang, $paid);
     }
 
     // -------------------------------------------------------------------------
@@ -361,19 +367,35 @@ final class CheckoutController extends BaseController
     /**
      * Render the order thank-you page.
      *
+     * Fires the GA4 `purchase` / Pixel `Purchase` event exactly once: only when
+     * the order is paid AND its id matches the `pending_purchase_order_id` set at
+     * submit time, then clears that flag. This avoids a double count on refresh
+     * and when the Stripe webhook confirmed the order before this redirect.
+     *
      * @param array<string, mixed> $order The order row.
      * @param string               $lang  Active locale.
+     * @param bool                 $paid  Whether the order is confirmed paid.
      *
      * @return Response Rendered HTML.
      */
-    private function renderSuccess(array $order, string $lang): Response
+    private function renderSuccess(array $order, string $lang, bool $paid = false): Response
     {
+        $events  = [];
+        $pending = (int) ($_SESSION['pending_purchase_order_id'] ?? 0);
+        if ($paid && $pending !== 0 && $pending === (int) ($order['id'] ?? 0)) {
+            $decoded = json_decode((string) ($order['items_json'] ?? ''), true);
+            $items   = is_array($decoded) ? $decoded : [];
+            $events[] = Analytics::purchase($order, $items);
+            unset($_SESSION['pending_purchase_order_id']);
+        }
+
         return Response::html(
             $this->render('public/checkout-success', [
-                'order'     => $order,
-                'lang'      => $lang,
-                'pageTitle' => __t('checkout.success_heading'),
-                'metaDesc'  => '',
+                'order'           => $order,
+                'lang'            => $lang,
+                'analyticsEvents' => $events,
+                'pageTitle'       => __t('checkout.success_heading'),
+                'metaDesc'        => '',
             ])
         );
     }
