@@ -156,15 +156,19 @@ final class Order
      *        delivery_fee (float|null), items_json (string — JSON),
      *        card_message (string|null), delivery_venue_name (string|null),
      *        occasion_type (string|null), subtotal (float),
-     *        tax_amount (float), total (float).
+     *        tax_amount (float), total (float),
+     *        delivery_type ('delivery'|'pickup', default 'delivery'),
+     *        fulfill_at (string|null — requested 'Y-m-d H:i:s' delivery/pickup time).
      *
      * @return int The newly created order ID.
      *
      * @example
      *   $orderId = Order::createShopOrder([
      *       'customer_id'        => 12,
+     *       'delivery_type'      => 'delivery',
      *       'delivery_address'   => '123 Main St, Tulsa, OK',
      *       'delivery_fee'       => 10.00,
+     *       'fulfill_at'         => '2026-06-20 14:00:00',
      *       'items_json'         => json_encode($snapshot),
      *       'card_message'       => 'Happy Birthday!',
      *       'delivery_venue_name'=> null,
@@ -176,22 +180,25 @@ final class Order
      */
     public static function createShopOrder(array $data): int
     {
+        $deliveryType = ($data['delivery_type'] ?? 'delivery') === 'pickup' ? 'pickup' : 'delivery';
+
         $stmt = Database::rw()->prepare(
             'INSERT INTO orders
-                (customer_id, delivery_type, delivery_address, delivery_fee,
+                (customer_id, delivery_type, delivery_address, delivery_fee, fulfill_at,
                  occasion, items_json, card_message, delivery_venue_name,
                  occasion_type, subtotal, tax_amount, total, payment_status)
              VALUES
-                (:customer_id, :delivery_type, :delivery_address, :delivery_fee,
+                (:customer_id, :delivery_type, :delivery_address, :delivery_fee, :fulfill_at,
                  :occasion, :items_json, :card_message, :delivery_venue_name,
                  :occasion_type, :subtotal, :tax_amount, :total, :payment_status)'
         );
 
         $stmt->execute([
             ':customer_id'         => $data['customer_id']         ?? null,
-            ':delivery_type'       => 'delivery',
+            ':delivery_type'       => $deliveryType,
             ':delivery_address'    => $data['delivery_address']    ?? null,
             ':delivery_fee'        => $data['delivery_fee']        ?? null,
+            ':fulfill_at'          => $data['fulfill_at']          ?? null,
             ':occasion'            => $data['occasion_type']       ?? null,
             ':items_json'          => $data['items_json']          ?? null,
             ':card_message'        => $data['card_message']        ?? null,

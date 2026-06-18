@@ -19,9 +19,11 @@ use App\Support\CartPricing;
 use App\Support\CartSession;
 use App\Support\CheckoutPricing;
 use App\Support\Destination;
+use App\Support\Fulfillment;
 use App\Support\LocalArea;
 use App\Support\ShopOrderSnapshot;
 use App\Support\StripeLineItems;
+use DateTimeImmutable;
 
 /**
  * Handles the shop-cart checkout: review, Stripe pay-now, and success.
@@ -100,6 +102,9 @@ final class CheckoutController extends BaseController
             }
         }
 
+        $cutoff = (string) Config::get('BUSINESS_SAMEDAY_CUTOFF', '13:00');
+        $now    = new DateTimeImmutable('now');
+
         $html = $this->render('public/checkout', [
             'items'        => $items,
             'subtotal'     => $subtotal,
@@ -108,6 +113,9 @@ final class CheckoutController extends BaseController
             'estimatedFee' => $estimatedFee,
             'lang'         => $lang,
             'csrfToken'    => $request->csrfToken(),
+            'earliestDate' => Fulfillment::earliestDate($now, $cutoff),
+            'samedayCutoff' => $cutoff,
+            'pickupAddress' => (string) Config::get('BUSINESS_ADDRESS', ''),
             'pageTitle'    => __t('checkout.heading'),
             'metaDesc'     => '',
         ]);
@@ -149,7 +157,7 @@ final class CheckoutController extends BaseController
             return $this->redirect('/' . $lang . '/cart');
         }
 
-        $name        = trim((string) $request->post('name', ''));
+        $name         = trim((string) $request->post('name', ''));
         $email        = trim((string) $request->post('email', ''));
         $phone        = trim((string) $request->post('phone', ''));
         $cardMessage  = trim((string) $request->post('card_message', ''));
@@ -157,35 +165,58 @@ final class CheckoutController extends BaseController
         $latRaw       = $request->post('latitude', '');
         $lngRaw       = $request->post('longitude', '');
 
+        $fulfillType  = $request->post('delivery_type', 'delivery') === 'pickup' ? 'pickup' : 'delivery';
+        $fulfillDate  = trim((string) $request->post('fulfill_date', ''));
+        $fulfillTime  = trim((string) $request->post('fulfill_time', ''));
+
         if ($name === '' || $email === '') {
             $this->setFlash('error', 'Please provide your name and email.');
             return $this->redirect('/' . $lang . '/checkout');
         }
 
-        if ($address === '' || $latRaw === '' || $lngRaw === '') {
-            $this->setFlash('error', 'Please select your delivery address from the suggestions.');
+        // Validate the requested fulfillment date/time (no past dates; same-day
+        // only before the cutoff). Pure logic in App\Support\Fulfillment.
+        $cutoff = (string) Config::get('BUSINESS_SAMEDAY_CUTOFF', '13:00');
+        $when   = new DateTimeImmutable('now');
+        $scheduleErrors = Fulfillment::validate($fulfillType, $fulfillDate, $fulfillTime, $when, $cutoff);
+        if ($scheduleErrors !== []) {
+            $this->setFlash('error', $scheduleErrors[0]);
             return $this->redirect('/' . $lang . '/checkout');
         }
+        $fulfillAt = Fulfillment::parse($fulfillDate, $fulfillTime)?->format('Y-m-d H:i:s');
 
-        // Recompute the delivery fee server-side from the selected coordinates.
-        $miles = LocalArea::haversineMiles(
-            (float) Config::get('BUSINESS_LAT', 0),
-            (float) Config::get('BUSINESS_LNG', 0),
-            (float) $latRaw,
-            (float) $lngRaw,
-        );
+        // Delivery needs a geocoded in-range address + a computed fee; pickup
+        // needs neither (the studio address is fixed) and carries no fee.
+        $deliveryFee = 0.0;
+        if ($fulfillType === 'delivery') {
+            if ($address === '' || $latRaw === '' || $lngRaw === '') {
+                $this->setFlash('error', 'Please select your delivery address from the suggestions.');
+                return $this->redirect('/' . $lang . '/checkout');
+            }
 
-        if ($miles > self::MAX_DELIVERY_MILES) {
-            $this->setFlash('error', __t('order.delivery_outside_range'));
-            return $this->redirect('/' . $lang . '/checkout');
+            // Recompute the delivery fee server-side from the selected coordinates.
+            $miles = LocalArea::haversineMiles(
+                (float) Config::get('BUSINESS_LAT', 0),
+                (float) Config::get('BUSINESS_LNG', 0),
+                (float) $latRaw,
+                (float) $lngRaw,
+            );
+
+            if ($miles > self::MAX_DELIVERY_MILES) {
+                $this->setFlash('error', __t('order.delivery_outside_range'));
+                return $this->redirect('/' . $lang . '/checkout');
+            }
+
+            $deliveryFee = LocalArea::deliveryFee(
+                $miles,
+                (float) Config::get('BUSINESS_DELIVERY_BASE_MILES', 5),
+                (float) Config::get('BUSINESS_DELIVERY_BASE_FEE', 10),
+                (float) Config::get('BUSINESS_DELIVERY_PER_MILE_FEE', 1),
+            );
+        } else {
+            // Pickup: no delivery address is stored.
+            $address = '';
         }
-
-        $deliveryFee = LocalArea::deliveryFee(
-            $miles,
-            (float) Config::get('BUSINESS_DELIVERY_BASE_MILES', 5),
-            (float) Config::get('BUSINESS_DELIVERY_BASE_FEE', 10),
-            (float) Config::get('BUSINESS_DELIVERY_PER_MILE_FEE', 1),
-        );
 
         $subtotal = CartPricing::subtotal($items);
         $totals   = CheckoutPricing::compute(
@@ -223,11 +254,13 @@ final class CheckoutController extends BaseController
 
         $orderId = Order::createShopOrder([
             'customer_id'         => $customerId,
-            'delivery_address'    => $address,
+            'delivery_type'       => $fulfillType,
+            'delivery_address'    => $address !== '' ? $address : null,
             'delivery_fee'        => $totals['delivery_fee'],
+            'fulfill_at'          => $fulfillAt,
             'items_json'          => json_encode($snapshot, JSON_UNESCAPED_UNICODE),
             'card_message'        => $cardMessage !== '' ? $cardMessage : null,
-            'delivery_venue_name' => $destination['venue_name'] ?? null,
+            'delivery_venue_name' => $fulfillType === 'delivery' ? ($destination['venue_name'] ?? null) : null,
             'occasion_type'       => $destination['occasion'] ?? null,
             'subtotal'            => $totals['subtotal'],
             'tax_amount'          => $totals['tax_amount'],
@@ -241,7 +274,10 @@ final class CheckoutController extends BaseController
 
         try {
             $lineItems = StripeLineItems::fromCart($items, $totals['delivery_fee'], $totals['tax_amount']);
-            $session   = StripeService::createCartCheckoutSession($orderId, $lineItems, $email);
+            $session   = StripeService::createCartCheckoutSession($orderId, $lineItems, $email, [
+                'delivery_type' => $fulfillType,
+                'fulfill_at'    => $fulfillAt ?? '',
+            ]);
             Order::setStripeCheckoutSession($orderId, $session['id']);
             return $this->redirect($session['url']);
         } catch (\Stripe\Exception\ApiErrorException $e) {
@@ -363,14 +399,28 @@ final class CheckoutController extends BaseController
         $total = '$' . number_format((float) ($order['total'] ?? 0), 2);
         $venue = (string) ($order['delivery_venue_name'] ?? '');
         $addr  = (string) ($order['delivery_address'] ?? '');
+        $type  = ($order['delivery_type'] ?? 'delivery') === 'pickup' ? 'Pickup' : 'Delivery';
+
+        // "Sat Jun 20, 2026 at 2:00 PM" from the stored 'Y-m-d H:i:s', when present.
+        $fulfillRaw = (string) ($order['fulfill_at'] ?? '');
+        $fulfillAt  = '';
+        if ($fulfillRaw !== '') {
+            $dt = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $fulfillRaw);
+            $fulfillAt = $dt !== false ? $dt->format('D M j, Y \a\t g:i A') : $fulfillRaw;
+        }
+        $whenLabel = $fulfillAt !== '' ? $type . ' — ' . $fulfillAt : $type;
 
         $html = MailService::buildHtml(
             '<h2 style="margin:0 0 1rem;font-size:1.2rem">New Paid Order 🌸</h2>'
             . '<table style="border-collapse:collapse;width:100%">'
             . $this->mailRow('Customer', $name)
             . $this->mailRow('Total Paid', $total)
+            . $this->mailRow('Fulfillment', $whenLabel)
             . $this->mailRow('Card Message', (string) ($order['card_message'] ?? ''))
-            . $this->mailRow('Deliver To', $venue !== '' ? $venue . ' — ' . $addr : $addr)
+            . $this->mailRow($type === 'Pickup' ? 'Pickup' : 'Deliver To',
+                $type === 'Pickup'
+                    ? 'Customer pickup at the studio'
+                    : ($venue !== '' ? $venue . ' — ' . $addr : $addr))
             . '</table>'
             . '<p style="margin:1.5rem 0 0;font-size:0.85rem;color:#999">'
             . 'View order #' . (int) $order['id'] . ' in the '
