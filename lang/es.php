@@ -17,6 +17,7 @@ return [
     'nav.order'       => 'Pedir Ahora',
     'nav.about'       => 'Nosotros',
     'nav.contact'     => 'Contacto',
+    'nav.returns'     => 'Devoluciones',
     'nav.areas'       => 'Áreas de Entrega',
     'nav.lang_switch' => 'English',
 

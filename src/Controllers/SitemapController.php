@@ -51,6 +51,7 @@ class SitemapController
             ['/order',             'monthly', '0.8'],
             ['/about',             'monthly', '0.6'],
             ['/contact',           'monthly', '0.6'],
+            ['/returns',           'monthly', '0.4'],
         ];
 
         $xml  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";

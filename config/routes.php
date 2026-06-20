@@ -46,6 +46,7 @@ return [
     ['GET',  '/about',                      'AboutController',             'index'],
     ['GET',  '/contact',                    'ContactController',           'index'],
     ['POST', '/contact',                    'ContactController',           'submit'],
+    ['GET',  '/returns',                    'ReturnPolicyController',      'index'],
     ['POST', '/signup',                     'SignupController',            'submit'],
     ['GET',  '/lang/{code}',               'LocaleController',            'switch'],
     ['GET',  '/sitemap.xml',               'SitemapController',           'index'],
