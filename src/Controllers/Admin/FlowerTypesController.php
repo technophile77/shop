@@ -40,8 +40,9 @@ final class FlowerTypesController extends BaseController
     /**
      * Render the flower types list page.
      *
-     * Loads all flower types, all active flower colors, and the full type-to-color
-     * map so the view can render the color matrix for each type without issuing
+     * Loads all flower types, all active flower colors, the full type-to-color
+     * map, and the per-cell stock map so the view can render the color matrix
+     * (including per-color stock-count inputs) for each type without issuing
      * additional queries.
      *
      * @param Request              $request HTTP request.
@@ -58,12 +59,14 @@ final class FlowerTypesController extends BaseController
         $flowerTypes = FlowerType::all();
         $flowerColors = FlowerColor::allActive();
         $colorMap    = FlowerTypeColor::map();
+        $stockMap    = FlowerTypeColor::stockMap();
 
         return Response::html(
             $this->render('admin/flower-types/list', [
                 'flowerTypes'  => $flowerTypes,
                 'flowerColors' => $flowerColors,
                 'colorMap'     => $colorMap,
+                'stockMap'     => $stockMap,
                 'csrfToken'    => $csrfToken,
                 'pageTitle'    => 'Flower Types',
             ], 'admin')
@@ -203,22 +206,32 @@ final class FlowerTypesController extends BaseController
     // -------------------------------------------------------------------------
 
     /**
-     * Update the color matrix for a single flower type.
+     * Update the color matrix and per-color stock counts for a flower type.
      *
      * Accepts an optional color_ids[] checkbox array from POST, normalises the
-     * values via FlowerColorResolver::normalizeIdList(), and passes the result
-     * to FlowerTypeColor::setColorsForType() using replace semantics.
+     * values via FlowerColorResolver::normalizeIdList(), then reads the optional
+     * stock[] map (shape colorId => string) to build a per-color stock count for
+     * each checked color. For each checked color, stock[colorId] is interpreted
+     * as: unset or empty/whitespace-only string → null (untracked, treated as
+     * unlimited); otherwise max(0, (int) value) stems on hand. Only checked
+     * colors contribute to the stock map — stock values for unchecked colors are
+     * ignored. The result is passed to FlowerTypeColor::setColorStockForType()
+     * using replace semantics.
      *
      * Submitting with no color_ids[] checked clears all color associations for
      * the type.
      *
-     * @param Request              $request HTTP request; expects color_ids[] in POST.
+     * @param Request              $request HTTP request; expects color_ids[] and an
+     *                                      optional stock[] map (colorId => string)
+     *                                      in POST.
      * @param array<string,string> $params  Route parameters; expects 'id'.
      *
      * @return Response Redirect to /admin/flower-types.
      *
      * @example
+     *   // POST color_ids[]=1&color_ids[]=2&stock[1]=24&stock[2]=
      *   (new FlowerTypesController())->updateColors($request, ['id' => '1']);
+     *   // Color 1 → 24 stems; Color 2 → null (untracked).
      */
     public function updateColors(Request $request, array $params = []): Response
     {
@@ -232,7 +245,17 @@ final class FlowerTypesController extends BaseController
             (array) $request->post('color_ids', [])
         );
 
-        FlowerTypeColor::setColorsForType($id, $colorIds);
+        $stockInput      = (array) $request->post('stock', []);
+        $countsByColorId = [];
+        foreach ($colorIds as $colorId) {
+            $raw = $stockInput[$colorId] ?? null;
+            $countsByColorId[$colorId] =
+                ($raw === null || trim((string) $raw) === '')
+                    ? null
+                    : max(0, (int) $raw);
+        }
+
+        FlowerTypeColor::setColorStockForType($id, $countsByColorId);
 
         $this->setFlash('success', 'Color matrix updated.');
         return $this->redirect('/admin/flower-types');

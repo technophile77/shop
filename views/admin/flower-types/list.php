@@ -140,12 +140,17 @@
 <?php if (!empty($flowerTypes) && !empty($flowerColors)): ?>
 <div class="admin-card" style="margin-bottom:2rem">
     <p class="admin-card-title" style="margin-bottom:1.25rem">Color Matrix</p>
-    <p style="font-size:0.8rem; color:#888; margin-bottom:1.25rem">
+    <p style="font-size:0.8rem; color:#888; margin-bottom:0.5rem">
         Check which colors each flower type is available in. Submit per type.
+    </p>
+    <p style="font-size:0.78rem; color:#999; margin-bottom:1.25rem">
+        Stock count = number of stems on hand. Leave blank for untracked / unlimited;
+        enter 0 to mark a color out of stock.
     </p>
 
     <?php foreach ($flowerTypes as $ft): ?>
     <?php $checkedIds = $colorMap[(int) $ft['id']] ?? []; ?>
+    <?php $stockForType = $stockMap[(int) $ft['id']] ?? []; ?>
     <div style="margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px solid #f0f0f0">
         <p style="font-size:0.85rem; font-weight:600; color:#333; margin-bottom:0.625rem">
             <?= htmlspecialchars($ft['name_en']) ?>
@@ -168,6 +173,11 @@
                              flex-shrink:0"></span>
                 <?php endif; ?>
                 <?= htmlspecialchars($fc['name_en']) ?>
+                <input type="number" min="0" name="stock[<?= (int) $fc['id'] ?>]"
+                       value="<?= isset($stockForType[(int) $fc['id']]) && $stockForType[(int) $fc['id']] !== null ? (int) $stockForType[(int) $fc['id']] : '' ?>"
+                       placeholder="∞"
+                       title="Stems in stock — blank = untracked/unlimited"
+                       style="width:4.5rem; padding:0.2rem 0.3rem; font-size:0.78rem; margin-left:0.25rem">
             </label>
             <?php endforeach; ?>
             <button type="submit" class="admin-btn admin-btn-primary"

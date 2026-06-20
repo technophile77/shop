@@ -11,6 +11,7 @@ use App\Core\Response;
 use App\Models\Customer;
 use App\Models\FlowerColor;
 use App\Models\FlowerType;
+use App\Models\FlowerTypeColor;
 use App\Models\Order;
 use App\Models\PaperColor;
 use App\Services\MailService;
@@ -23,6 +24,7 @@ use App\Support\Destination;
 use App\Support\Fulfillment;
 use App\Support\LocalArea;
 use App\Support\ShopOrderSnapshot;
+use App\Support\StockCheck;
 use App\Support\StripeLineItems;
 use DateTimeImmutable;
 
@@ -60,6 +62,11 @@ final class CheckoutController extends BaseController
      * fee when the session destination carries a venue address with cached
      * coordinates; otherwise the fee is computed live as the customer selects an
      * address. Sender contact, card message, and the address are collected here.
+     *
+     * Also performs a warn-only stock check: passes `outOfStockColors` (a list of
+     * localized "{color} {type}" labels for chosen colors whose tracked stock
+     * can't cover the cart) and `hasStockWarning` to the view. This only surfaces
+     * a notice — it never blocks the order or constrains the date picker.
      *
      * @param Request              $request HTTP request.
      * @param array<string, mixed> $params  Route parameters (none).
@@ -106,6 +113,31 @@ final class CheckoutController extends BaseController
         $cutoff = (string) Config::get('BUSINESS_SAMEDAY_CUTOFF', '13:00');
         $now    = new DateTimeImmutable('now');
 
+        // Warn-only stock check: gather localized labels for chosen colors whose
+        // tracked stock can't cover cart demand. Never blocks the order.
+        $stockMap     = FlowerTypeColor::stockMap();
+        $insufficient = StockCheck::insufficientColors($items, $stockMap);
+
+        $nameOf = static function (array $rows) use ($lang): array {
+            $map = [];
+            foreach ($rows as $row) {
+                $map[(int) $row['id']] = $row['name_' . $lang] ?? $row['name_en'] ?? '';
+            }
+            return $map;
+        };
+        $typeNames  = $nameOf(FlowerType::allActive());
+        $colorNames = $nameOf(FlowerColor::allActive());
+
+        $outOfStockColors = [];
+        foreach ($insufficient as $pair) {
+            $colorName = (string) ($colorNames[$pair['color_id']] ?? '');
+            $typeName  = (string) ($typeNames[$pair['flower_type_id']] ?? '');
+            $label     = trim($colorName . ' ' . $typeName);
+            if ($label !== '' && !in_array($label, $outOfStockColors, true)) {
+                $outOfStockColors[] = $label;
+            }
+        }
+
         $html = $this->render('public/checkout', [
             'items'        => $items,
             'subtotal'     => $subtotal,
@@ -117,6 +149,8 @@ final class CheckoutController extends BaseController
             'earliestDate' => Fulfillment::earliestDate($now, $cutoff),
             'samedayCutoff' => $cutoff,
             'pickupAddress' => (string) Config::get('BUSINESS_ADDRESS', ''),
+            'outOfStockColors' => $outOfStockColors,
+            'hasStockWarning'  => $outOfStockColors !== [],
             'analyticsEvents' => [Analytics::beginCheckout($items, $subtotal)],
             'pageTitle'    => __t('checkout.heading'),
             'metaDesc'     => '',
