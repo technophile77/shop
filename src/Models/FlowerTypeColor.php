@@ -118,6 +118,41 @@ final class FlowerTypeColor
         return $map;
     }
 
+    /**
+     * Return a nested map of stock counts for every type/color cell.
+     *
+     * Fetches all rows from flower_type_colors in a single query and groups them
+     * by flower_type_id then flower_color_id, with the per-cell stock_count as
+     * the leaf value. A leaf of null means the cell is untracked (treated as
+     * unlimited); an integer is the available stem count. Used by admin stock
+     * pages and the checkout stock check to avoid N+1 queries.
+     *
+     * @return array<int, array<int, ?int>> Map of
+     *         flower_type_id => [flower_color_id => ?int stock_count].
+     *
+     * @throws \PDOException When the database query fails.
+     *
+     * @example
+     *   $stock = FlowerTypeColor::stockMap();
+     *   // [1 => [1 => 24, 2 => null, 3 => 0], 2 => [1 => 5, 6 => null], ...]
+     *   // Type 1 / Color 1 has 24 stems; Type 1 / Color 2 is untracked.
+     */
+    public static function stockMap(): array
+    {
+        $stmt = Database::ro()->query(
+            'SELECT flower_type_id, flower_color_id, stock_count FROM flower_type_colors'
+        );
+
+        $map = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $typeId                   = (int) $row['flower_type_id'];
+            $colorId                  = (int) $row['flower_color_id'];
+            $map[$typeId][$colorId]   = $row['stock_count'] === null ? null : (int) $row['stock_count'];
+        }
+
+        return $map;
+    }
+
     // -------------------------------------------------------------------------
     // Write methods (use Database::rw())
     // -------------------------------------------------------------------------
@@ -125,9 +160,11 @@ final class FlowerTypeColor
     /**
      * Replace the full set of colors for a flower type atomically.
      *
-     * Deletes all existing flower_type_colors rows for the type, then inserts
-     * the new set — all inside a single transaction. Passing an empty array
-     * clears all color associations without inserting anything.
+     * Availability-only convenience wrapper: delegates to setColorStockForType()
+     * with every selected color mapped to a null (untracked) stock count, so the
+     * type/color cells exist but are treated as unlimited. Replace-semantics and
+     * the surrounding transaction are inherited from the delegate. Passing an
+     * empty array clears all color associations without inserting anything.
      *
      * @param int   $flowerTypeId The flower type's primary key.
      * @param int[] $colorIds     Color IDs to associate with the flower type.
@@ -137,11 +174,47 @@ final class FlowerTypeColor
      * @throws \PDOException When any database operation fails; the transaction is
      *                       rolled back automatically on exception.
      *
+     * @see \App\Models\FlowerTypeColor::setColorStockForType  Underlying implementation.
+     *
      * @example
-     *   FlowerTypeColor::setColorsForType(1, [1, 2, 3, 4, 8]); // Roses: Red, Pink, White, Yellow, Peach
+     *   FlowerTypeColor::setColorsForType(1, [1, 2, 3, 4, 8]); // Roses: Red, Pink, White, Yellow, Peach (all untracked)
      *   FlowerTypeColor::setColorsForType(1, []);                // clears all colors for Roses
      */
     public static function setColorsForType(int $flowerTypeId, array $colorIds): void
+    {
+        $countsByColorId = [];
+        foreach ($colorIds as $colorId) {
+            $countsByColorId[(int) $colorId] = null;
+        }
+
+        self::setColorStockForType($flowerTypeId, $countsByColorId);
+    }
+
+    /**
+     * Replace the full set of colors and their stock counts for a flower type.
+     *
+     * Deletes all existing flower_type_colors rows for the type, then inserts the
+     * supplied selection with per-cell stock counts — all inside a single
+     * transaction. Each map value is the stock count for that color: null stores
+     * NULL (untracked, treated as unlimited), an integer stores the available
+     * stem count. Passing an empty array clears all color associations without
+     * inserting anything.
+     *
+     * @param int                  $flowerTypeId    The flower type's primary key.
+     * @param array<int, int|null> $countsByColorId Map of flower_color_id => stock
+     *                                              count (null = untracked).
+     *
+     * @return void
+     *
+     * @throws \PDOException When any database operation fails; the transaction is
+     *                       rolled back automatically on exception.
+     *
+     * @example
+     *   FlowerTypeColor::setColorStockForType(1, [1 => 24, 2 => null, 8 => 0]);
+     *   // Roses: Red has 24 stems, Pink untracked, Peach out of stock.
+     *   FlowerTypeColor::setColorStockForType(1, []); // clears all colors for Roses
+     */
+    public static function setColorStockForType(int $flowerTypeId, array $countsByColorId): void
     {
         $db = Database::rw();
         $db->beginTransaction();
@@ -150,12 +223,16 @@ final class FlowerTypeColor
             $db->prepare('DELETE FROM flower_type_colors WHERE flower_type_id = ?')
                ->execute([$flowerTypeId]);
 
-            if ($colorIds !== []) {
+            if ($countsByColorId !== []) {
                 $insert = $db->prepare(
-                    'INSERT INTO flower_type_colors (flower_type_id, flower_color_id) VALUES (?, ?)'
+                    'INSERT INTO flower_type_colors (flower_type_id, flower_color_id, stock_count) VALUES (?, ?, ?)'
                 );
-                foreach ($colorIds as $colorId) {
-                    $insert->execute([$flowerTypeId, (int) $colorId]);
+                foreach ($countsByColorId as $colorId => $stockCount) {
+                    $insert->execute([
+                        $flowerTypeId,
+                        (int) $colorId,
+                        $stockCount === null ? null : (int) $stockCount,
+                    ]);
                 }
             }
 

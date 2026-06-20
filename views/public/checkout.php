@@ -19,6 +19,11 @@ declare(strict_types=1);
  *   @var float|null        $estimatedFee  Pre-estimated fee for a known venue, or null.
  *   @var string            $lang          Active locale.
  *   @var string            $csrfToken     CSRF token.
+ *   @var string            $earliestDate  Earliest selectable fulfillment date (date input min).
+ *   @var string            $samedayCutoff Same-day order cutoff time (e.g. '13:00').
+ *   @var string            $pickupAddress Studio pickup address.
+ *   @var list<string>      $outOfStockColors Localized "{color} {type}" labels for out-of-stock chosen colors.
+ *   @var bool              $hasStockWarning  Whether any chosen color is out of stock (warn-only).
  *
  * @see \App\Controllers\CheckoutController
  */
@@ -154,6 +159,16 @@ $prefillAddress = $destination['venue_address'] ?? '';
               ? 'Pedidos para el mismo día deben hacerse antes de las ' . $samedayCutoff . '.'
               : 'Same-day orders must be placed before ' . $samedayCutoff . '.') ?>
         </p>
+        <?php if (!empty($hasStockWarning)): ?>
+        <div role="status" style="background:#fff4e5; border:1px solid #ffcc80; color:#8a5300; border-radius:8px; padding:0.75rem 1rem; font-size:0.85rem; margin:-0.25rem 0 1.25rem">
+          <?php
+          $names = implode(', ', array_map('htmlspecialchars', $outOfStockColors));
+          echo $lang === 'es'
+              ? 'Algunos colores de flores en su pedido están agotados (' . $names . '), por lo que la entrega el mismo día después de las ' . htmlspecialchars($samedayCutoff) . ' no está disponible para este pedido. Por favor elija una fecha posterior.'
+              : 'Some flower colors in your order are currently out of stock (' . $names . '), so same-day delivery after ' . htmlspecialchars($samedayCutoff) . ' isn\'t available for this order. Please choose a later date.';
+          ?>
+        </div>
+        <?php endif; ?>
 
         <!-- Totals -->
         <div style="border-top:1px solid rgba(0,0,0,0.08); padding-top:1rem; margin-bottom:1.5rem">
