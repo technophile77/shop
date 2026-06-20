@@ -1,6 +1,10 @@
 # Secrets — NEVER commit
 .env
 
+# Google service-account key — NEVER commit
+config/google-service-account.json
+*.service-account.json
+
 # Composer dependencies (installed on server via `composer install`)
 /vendor/
 
