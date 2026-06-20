@@ -144,6 +144,10 @@ final class ProductsController extends BaseController
      * sets a flash message and redirects to the product list. On validation
      * failure, sets an error flash and redirects back to the create form.
      *
+     * Side effect: after the product is persisted, best-effort syncs it to Google
+     * Merchant Center via {@see syncToMerchant()} (no-op until configured; never
+     * blocks the save).
+     *
      * @param Request              $request HTTP request containing POST data.
      * @param array<string,string> $params  Route parameters (none for this route).
      *
@@ -182,6 +186,8 @@ final class ProductsController extends BaseController
         ProductOccasion::setForProduct($newId, $occasionIds);
         ProductFlowerType::setForProduct($newId, $flowerTypeIds);
         ProductFlowerTypeColor::setForProduct($newId, $this->collectPicturedColors($request, $flowerTypeIds));
+
+        $this->syncToMerchant($newId);
 
         $this->setFlash('success', 'Product created successfully.');
         return $this->redirect('/admin/products');
@@ -248,6 +254,10 @@ final class ProductsController extends BaseController
      * 'image_path' is an empty string, image_path is cleared to null (removes
      * the image association without deleting the file from disk).
      *
+     * Side effect: after the update is persisted, best-effort syncs the product to
+     * Google Merchant Center via {@see syncToMerchant()} (no-op until configured;
+     * never blocks the save).
+     *
      * @param Request              $request HTTP request.
      * @param array<string,string> $params  Route parameters; expects 'id'.
      *
@@ -296,6 +306,8 @@ final class ProductsController extends BaseController
         ProductFlowerType::setForProduct($id, $flowerTypeIds);
         ProductFlowerTypeColor::setForProduct($id, $this->collectPicturedColors($request, $flowerTypeIds));
 
+        $this->syncToMerchant($id);
+
         $this->setFlash('success', 'Product updated successfully.');
         return $this->redirect('/admin/products');
     }
@@ -309,6 +321,11 @@ final class ProductsController extends BaseController
      *
      * The product row is preserved in the database. Validates CSRF before
      * acting.
+     *
+     * Side effect: because the soft-delete makes the product ineligible, the
+     * follow-up best-effort {@see syncToMerchant()} removes it from the Google
+     * Merchant feed in both languages (no-op until configured; never blocks the
+     * delete).
      *
      * @param Request              $request HTTP request.
      * @param array<string,string> $params  Route parameters; expects 'id'.
@@ -327,6 +344,8 @@ final class ProductsController extends BaseController
 
         $id = (int) ($params['id'] ?? 0);
         Product::delete($id);
+
+        $this->syncToMerchant($id);
 
         $this->setFlash('success', 'Product hidden successfully.');
         return $this->redirect('/admin/products');
@@ -433,6 +452,46 @@ final class ProductsController extends BaseController
         }
 
         return $out;
+    }
+
+    /**
+     * Best-effort: push a product's current state to Google Merchant Center for
+     * both languages. Eligible (active + priced) → upsert; otherwise → delete so
+     * it leaves the feed. Never throws — a Merchant/API failure must not block the
+     * admin save (mirrors the owner-email/SMS best-effort pattern).
+     *
+     * When {@see \App\Services\GoogleMerchantService::isConfigured()} is false this
+     * returns immediately, so the wiring stays dormant until credentials exist.
+     *
+     * @param int $productId The product whose feed entries should be reconciled.
+     *
+     * @return void
+     *
+     * @see \App\Services\GoogleMerchantService Owns the Merchant API transport.
+     * @see \App\Support\MerchantProduct        Decides feed eligibility.
+     */
+    private function syncToMerchant(int $productId): void
+    {
+        if (!\App\Services\GoogleMerchantService::isConfigured()) {
+            return;
+        }
+
+        try {
+            $product = \App\Models\Product::find($productId);
+            if ($product === null) {
+                return;
+            }
+
+            foreach (['en', 'es'] as $lang) {
+                if (\App\Support\MerchantProduct::eligible($product)) {
+                    \App\Services\GoogleMerchantService::upsert($product, $lang);
+                } else {
+                    \App\Services\GoogleMerchantService::delete('prod-' . $productId, $lang);
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('[ProductsController] Merchant sync failed: ' . $e->getMessage());
+        }
     }
 
     /**
