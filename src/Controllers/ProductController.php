@@ -8,8 +8,11 @@ use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Settings;
+use App\Models\Addon;
+use App\Models\PaperColor;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Services\BouquetColorOptions;
 
 /**
  * Handles the public-facing products gallery routes.
@@ -109,6 +112,10 @@ final class ProductController extends BaseController
             'metaDesc'   => $metaDesc,
             'ogImage'    => $ogImage,
             'jsonLd'     => $jsonLd,
+            'productColorOptions' => BouquetColorOptions::forProducts($products),
+            'paperColors'         => PaperColor::allActive(),
+            'addons'              => Addon::allActive(),
+            'csrfToken'           => $request->csrfToken(),
         ]);
 
         return Response::html($html);
@@ -210,6 +217,10 @@ final class ProductController extends BaseController
             'metaDesc'   => $metaDesc,
             'ogImage'    => $ogImage,
             'jsonLd'     => $jsonLd,
+            'productColorOptions' => BouquetColorOptions::forProducts($products),
+            'paperColors'         => PaperColor::allActive(),
+            'addons'              => Addon::allActive(),
+            'csrfToken'           => $request->csrfToken(),
         ]);
 
         return Response::html($html);

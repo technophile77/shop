@@ -9,18 +9,13 @@ use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
 use App\Models\Addon;
-use App\Models\FlowerColor;
-use App\Models\FlowerType;
-use App\Models\FlowerTypeColor;
 use App\Models\Occasion;
 use App\Models\PaperColor;
 use App\Models\Product;
-use App\Models\ProductFlowerType;
-use App\Models\ProductFlowerTypeColor;
+use App\Services\BouquetColorOptions;
 use App\Services\OccasionMenu;
 use App\Support\Analytics;
 use App\Support\Destination;
-use App\Support\FlowerColorResolver;
 use App\Support\Shop;
 use App\Support\Slug;
 
@@ -100,34 +95,11 @@ final class ShopController extends BaseController
             ]));
         }
 
-        // Pre-load the global catalogs once, then resolve per-product flower-type
-        // color options for buyable products (the add-to-cart panel data).
-        $paperColors    = PaperColor::allActive();
-        $addons         = Addon::allActive();
-        $flowerTypesById = [];
-        foreach (FlowerType::allActive() as $_ft) {
-            $flowerTypesById[(int) $_ft['id']] = $_ft;
-        }
-        $flowerColorsById = [];
-        foreach (FlowerColor::allActive() as $_fc) {
-            $flowerColorsById[(int) $_fc['id']] = $_fc;
-        }
-        $flowerTypeColorMap = FlowerTypeColor::map();
-
-        $productColorOptions = [];
-        foreach ($products as $_p) {
-            if (!Shop::isBuyable($_p)) {
-                continue;
-            }
-            $pid = (int) $_p['id'];
-            $productColorOptions[$pid] = FlowerColorResolver::availableColorsForProduct(
-                ProductFlowerType::flowerTypeIdsForProduct($pid),
-                $flowerTypesById,
-                $flowerTypeColorMap,
-                $flowerColorsById,
-                ProductFlowerTypeColor::mapForProduct($pid)
-            );
-        }
+        // Resolve per-product flower-type color options for buyable products
+        // (the add-to-cart panel data).
+        $paperColors         = PaperColor::allActive();
+        $addons              = Addon::allActive();
+        $productColorOptions = BouquetColorOptions::forProducts($products);
 
         // Build JSON-LD ItemList — same pattern as ProductController.
         $listItems = [];
@@ -229,24 +201,9 @@ final class ShopController extends BaseController
         $buyable      = Shop::isBuyable($product);
 
         // Per-flower-type color options for the add-to-cart panel (buyable only).
-        $colorOptions = [];
-        if ($buyable) {
-            $flowerTypesById = [];
-            foreach (FlowerType::allActive() as $_ft) {
-                $flowerTypesById[(int) $_ft['id']] = $_ft;
-            }
-            $flowerColorsById = [];
-            foreach (FlowerColor::allActive() as $_fc) {
-                $flowerColorsById[(int) $_fc['id']] = $_fc;
-            }
-            $colorOptions = FlowerColorResolver::availableColorsForProduct(
-                ProductFlowerType::flowerTypeIdsForProduct($id),
-                $flowerTypesById,
-                FlowerTypeColor::map(),
-                $flowerColorsById,
-                ProductFlowerTypeColor::mapForProduct($id)
-            );
-        }
+        $colorOptions = $buyable
+            ? (BouquetColorOptions::forProducts([$product])[(int) $product['id']] ?? [])
+            : [];
 
         $name  = (string) ($product['name_' . $lang] ?? $product['name_en'] ?? '');
         $desc  = (string) ($product['description_' . $lang] ?? $product['description_en'] ?? '');

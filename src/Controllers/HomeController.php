@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Config;
-use App\Core\Database;
 use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Settings;
+use App\Models\Addon;
+use App\Models\PaperColor;
+use App\Models\Product;
+use App\Services\BouquetColorOptions;
 use App\Services\OccasionMenu;
 
 /**
@@ -20,7 +23,7 @@ use App\Services\OccasionMenu;
  * home view wrapped in the public layout.
  *
  * @see \App\Controllers\BaseController  Provides render() and redirect().
- * @see \App\Core\Database               Supplies the read-only PDO connection.
+ * @see \App\Models\Product              Supplies the featured-products query.
  * @see \App\Core\Settings               Provides hero copy and button labels.
  */
 class HomeController extends BaseController
@@ -28,13 +31,15 @@ class HomeController extends BaseController
     /**
      * Render the public home page.
      *
-     * Fetches featured products from the database using the current locale so
-     * the correct category name (name_en or name_es) is selected in SQL, which
-     * avoids an N+1 PHP-side lookup. The CSRF token is generated here so the
-     * promotion signup form can embed it as a hidden field without a second
-     * Request instantiation in the view. The page title is read from the
-     * `home_page_title_{lang}` setting (e.g. `home_page_title_en`), falling
-     * back to the `BUSINESS_NAME` env value when the setting is empty.
+     * Fetches up to six featured products via {@see Product::featured()} and
+     * resolves their add-to-cart options (per-product flower colors, active
+     * paper colors, and add-ons) so the Featured Products grid can reuse the
+     * shared bouquet card with its add-to-cart panel. The CSRF token is
+     * generated here so both the add-to-cart forms and the promotion signup
+     * form can embed it without a second Request instantiation in the view. The
+     * page title is read from the `home_page_title_{lang}` setting (e.g.
+     * `home_page_title_en`), falling back to the `BUSINESS_NAME` env value when
+     * the setting is empty.
      *
      * @param Request              $request The current HTTP request.
      * @param array<string,string> $params  Route parameters (none for this route).
@@ -49,23 +54,7 @@ class HomeController extends BaseController
     {
         $lang = Lang::current();
 
-        // Fetch up to 6 featured, active products with their localised category name.
-        // The category name column alias avoids a PHP-side join and keeps the query
-        // a single round-trip.
-        $sql = <<<SQL
-            SELECT
-                p.*,
-                c.name_{$lang} AS category_name
-            FROM products p
-            JOIN product_categories c ON c.id = p.category_id
-            WHERE p.featured = 1
-              AND p.active   = 1
-            ORDER BY p.sort_order ASC
-            LIMIT 6
-            SQL;
-
-        $stmt     = Database::ro()->query($sql);
-        $products = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $products = Product::featured(6);
 
         $csrfToken = $request->csrfToken();
 
@@ -73,8 +62,11 @@ class HomeController extends BaseController
 
         return Response::html(
             $this->render('public/home', [
-                'products'      => $products,
-                'occasionTiles' => OccasionMenu::tiles($lang),
+                'products'           => $products,
+                'occasionTiles'      => OccasionMenu::tiles($lang),
+                'productColorOptions' => BouquetColorOptions::forProducts($products),
+                'paperColors'        => PaperColor::allActive(),
+                'addons'             => Addon::allActive(),
                 'csrfToken' => $csrfToken,
                 'pageTitle' => (string) Settings::get('home_page_title_' . $lang, Config::get('BUSINESS_NAME', '')),
                 'metaDesc'  => $metaDesc,
