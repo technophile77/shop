@@ -11,7 +11,10 @@
  *   Closure               $config     fn(string $key, mixed $default = null): mixed
  *   Closure               $t          fn(string $key): string
  *   array<int,array>      $products   Featured products from DB (up to 6 rows).
- *   string                $csrfToken  Session CSRF token for the signup form.
+ *   array<int,array>      $productColorOptions Per-product flower-color options keyed by product id.
+ *   array<int,array>      $paperColors Active paper-color rows for the add-to-cart panel.
+ *   array<int,array>      $addons     Active add-on rows for the add-to-cart panel.
+ *   string                $csrfToken  Session CSRF token for the signup and add-to-cart forms.
  *
  * @see \App\Controllers\HomeController::index()
  */
@@ -84,39 +87,9 @@ use App\Core\Settings;
         </div>
 
         <div class="product-grid">
+            <?php $occasionLabel = ''; ?>
             <?php foreach ($products as $product): ?>
-            <div class="product-card">
-                <img class="product-card-img"
-                     src="<?= $product['image_path']
-                         ? htmlspecialchars('/public/uploads/products/' . $product['image_path'])
-                         : '/public/assets/images/placeholder-flower.jpg' ?>"
-                     alt="<?= htmlspecialchars($product['name_' . $lang] ?? $product['name_en'] ?? '') ?>"
-                     loading="lazy"
-                     width="400"
-                     height="300">
-                <div class="product-card-body">
-                    <span class="product-card-category">
-                        <?= htmlspecialchars($product['category_name'] ?? '') ?>
-                    </span>
-                    <h3 class="product-card-name">
-                        <?= htmlspecialchars($product['name_' . $lang] ?? $product['name_en'] ?? '') ?>
-                    </h3>
-                    <?php if (!empty($product['price_from'])): ?>
-                    <p class="product-card-price">
-                        <?= htmlspecialchars(__t('home.price_from')) ?>
-                        $<?= htmlspecialchars(number_format((float) $product['price_from'], 2)) ?>
-                        <?php if (!empty($product['price_to']) && (float) $product['price_to'] !== (float) $product['price_from']): ?>
-                        &ndash; $<?= htmlspecialchars(number_format((float) $product['price_to'], 2)) ?>
-                        <?php endif; ?>
-                    </p>
-                    <?php endif; ?>
-                    <a href="/<?= $lang ?>/order?arrangement=<?= urlencode((string) ($product['name_en'] ?? '')) ?>"
-                       class="btn btn-outline btn-sm"
-                       style="width:100%; justify-content:center">
-                        <?= htmlspecialchars(Settings::get('order_button_text_' . $lang, 'Request a Custom Bouquet')) ?>
-                    </a>
-                </div>
-            </div>
+            <?php include __DIR__ . '/_bouquet_card.php'; ?>
             <?php endforeach; ?>
         </div>
 

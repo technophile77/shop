@@ -10,10 +10,14 @@ use App\Core\Settings;
  * Rendered inside views/layouts/public.php. Expects the following variables
  * extracted into scope by BaseController::render():
  *
- *   @var string                $lang        Active locale code — 'en' or 'es'.
- *   @var string                $activeSlug  Current category slug, or 'all'.
- *   @var array<int, array>     $categories  Rows from ProductCategory::allActive().
- *   @var array<int, array>     $products    Product rows to display in the grid.
+ *   @var string                $lang                Active locale code — 'en' or 'es'.
+ *   @var string                $activeSlug          Current category slug, or 'all'.
+ *   @var array<int, array>     $categories          Rows from ProductCategory::allActive().
+ *   @var array<int, array>     $products            Product rows to display in the grid.
+ *   @var array<int, array>     $productColorOptions Per-product flower-type color options keyed by product id.
+ *   @var array<int, array>     $paperColors         Active paper-color rows.
+ *   @var array<int, array>     $addons              Active add-on rows (price + has_custom_text).
+ *   @var string                $csrfToken           CSRF token for the add-to-cart form.
  *
  * @see \App\Controllers\ProductController
  * @see \App\Models\Product
@@ -81,69 +85,9 @@ use App\Core\Settings;
     <?php else: ?>
     <div class="product-grid">
 
+      <?php $occasionLabel = ''; ?>
       <?php foreach ($products as $product): ?>
-      <?php $detailUrl = '/' . $lang . '/flowers/' . \App\Support\Slug::productRef($product); ?>
-      <div class="product-card"
-           data-category="<?= htmlspecialchars($product['category_slug'] ?? '') ?>">
-
-        <!-- Product image -->
-        <a href="<?= htmlspecialchars($detailUrl) ?>">
-          <img class="product-card-img"
-               src="<?= $product['image_path']
-                   ? htmlspecialchars('/public/uploads/products/' . $product['image_path'])
-                   : '/public/assets/images/placeholder-flower.jpg' ?>"
-               alt="<?= htmlspecialchars($product['name_' . $lang] ?? $product['name_en']) ?>"
-               loading="lazy"
-               width="400"
-               height="300">
-        </a>
-
-        <div class="product-card-body">
-
-          <!-- Category eyebrow -->
-          <span class="product-card-category">
-            <?= htmlspecialchars($product['category_name_' . $lang] ?? $product['category_name_en'] ?? '') ?>
-          </span>
-
-          <!-- Product name -->
-          <h3 class="product-card-name">
-            <a href="<?= htmlspecialchars($detailUrl) ?>" style="color:inherit; text-decoration:none"><?= htmlspecialchars($product['name_' . $lang] ?? $product['name_en']) ?></a>
-          </h3>
-
-          <!-- Optional description -->
-          <?php
-          $desc = $product['description_' . $lang] ?? $product['description_en'] ?? '';
-          if ($desc !== '' && $desc !== null):
-          ?>
-          <p style="color:var(--color-muted); font-size:0.9rem; margin-bottom:0.75rem; line-height:1.5">
-            <?= htmlspecialchars($desc) ?>
-          </p>
-          <?php endif; ?>
-
-          <!-- Pricing — single price or range -->
-          <?php if (!empty($product['price_from'])): ?>
-          <p class="product-card-price">
-            <?php
-            $priceFrom = (float) $product['price_from'];
-            $priceTo   = !empty($product['price_to']) ? (float) $product['price_to'] : null;
-            if ($priceTo !== null && $priceTo !== $priceFrom):
-            ?>
-              $<?= number_format($priceFrom, 2) ?> &ndash; $<?= number_format($priceTo, 2) ?>
-            <?php else: ?>
-              <?= __t('products.price_from') ?> $<?= number_format($priceFrom, 2) ?>
-            <?php endif; ?>
-          </p>
-          <?php endif; ?>
-
-          <!-- CTA — links to order form with arrangement pre-filled -->
-          <a href="/<?= $lang ?>/order?arrangement=<?= urlencode($product['name_en']) ?>"
-             class="btn btn-outline"
-             style="width:100%; justify-content:center">
-            <?= htmlspecialchars(Settings::get('order_button_text_' . $lang, Settings::get('order_button_text_en', __t('products.request_cta')))) ?>
-          </a>
-
-        </div><!-- /.product-card-body -->
-      </div><!-- /.product-card -->
+      <?php include __DIR__ . '/_bouquet_card.php'; ?>
       <?php endforeach; ?>
 
     </div><!-- /.product-grid -->

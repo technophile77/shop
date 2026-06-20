@@ -10,7 +10,11 @@ declare(strict_types=1);
  * markup lives in exactly one place.
  *
  * Expected variables in the including scope:
- *   @var array              $product             Product row (id, name_*, description_*, price_from/to, image_path, flower_count, pictured_paper_color_id).
+ *   @var array              $product             Product row (id, name_*, description_*, price_from/to, image_path, flower_count, pictured_paper_color_id, category_slug).
+ *
+ * The root .product-card element emits a data-category attribute sourced from
+ * $product['category_slug'] (inert where no category filter is present; used by
+ * the /products page JS filter to show/hide cards).
  *   @var string             $lang                Active locale ('en'|'es').
  *   @var string             $occasionLabel       Occasion name for the "Customize" /order prefill.
  *   @var array<int, array>  $productColorOptions Per-product flower-type color options keyed by product id.
@@ -34,7 +38,7 @@ $customizeUrl  = '/' . $lang . '/order'
     . '&occasion=' . urlencode((string) ($occasionLabel ?? ''));
 $detailUrl     = '/' . $lang . '/flowers/' . \App\Support\Slug::productRef($product);
 ?>
-<div class="product-card">
+<div class="product-card" data-category="<?= htmlspecialchars($product['category_slug'] ?? '') ?>">
 
   <a href="<?= htmlspecialchars($detailUrl) ?>">
     <img class="product-card-img"

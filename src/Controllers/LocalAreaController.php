@@ -9,17 +9,11 @@ use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
 use App\Models\Addon;
-use App\Models\FlowerColor;
-use App\Models\FlowerType;
-use App\Models\FlowerTypeColor;
 use App\Models\PaperColor;
 use App\Models\Product;
-use App\Models\ProductFlowerType;
-use App\Models\ProductFlowerTypeColor;
+use App\Services\BouquetColorOptions;
 use App\Support\Destination;
-use App\Support\FlowerColorResolver;
 use App\Support\LocalArea;
-use App\Support\Shop;
 
 /**
  * Serves the local-SEO city landing pages and their hub.
@@ -417,29 +411,7 @@ final class LocalAreaController extends BaseController
             $paperColors = PaperColor::allActive();
             $addons      = Addon::allActive();
 
-            $flowerTypesById = [];
-            foreach (FlowerType::allActive() as $_ft) {
-                $flowerTypesById[(int) $_ft['id']] = $_ft;
-            }
-            $flowerColorsById = [];
-            foreach (FlowerColor::allActive() as $_fc) {
-                $flowerColorsById[(int) $_fc['id']] = $_fc;
-            }
-            $flowerTypeColorMap = FlowerTypeColor::map();
-
-            foreach ($bouquetProducts as $_bp) {
-                if (!Shop::isBuyable($_bp)) {
-                    continue;
-                }
-                $pid = (int) $_bp['id'];
-                $productColorOptions[$pid] = FlowerColorResolver::availableColorsForProduct(
-                    ProductFlowerType::flowerTypeIdsForProduct($pid),
-                    $flowerTypesById,
-                    $flowerTypeColorMap,
-                    $flowerColorsById,
-                    ProductFlowerTypeColor::mapForProduct($pid),
-                );
-            }
+            $productColorOptions = BouquetColorOptions::forProducts($bouquetProducts);
 
             // Record the city itself (no specific venue) as the delivery destination.
             Destination::set(Destination::normalize([
