@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Support;
+namespace App\Tests\Support;
 
 use App\Support\StripeLineItems;
 use PHPUnit\Framework\TestCase;

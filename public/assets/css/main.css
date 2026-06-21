@@ -447,12 +447,17 @@ nav.site-nav.scrolled {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   transform: translateY(-10px);
   opacity: 0;
+  /* Invisible-but-present (opacity:0) while closed. On mobile the media query
+     forces display:flex, so without this the fixed, full-width overlay would
+     still swallow clicks across the top of the viewport. */
+  pointer-events: none;
   transition: transform 0.25s ease, opacity 0.25s ease;
 }
 
 .nav-mobile.is-open {
   transform: translateY(0);
   opacity: 1;
+  pointer-events: auto;
 }
 
 .nav-mobile-links {
