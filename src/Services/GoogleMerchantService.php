@@ -135,9 +135,7 @@ final class GoogleMerchantService
         $merchantId = rawurlencode((string) Config::get('GOOGLE_MERCHANT_ID', ''));
         $dataSource = rawurlencode((string) Config::get('GOOGLE_MERCHANT_DATASOURCE', ''));
 
-        // CONFIRM: Merchant API v1 productInputs insert endpoint path + `dataSource`
-        // query param. Verify against the live Merchant API v1 reference when real
-        // credentials exist:
+        // Verified live (2026-06-20) against Merchant API v1:
         //   POST products/v1/accounts/{account}/productInputs:insert?dataSource={dataSource}
         $url = self::API_BASE
             . "/products/v1/accounts/{$merchantId}/productInputs:insert?dataSource={$dataSource}";
@@ -163,9 +161,9 @@ final class GoogleMerchantService
      *
      * Mints a bearer token and issues a DELETE against the Merchant API v1
      * `productInputs` resource. The fully-qualified productInput name encodes the
-     * channel, content language, feed label, and offerId; this mirrors the values
-     * produced by {@see MerchantProduct::toProductInput()} (channel `online`, feed
-     * label `US`). Any 2xx HTTP status is treated as success.
+     * content language, feed label, and offerId (e.g. `en~US~prod-14`); this
+     * mirrors the values produced by {@see MerchantProduct::toProductInput()}
+     * (feed label `US`). Any 2xx HTTP status is treated as success.
      *
      * Never throws — same no-op-when-unconfigured and error-result contract as
      * {@see upsert()}.
@@ -196,13 +194,11 @@ final class GoogleMerchantService
         $merchantId = (string) Config::get('GOOGLE_MERCHANT_ID', '');
         $dataSource = rawurlencode((string) Config::get('GOOGLE_MERCHANT_DATASOURCE', ''));
 
-        // CONFIRM: Merchant API v1 productInput resource name format. Verify against
-        // the live Merchant API v1 reference when real credentials exist:
-        //   accounts/{account}/productInputs/{channel}~{contentLanguage}~{feedLabel}~{offerId}
-        // Here: channel = "online", feedLabel = "US" (matching MerchantProduct).
-        $name = "accounts/{$merchantId}/productInputs/online~{$lang}~US~{$offerId}";
+        // Verified live (2026-06-20): the productInput name is
+        // {contentLanguage}~{feedLabel}~{offerId} — there is NO channel segment in
+        // Merchant API v1, e.g. accounts/{account}/productInputs/en~US~prod-14.
+        $name = "accounts/{$merchantId}/productInputs/{$lang}~US~{$offerId}";
 
-        // CONFIRM: DELETE endpoint path + `dataSource` query param for v1:
         //   DELETE products/v1/{name}?dataSource={dataSource}
         $url = self::API_BASE . '/products/v1/' . $name . "?dataSource={$dataSource}";
 

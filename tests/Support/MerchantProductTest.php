@@ -113,7 +113,8 @@ class MerchantProductTest extends TestCase
     public function testConstantIdentityFields(): void
     {
         $result = MerchantProduct::toProductInput($this->makeProduct(), 'en', $this->cfg());
-        $this->assertSame('ONLINE', $result['channel']);
+        // Merchant API v1 has no top-level 'channel' field (it was a Content API concept).
+        $this->assertArrayNotHasKey('channel', $result);
         $this->assertSame('US', $result['feedLabel']);
     }
 
@@ -138,7 +139,7 @@ class MerchantProductTest extends TestCase
     public function testStaticAttributes(): void
     {
         $attrs = MerchantProduct::toProductInput($this->makeProduct(), 'en', $this->cfg())['productAttributes'];
-        $this->assertSame('in_stock', $attrs['availability']);
+        $this->assertSame('IN_STOCK', $attrs['availability']);
         $this->assertSame('new', $attrs['condition']);
         $this->assertSame("Perla's Flowers", $attrs['brand']);
         $this->assertSame('Home & Garden > Decor > Flowers', $attrs['googleProductCategory']);
