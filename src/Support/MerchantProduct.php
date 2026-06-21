@@ -75,7 +75,6 @@ final class MerchantProduct
      * ```
      * [
      *   'offerId'         => 'prod-{id}',     // stable across languages
-     *   'channel'         => 'ONLINE',
      *   'contentLanguage' => 'en' | 'es',
      *   'feedLabel'       => 'US',
      *   'productAttributes' => [
@@ -83,7 +82,7 @@ final class MerchantProduct
      *      'description'  => string,
      *      'link'         => string,         // {app_url}/{lang}/flowers/{slug-id}
      *      'imageLink'    => string,         // product image or placeholder
-     *      'availability' => 'in_stock',
+     *      'availability' => 'IN_STOCK',
      *      'condition'    => 'new',
      *      'brand'        => string,
      *      'googleProductCategory' => string,
@@ -118,13 +117,13 @@ final class MerchantProduct
      *   ];
      *   MerchantProduct::toProductInput($row, 'en', $cfg);
      *   // [
-     *   //   'offerId' => 'prod-12', 'channel' => 'ONLINE', 'contentLanguage' => 'en',
+     *   //   'offerId' => 'prod-12', 'contentLanguage' => 'en',
      *   //   'feedLabel' => 'US',
      *   //   'productAttributes' => [
      *   //     'title' => 'Whisper of Love', 'description' => 'A dozen red roses.',
      *   //     'link' => 'https://flowers.cresswell.org/en/flowers/whisper-of-love-12',
      *   //     'imageLink' => 'https://flowers.cresswell.org/public/uploads/products/abc123.jpg',
-     *   //     'availability' => 'in_stock', 'condition' => 'new', 'brand' => "Perla's Flowers",
+     *   //     'availability' => 'IN_STOCK', 'condition' => 'new', 'brand' => "Perla's Flowers",
      *   //     'googleProductCategory' => 'Home & Garden > Decor > Flowers',
      *   //     'identifierExists' => false,
      *   //     'price' => ['amountMicros' => '45000000', 'currencyCode' => 'USD'],
@@ -148,7 +147,6 @@ final class MerchantProduct
 
         return [
             'offerId'         => 'prod-' . (int) ($product['id'] ?? 0),
-            'channel'         => 'ONLINE',
             'contentLanguage' => $lang,
             'feedLabel'       => 'US',
             'productAttributes' => [
@@ -156,7 +154,7 @@ final class MerchantProduct
                 'description'           => $description,
                 'link'                  => $appUrl . '/' . $lang . '/flowers/' . Slug::productRef($product),
                 'imageLink'             => $imageLink,
-                'availability'          => 'in_stock',
+                'availability'          => 'IN_STOCK',
                 'condition'             => 'new',
                 'brand'                 => $brand,
                 'googleProductCategory' => (string) ($cfg['google_category'] ?? ''),

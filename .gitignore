@@ -4,6 +4,9 @@
 # Google service-account key — NEVER commit
 config/google-service-account.json
 *.service-account.json
+# Google downloads keys as <project-id>-<hash>.json; ignore any such key for this project
+perlas-flowers-*.json
+*.iam.gserviceaccount.com.json
 
 # Composer dependencies (installed on server via `composer install`)
 /vendor/
