@@ -149,19 +149,7 @@ final class QuotesController extends BaseController
         }
 
         // --- Customer resolution ---
-        $customerId   = (int) $request->post('customer_id', 0);
-        $customerName = strip_tags(trim((string) $request->post('customer_name', '')));
-        $customerEmail = trim((string) $request->post('customer_email', ''));
-        $customerPhone = trim((string) $request->post('customer_phone', ''));
-
-        if ($customerId === 0 && ($customerName !== '' || $customerEmail !== '' || $customerPhone !== '')) {
-            $customerId = Customer::upsert([
-                'name'   => $customerName !== '' ? $customerName : null,
-                'email'  => $customerEmail !== '' ? $customerEmail : null,
-                'phone'  => $customerPhone !== '' ? $customerPhone : null,
-                'source' => 'admin_quote',
-            ]);
-        }
+        $customerId = $this->resolveCustomerId($request);
 
         // --- Event and quote settings ---
         $eventDate  = trim((string) $request->post('event_date', ''));
@@ -298,8 +286,203 @@ final class QuotesController extends BaseController
     }
 
     // -------------------------------------------------------------------------
+    // GET /admin/quotes/{id}/edit — edit form
+    // -------------------------------------------------------------------------
+
+    /**
+     * Render the quote builder pre-filled for editing an existing quote.
+     *
+     * Loads the quote and 404s when not found. Quotes past the editable window
+     * ({@see Quote::isEditable()}) are refused with an error flash and a redirect
+     * to the detail page. Otherwise the shared {@see views/admin/quotes/builder}
+     * view is rendered in edit mode: items are decoded, the customer list is
+     * loaded for the selector, the validity window is recovered from the stored
+     * dates, and an $initialState blob seeds the Alpine component.
+     *
+     * @param Request              $request HTTP request.
+     * @param array<string,string> $params  Route parameters; expects 'id'.
+     *
+     * @return Response Rendered builder, a 404, or a redirect for locked quotes.
+     *
+     * @example
+     *   // GET /admin/quotes/12/edit
+     *   (new QuotesController())->editForm($request, ['id' => '12']);
+     */
+    public function editForm(Request $request, array $params = []): Response
+    {
+        $id    = (int) ($params['id'] ?? 0);
+        $quote = Quote::find($id);
+
+        if ($quote === null) {
+            return Response::html('<h1>Quote Not Found</h1>', 404);
+        }
+
+        if (!Quote::isEditable((string) $quote['status'])) {
+            $this->setFlash('error', 'This quote can no longer be edited.');
+            return $this->redirect('/admin/quotes/' . $id);
+        }
+
+        $items = QuoteService::decodeItems((string) $quote['items_json']);
+
+        $initialState = [
+            'customerId'    => (int) ($quote['customer_id'] ?? 0),
+            'customerName'  => (string) ($quote['customer_name']  ?? ''),
+            'customerEmail' => (string) ($quote['customer_email'] ?? ''),
+            'customerPhone' => (string) ($quote['customer_phone'] ?? ''),
+            'eventDate'     => (string) ($quote['event_date'] ?? ''),
+            'validDays'     => $this->validityDays($quote),
+            'depositPct'    => (int) $quote['deposit_pct'],
+            'notes'         => (string) ($quote['notes'] ?? ''),
+            'items'         => $items,
+        ];
+
+        return Response::html(
+            $this->render('admin/quotes/builder', [
+                'customers'    => Customer::all(),
+                'csrfToken'    => $request->csrfToken(),
+                'formAction'   => '/admin/quotes/' . $id . '/edit',
+                'submitLabel'  => 'Save Changes',
+                'initialState' => $initialState,
+                'pageTitle'    => 'Edit Quote #' . $id,
+            ], 'admin')
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /admin/quotes/{id}/edit — update
+    // -------------------------------------------------------------------------
+
+    /**
+     * Apply edits to an existing quote and redirect to its detail page.
+     *
+     * Validates CSRF, re-checks that the quote exists and is still editable
+     * (guarding against a status change between load and submit), then resolves
+     * the customer and rebuilds the line items the same way {@see create()} does.
+     * Requires at least one valid item. Persists via {@see Quote::update()},
+     * which recomputes the totals and refreshes the validity window. The quote's
+     * status and share token are left untouched.
+     *
+     * @param Request              $request HTTP request with POST body.
+     * @param array<string,string> $params  Route parameters; expects 'id'.
+     *
+     * @return Response Redirect to /admin/quotes/{id} on success, back to the
+     *         edit form on validation failure, or a redirect to detail when the
+     *         quote is no longer editable.
+     *
+     * @example
+     *   // POST /admin/quotes/12/edit
+     *   (new QuotesController())->update($request, ['id' => '12']);
+     */
+    public function update(Request $request, array $params = []): Response
+    {
+        $id = (int) ($params['id'] ?? 0);
+
+        if (!$request->validateCsrf()) {
+            $this->setFlash('error', 'Invalid security token. Please try again.');
+            return $this->redirect('/admin/quotes/' . $id . '/edit');
+        }
+
+        $quote = Quote::find($id);
+        if ($quote === null) {
+            return Response::html('<h1>Quote Not Found</h1>', 404);
+        }
+
+        if (!Quote::isEditable((string) $quote['status'])) {
+            $this->setFlash('error', 'This quote can no longer be edited.');
+            return $this->redirect('/admin/quotes/' . $id);
+        }
+
+        $items = $this->buildItems($request);
+        if ($items === []) {
+            $this->setFlash('error', 'Please add at least one item with a description and a price greater than zero.');
+            return $this->redirect('/admin/quotes/' . $id . '/edit');
+        }
+
+        $customerId = $this->resolveCustomerId($request);
+        $eventDate  = trim((string) $request->post('event_date', ''));
+        $notes      = trim((string) $request->post('notes', ''));
+
+        Quote::update($id, [
+            'customer_id' => $customerId > 0 ? $customerId : null,
+            'event_date'  => $eventDate !== '' ? $eventDate : null,
+            'items'       => $items,
+            'deposit_pct' => (int) $request->post('deposit_pct', 50),
+            'notes'       => $notes !== '' ? $notes : null,
+            'valid_days'  => (int) $request->post('valid_days', 14),
+        ]);
+
+        $this->setFlash('success', 'Quote updated successfully.');
+        return $this->redirect('/admin/quotes/' . $id);
+    }
+
+    // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Resolve the customer ID from the request, upserting a new customer when needed.
+     *
+     * Returns the posted customer_id when an existing customer is selected. When
+     * customer_id is 0 (new customer) and at least one of name/email/phone is
+     * supplied, upserts the customer via {@see Customer::upsert()} and returns
+     * the new ID. Returns 0 when no customer is selected and no details are given.
+     *
+     * @param Request $request The current HTTP request.
+     *
+     * @return int The resolved customer ID, or 0 when there is no customer.
+     *
+     * @example
+     *   $customerId = $this->resolveCustomerId($request); // 7, or 0 for none
+     */
+    private function resolveCustomerId(Request $request): int
+    {
+        $customerId    = (int) $request->post('customer_id', 0);
+        $customerName  = strip_tags(trim((string) $request->post('customer_name', '')));
+        $customerEmail = trim((string) $request->post('customer_email', ''));
+        $customerPhone = trim((string) $request->post('customer_phone', ''));
+
+        if ($customerId === 0 && ($customerName !== '' || $customerEmail !== '' || $customerPhone !== '')) {
+            $customerId = Customer::upsert([
+                'name'   => $customerName !== '' ? $customerName : null,
+                'email'  => $customerEmail !== '' ? $customerEmail : null,
+                'phone'  => $customerPhone !== '' ? $customerPhone : null,
+                'source' => 'admin_quote',
+            ]);
+        }
+
+        return $customerId;
+    }
+
+    /**
+     * Recover the original validity window (in days) from a stored quote.
+     *
+     * The quote stores `valid_until` (an absolute date) rather than the number
+     * of days chosen at creation, so this derives the span from `created_at` to
+     * `valid_until` and snaps it to the builder's allowed options (7, 14, 30),
+     * falling back to 14 when the value is missing or off-grid. This seeds the
+     * edit form's "Quote Valid For" selector sensibly.
+     *
+     * @param array<string,mixed> $quote A quote row with created_at and valid_until.
+     *
+     * @return int One of 7, 14, or 30.
+     *
+     * @example
+     *   $days = $this->validityDays($quote); // 14
+     */
+    private function validityDays(array $quote): int
+    {
+        $allowed = [7, 14, 30];
+        $created = strtotime((string) ($quote['created_at'] ?? ''));
+        $until   = strtotime((string) ($quote['valid_until'] ?? ''));
+
+        if ($created === false || $until === false || $until < $created) {
+            return 14;
+        }
+
+        $days = (int) round(($until - $created) / 86400);
+
+        return in_array($days, $allowed, true) ? $days : 14;
+    }
 
     /**
      * Build the validated items array from POST parallel arrays.

@@ -109,6 +109,11 @@ $statusLabel = static function (string $s): string {
             <div style="font-size:0.875rem; color:var(--color-muted)">
                 Deposit (<?= $depositPct ?>%): <strong>$<?= number_format($deposit, 2) ?></strong>
             </div>
+            <?php if (\App\Models\Quote::isEditable($status)): ?>
+            <div style="margin-top:0.75rem">
+                <a href="/admin/quotes/<?= $id ?>/edit" class="btn btn-sm btn-outline">Edit Quote</a>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>

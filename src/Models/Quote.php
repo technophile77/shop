@@ -39,6 +39,36 @@ final class Quote
     ];
 
     /**
+     * Statuses whose content (items, customer, deposit, notes, validity) may
+     * still be edited.
+     *
+     * Once a quote reaches `deposit_confirmed` or `completed`, money and the
+     * customer's lifetime spend are derived from the stored numbers, so editing
+     * would desync financial records; `cancelled` is terminal. Those are
+     * therefore excluded.
+     */
+    public const EDITABLE_STATUSES = ['draft', 'sent', 'accepted'];
+
+    /**
+     * Whether a quote in the given status may be edited.
+     *
+     * Pure helper (no DB) used by both the controller guard and the admin view
+     * to decide whether to expose the Edit action.
+     *
+     * @param string $status A quote status; need not be a valid status.
+     *
+     * @return bool True only for statuses in {@see self::EDITABLE_STATUSES}.
+     *
+     * @example
+     *   Quote::isEditable('sent');       // true
+     *   Quote::isEditable('completed');  // false
+     */
+    public static function isEditable(string $status): bool
+    {
+        return in_array($status, self::EDITABLE_STATUSES, true);
+    }
+
+    /**
      * Allowed forward transitions: status → next allowed status.
      *
      * 'cancelled' is handled separately (any non-completed quote may cancel).
@@ -144,6 +174,82 @@ final class Quote
         ]);
 
         return (int) Database::rw()->lastInsertId();
+    }
+
+    /**
+     * Updates an existing quote's editable content and recomputes its totals.
+     *
+     * Recalculates `subtotal`, `deposit_amount`, and `tax_amount` from the
+     * supplied items and `deposit_pct` exactly as {@see create()} does, and
+     * refreshes `valid_until` to today + `valid_days` (so an edit re-arms the
+     * quote's validity window). Does **not** change `status`, `token`, or any
+     * lifecycle timestamp — callers should restrict this to editable statuses
+     * via {@see isEditable()}.
+     *
+     * @param int                  $id   The quote ID to update.
+     * @param array<string, mixed> $data Recognised keys match {@see create()}:
+     *        customer_id (int|null), event_date (string|null), items (array),
+     *        deposit_pct (int), notes (string|null), valid_days (int).
+     *
+     * @return void
+     *
+     * @example
+     *   Quote::update(12, [
+     *       'customer_id' => 7,
+     *       'event_date'  => '2026-09-01',
+     *       'items'       => [['description' => 'Bouquet', 'qty' => 3, 'unit_price' => 60.0]],
+     *       'deposit_pct' => 50,
+     *       'notes'       => 'Updated colour scheme.',
+     *       'valid_days'  => 14,
+     *   ]);
+     */
+    public static function update(int $id, array $data): void
+    {
+        $depositPct = (int) ($data['deposit_pct'] ?? 50);
+        $validDays  = (int) ($data['valid_days']  ?? 14);
+        $items      = $data['items'] ?? [];
+
+        $subtotal = array_reduce(
+            $items,
+            static fn (float $carry, array $item): float =>
+                $carry + ((float) $item['unit_price'] * (int) $item['qty']),
+            0.0
+        );
+
+        $depositAmount = $subtotal * ($depositPct / 100);
+        $validUntil    = date('Y-m-d', strtotime("+{$validDays} days"));
+
+        $taxRate   = (float) Config::get('BUSINESS_SALES_TAX_RATE', 0.0);
+        $taxAmount = round($subtotal * $taxRate, 2);
+
+        $stmt = Database::rw()->prepare(
+            'UPDATE quotes SET
+                customer_id    = :customer_id,
+                event_date     = :event_date,
+                items_json     = :items_json,
+                subtotal       = :subtotal,
+                deposit_pct    = :deposit_pct,
+                tax_rate       = :tax_rate,
+                tax_amount     = :tax_amount,
+                deposit_amount = :deposit_amount,
+                notes          = :notes,
+                valid_until    = :valid_until
+             WHERE id = :id'
+        );
+
+        $stmt->execute([
+            ':customer_id'    => $data['customer_id'] ?? null,
+            ':event_date'     => $data['event_date']  ?? null,
+            ':items_json'     => json_encode($items, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            ':subtotal'       => $subtotal,
+            ':deposit_pct'    => $depositPct,
+            ':tax_rate'       => $taxRate,
+            ':tax_amount'     => $taxAmount,
+            ':deposit_amount' => $depositAmount,
+            ':notes'          => $data['notes'] ?? null,
+            ':valid_until'    => $validUntil,
+            ':id'             => $id,
+        ]);
     }
 
     /**
