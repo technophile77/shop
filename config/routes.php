@@ -133,6 +133,8 @@ return [
     ['GET',  '/admin/quotes/new',           'Admin\QuotesController',      'newForm',         ['auth']],
     ['POST', '/admin/quotes',               'Admin\QuotesController',      'create',          ['auth']],
     ['GET',  '/admin/quotes/{id}',          'Admin\QuotesController',      'show',            ['auth']],
+    ['GET',  '/admin/quotes/{id}/edit',     'Admin\QuotesController',      'editForm',        ['auth']],
+    ['POST', '/admin/quotes/{id}/edit',     'Admin\QuotesController',      'update',          ['auth']],
     ['POST', '/admin/quotes/{id}/status',   'Admin\QuotesController',      'updateStatus',    ['auth']],
 
     // Customers

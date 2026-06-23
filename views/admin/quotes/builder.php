@@ -7,21 +7,38 @@
  *   string $csrfToken  CSRF token for the POST form.
  *   string $pageTitle  Page title string.
  *
- * The form submits to POST /admin/quotes. Items are sent as parallel arrays:
+ * The form submits to $formAction (POST). Items are sent as parallel arrays:
  * item_description[], item_qty[], item_unit_price[]. Customer fields are sent
  * as hidden inputs so Alpine x-model changes are captured on submission.
  *
+ * Shared by the new-quote and edit-quote flows. Optional variables:
+ *   string $formAction    POST target. Default '/admin/quotes' (create).
+ *   string $submitLabel   Submit button text. Default 'Generate Quote & Get Link'.
+ *   array  $initialState  Seed for the Alpine component (edit mode pre-fill).
+ *                         Keys: customerId, customerName, customerEmail,
+ *                         customerPhone, eventDate, validDays, depositPct,
+ *                         notes, items[]. Defaults to an empty new-quote state.
+ *
  * @see \App\Controllers\Admin\QuotesController::newForm()
  * @see \App\Controllers\Admin\QuotesController::create()
+ * @see \App\Controllers\Admin\QuotesController::editForm()
+ * @see \App\Controllers\Admin\QuotesController::update()
  */
 
 /** @var array<int, array<string, mixed>> $customers */
 /** @var string $csrfToken */
+/** @var string $formAction */
+/** @var string $submitLabel */
+/** @var array<string, mixed> $initialState */
+
+$formAction   = $formAction   ?? '/admin/quotes';
+$submitLabel  = $submitLabel  ?? 'Generate Quote & Get Link';
+$initialState = $initialState ?? [];
 ?>
 
-<form method="POST" action="/admin/quotes">
+<form method="POST" action="<?= htmlspecialchars($formAction) ?>">
 
-<div class="admin-card" x-data="quoteBuilder()" style="max-width:900px">
+<div class="admin-card" x-data="quoteBuilder(<?= htmlspecialchars(json_encode($initialState, JSON_THROW_ON_ERROR), ENT_QUOTES) ?>)" style="max-width:900px">
 
     <!-- ============================================================
          Customer section
@@ -214,7 +231,7 @@
         <button type="submit"
                 class="btn btn-accent btn-lg"
                 :disabled="items.length === 0 || subtotal === 0">
-            Generate Quote &amp; Get Link
+            <?= htmlspecialchars($submitLabel) ?>
         </button>
         <a href="/admin/quotes" class="btn btn-outline">Cancel</a>
         <span x-show="subtotal === 0"
@@ -233,29 +250,35 @@
  *
  * Manages customer selection, line-item CRUD, deposit calculation, and syncs
  * all reactive state back into the hidden form inputs so a plain HTML POST
- * carries the correct data.
+ * carries the correct data. An optional `initial` object pre-fills the form for
+ * edit mode; any omitted key falls back to the new-quote default.
  *
+ * @param {object} [initial] Seed state: customerId, customerName, customerEmail,
+ *   customerPhone, eventDate, validDays, depositPct, notes, items[].
  * @returns {object} Alpine component data and methods.
  */
-function quoteBuilder() {
+function quoteBuilder(initial) {
+    initial = initial || {};
+    var seededItems = Array.isArray(initial.items) ? initial.items : [];
+
     return {
         /** Selected customer ID; 0 means "new customer". */
-        customerId: 0,
-        customerName: '',
-        customerEmail: '',
-        customerPhone: '',
+        customerId: initial.customerId || 0,
+        customerName: initial.customerName || '',
+        customerEmail: initial.customerEmail || '',
+        customerPhone: initial.customerPhone || '',
 
-        eventDate: '',
+        eventDate: initial.eventDate || '',
         /** Number of days the quote remains valid. */
-        validDays: 14,
+        validDays: initial.validDays || 14,
         /** Deposit percentage (25 | 50 | 75 | 100). */
-        depositPct: 50,
+        depositPct: initial.depositPct || 50,
         /** Sales tax rate from server config, e.g. 0.08517. */
         taxRate: <?= (float) \App\Core\Config::get('BUSINESS_SALES_TAX_RATE', 0) ?>,
-        notes: '',
+        notes: initial.notes || '',
 
-        /** Line-item list; always starts with one blank row. */
-        items: [{ description: '', qty: 1, unit_price: 0 }],
+        /** Line-item list; always starts with at least one row. */
+        items: seededItems.length > 0 ? seededItems : [{ description: '', qty: 1, unit_price: 0 }],
 
         /**
          * Sum of (qty × unit_price) for all items.
