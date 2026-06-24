@@ -813,6 +813,10 @@ select {
   margin-left: auto;
   margin-right: auto;
   background-color: #fff;
+  /* Explicit dark text so card content isn't left inheriting the light color
+     from the surrounding .section--dark (which made line-item rows render
+     white-on-white). The dark header/deposit panels set their own light color. */
+  color: var(--color-text-dark);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
