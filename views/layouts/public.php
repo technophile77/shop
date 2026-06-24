@@ -83,7 +83,13 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     }
     </style>
 
-    <link rel="stylesheet" href="/public/assets/css/main.css">
+    <?php
+    // Cache-bust the stylesheet by file mtime so deploys are picked up
+    // immediately (the asset is served with no Cache-Control, so browsers
+    // would otherwise serve a stale copy from heuristic cache).
+    $mainCssVer = @filemtime(dirname(__DIR__, 2) . '/public/assets/css/main.css') ?: date('Ymd');
+    ?>
+    <link rel="stylesheet" href="/public/assets/css/main.css?v=<?= htmlspecialchars((string) $mainCssVer) ?>">
 
     <?php if (\App\Core\Config::get('GA4_MEASUREMENT_ID')): ?>
     <!-- Google Analytics 4 -->
