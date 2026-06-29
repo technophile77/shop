@@ -85,6 +85,8 @@ return [
     'quote.subtotal'             => 'Subtotal',
     'quote.deposit_label'        => 'Deposit Required',
     'quote.deposit_note'         => 'A deposit is required to confirm your order.',
+    'quote.paid_in_full'         => 'Paid in full',
+    'quote.deposit_breakdown'    => 'Includes {full} for items paid in full, plus {pct}% of the remaining {rest}.',
     'quote.accept_button'        => 'Accept This Quote',
     'quote.payment_title'        => 'Send Your Deposit',
     'quote.payment_instructions' => 'Please send {amount} to confirm your order:',

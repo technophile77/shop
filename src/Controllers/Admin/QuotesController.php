@@ -487,19 +487,20 @@ final class QuotesController extends BaseController
     /**
      * Build the validated items array from POST parallel arrays.
      *
-     * Reads item_description[], item_qty[], and item_unit_price[] from the
-     * request. Rows where the description is blank or the unit_price is zero
-     * or below are silently skipped; the remaining rows are returned as a
-     * typed array ready for {@see Quote::create()}.
+     * Reads item_description[], item_qty[], item_unit_price[], and
+     * item_full_deposit[] from the request. Rows where the description is blank
+     * or the unit_price is zero or below are silently skipped; the remaining
+     * rows are returned as a typed array ready for {@see Quote::create()}. The
+     * full_deposit flag marks a line that must be paid in full upfront.
      *
      * @param Request $request The current HTTP request.
      *
-     * @return array<int, array{description: string, qty: int, unit_price: float}>
+     * @return array<int, array{description: string, qty: int, unit_price: float, full_deposit: bool}>
      *         Validated, non-empty line items.
      *
      * @example
      *   $items = $this->buildItems($request);
-     *   // [['description' => 'Red Rose Bouquet', 'qty' => 2, 'unit_price' => 45.00]]
+     *   // [['description' => 'Red Rose Bouquet', 'qty' => 2, 'unit_price' => 45.00, 'full_deposit' => false]]
      */
     private function buildItems(Request $request): array
     {
@@ -509,6 +510,8 @@ final class QuotesController extends BaseController
         $qtys         = (array) ($request->post('item_qty') ?? []);
         /** @var list<string> $prices */
         $prices       = (array) ($request->post('item_unit_price') ?? []);
+        /** @var list<string> $fullDeposits */
+        $fullDeposits = (array) ($request->post('item_full_deposit') ?? []);
 
         $items = [];
         $count = count($descriptions);
@@ -523,9 +526,10 @@ final class QuotesController extends BaseController
             }
 
             $items[] = [
-                'description' => $description,
-                'qty'         => $qty,
-                'unit_price'  => $unitPrice,
+                'description'  => $description,
+                'qty'          => $qty,
+                'unit_price'   => $unitPrice,
+                'full_deposit' => (bool) ((int) ($fullDeposits[$i] ?? 0)),
             ];
         }
 

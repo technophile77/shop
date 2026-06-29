@@ -85,6 +85,8 @@ return [
     'quote.subtotal'             => 'Subtotal',
     'quote.deposit_label'        => 'Depósito Requerido',
     'quote.deposit_note'         => 'Se requiere un depósito para confirmar tu pedido.',
+    'quote.paid_in_full'         => 'Pago completo',
+    'quote.deposit_breakdown'    => 'Incluye {full} de artículos con pago completo, más {pct}% del resto ({rest}).',
     'quote.accept_button'        => 'Aceptar Esta Cotización',
     'quote.payment_title'        => 'Envía Tu Depósito',
     'quote.payment_instructions' => 'Por favor envía {amount} para confirmar tu pedido:',

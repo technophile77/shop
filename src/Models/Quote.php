@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Core\Database;
 use App\Core\Config;
+use App\Services\QuoteService;
 
 /**
  * Represents a custom-quote record in the `quotes` table.
@@ -99,14 +100,16 @@ final class Quote
      * Creates a new quote and returns its auto-increment ID.
      *
      * Generates a 64-character hex token for the public share URL. Computes
-     * `subtotal` from the item list and derives `deposit_amount` from
-     * `deposit_pct`. Stores items as a JSON blob. Sets `valid_until` to
-     * today + `valid_days` days.
+     * `subtotal` from the item list and derives `deposit_amount` via
+     * {@see QuoteService::calculateDeposit()} (items flagged `full_deposit` are
+     * charged in full, the rest at `deposit_pct`). Stores items as a JSON blob.
+     * Sets `valid_until` to today + `valid_days` days.
      *
      * @param array<string, mixed> $data Recognised keys:
      *        - customer_id (int|null): linked customer; may be null for drafts.
      *        - event_date (string|null): ISO date of the event, e.g. '2026-09-01'.
-     *        - items (array): each element has keys description, qty, unit_price.
+     *        - items (array): each element has keys description, qty, unit_price,
+     *          and an optional bool full_deposit (true ⇒ this line is due in full).
      *        - deposit_pct (int): percentage of subtotal required as deposit; default 50.
      *        - tax_rate (float): sales tax rate applied; read from BUSINESS_SALES_TAX_RATE config.
      *        - tax_amount (float): computed tax on the subtotal; stored for display.
@@ -141,7 +144,7 @@ final class Quote
             0.0
         );
 
-        $depositAmount = $subtotal * ($depositPct / 100);
+        $depositAmount = QuoteService::calculateDeposit($items, $depositPct);
         $validUntil    = date('Y-m-d', strtotime("+{$validDays} days"));
 
         $taxRate   = (float) Config::get('BUSINESS_SALES_TAX_RATE', 0.0);
@@ -216,7 +219,7 @@ final class Quote
             0.0
         );
 
-        $depositAmount = $subtotal * ($depositPct / 100);
+        $depositAmount = QuoteService::calculateDeposit($items, $depositPct);
         $validUntil    = date('Y-m-d', strtotime("+{$validDays} days"));
 
         $taxRate   = (float) Config::get('BUSINESS_SALES_TAX_RATE', 0.0);
