@@ -8,8 +8,9 @@
  *   string $pageTitle  Page title string.
  *
  * The form submits to $formAction (POST). Items are sent as parallel arrays:
- * item_description[], item_qty[], item_unit_price[]. Customer fields are sent
- * as hidden inputs so Alpine x-model changes are captured on submission.
+ * item_description[], item_qty[], item_unit_price[], item_full_deposit[] (0/1
+ * per row, marking lines that must be paid in full upfront). Customer fields
+ * are sent as hidden inputs so Alpine x-model changes are captured on submission.
  *
  * Shared by the new-quote and edit-quote flows. Optional variables:
  *   string $formAction    POST target. Default '/admin/quotes' (create).
@@ -122,6 +123,7 @@ $initialState = $initialState ?? [];
                 <th>Description</th>
                 <th style="width:80px; text-align:center">Qty</th>
                 <th style="width:130px; text-align:right">Unit Price</th>
+                <th style="width:110px; text-align:center" title="Require this item to be paid in full upfront">100% Deposit</th>
                 <th style="width:120px; text-align:right">Total</th>
                 <th style="width:40px"></th>
             </tr>
@@ -152,6 +154,15 @@ $initialState = $initialState ?? [];
                                    min="0" step="0.01" placeholder="0.00"
                                    style="border:none; background:transparent; width:80px; text-align:right; padding:0.25rem">
                         </div>
+                    </td>
+                    <td style="text-align:center">
+                        <!-- Visible toggle (no name); the hidden input below carries
+                             one 0/1 value per row so indices stay aligned on POST. -->
+                        <input type="checkbox" x-model="item.full_deposit"
+                               style="width:18px; height:18px; cursor:pointer"
+                               title="Charge this line in full as part of the deposit">
+                        <input type="hidden" :name="'item_full_deposit[]'"
+                               :value="item.full_deposit ? 1 : 0">
                     </td>
                     <td style="text-align:right">
                         <strong x-text="'$' + (item.qty * item.unit_price).toFixed(2)"></strong>
@@ -278,7 +289,7 @@ function quoteBuilder(initial) {
         notes: initial.notes || '',
 
         /** Line-item list; always starts with at least one row. */
-        items: seededItems.length > 0 ? seededItems : [{ description: '', qty: 1, unit_price: 0 }],
+        items: seededItems.length > 0 ? seededItems : [{ description: '', qty: 1, unit_price: 0, full_deposit: false }],
 
         /**
          * Sum of (qty × unit_price) for all items.
@@ -291,11 +302,18 @@ function quoteBuilder(initial) {
         },
 
         /**
-         * Deposit amount in dollars based on depositPct.
+         * Deposit amount in dollars. Items flagged full_deposit are counted in
+         * full; the remaining items contribute depositPct percent of their
+         * total. Mirrors QuoteService::calculateDeposit() on the server.
          * @returns {number}
          */
         get deposit() {
-            return this.subtotal * (this.depositPct / 100);
+            var full = 0, rest = 0;
+            this.items.forEach(function (item) {
+                var line = (Number(item.qty) || 0) * (Number(item.unit_price) || 0);
+                if (item.full_deposit) { full += line; } else { rest += line; }
+            });
+            return full + rest * (this.depositPct / 100);
         },
 
         /**
@@ -316,7 +334,7 @@ function quoteBuilder(initial) {
 
         /** Append a blank line item to the table. */
         addItem() {
-            this.items.push({ description: '', qty: 1, unit_price: 0 });
+            this.items.push({ description: '', qty: 1, unit_price: 0, full_deposit: false });
         },
 
         /**

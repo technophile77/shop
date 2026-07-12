@@ -67,6 +67,18 @@ use App\Core\Config;
       $taxRate    = (float) ($quote['tax_rate']   ?? 0.0);
       $taxAmount  = (float) ($quote['tax_amount'] ?? 0.0);
       $quoteTotal = (float) $quote['subtotal'] + $taxAmount;
+
+      // Deposit breakdown: items flagged full_deposit are charged in full; the
+      // remainder follows deposit_pct. Used to explain the deposit total below.
+      $fullDepositTotal = 0.0;
+      foreach ($items as $itm) {
+          if (!empty($itm['full_deposit'])) {
+              $fullDepositTotal += (float) $itm['unit_price'] * (int) $itm['qty'];
+          }
+      }
+      $hasFullDepositItems  = $fullDepositTotal > 0;
+      $depositRemainingBase = (float) $quote['subtotal'] - $fullDepositTotal;
+      $depositPct           = (int) ($quote['deposit_pct'] ?? 0);
       ?>
 
       <!-- ─── Always-visible quote summary ─────────────────────────────────── -->
@@ -83,7 +95,12 @@ use App\Core\Config;
           <tbody>
             <?php foreach ($items as $item): ?>
             <tr>
-              <td><?= htmlspecialchars((string) $item['description']) ?></td>
+              <td>
+                <?= htmlspecialchars((string) $item['description']) ?>
+                <?php if (!empty($item['full_deposit'])): ?>
+                <span style="display:inline-block; margin-left:0.4rem; padding:0.1rem 0.5rem; font-size:0.68rem; font-weight:600; color:var(--color-primary); background:#f3e8f1; border-radius:999px; white-space:nowrap"><?= htmlspecialchars(__t('quote.paid_in_full')) ?></span>
+                <?php endif; ?>
+              </td>
               <td style="text-align:center"><?= (int) $item['qty'] ?></td>
               <td style="text-align:right">$<?= number_format((float) $item['unit_price'], 2) ?></td>
               <td style="text-align:right">$<?= number_format((float) $item['qty'] * (float) $item['unit_price'], 2) ?></td>
@@ -137,6 +154,15 @@ use App\Core\Config;
           <div style="font-family:'Cormorant Garamond',serif; font-size:3rem; color:var(--color-accent); margin:0.5rem 0">
             $<?= number_format((float) $quote['deposit_amount'], 2) ?>
           </div>
+          <?php if ($hasFullDepositItems): ?>
+          <p style="color:rgba(255,255,255,0.6); font-size:0.85rem; max-width:420px; margin:0 auto">
+            <?= htmlspecialchars(strtr(__t('quote.deposit_breakdown'), [
+                '{full}' => '$' . number_format($fullDepositTotal, 2),
+                '{pct}'  => (string) $depositPct,
+                '{rest}' => '$' . number_format($depositRemainingBase, 2),
+            ])) ?>
+          </p>
+          <?php endif; ?>
           <p style="color:rgba(255,255,255,0.6); font-size:0.9rem"><?= htmlspecialchars(__t('quote.deposit_note')) ?></p>
 
           <?php if ($quote['status'] === 'sent'): ?>

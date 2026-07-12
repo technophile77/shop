@@ -55,8 +55,10 @@ final class QuoteService
      *                          An empty string or the literal string 'null' returns
      *                          an empty array without throwing.
      *
-     * @return array<int, array{description: string, qty: int, unit_price: float}>
-     *         Decoded and type-coerced item list.
+     * @return array<int, array{description: string, qty: int, unit_price: float, full_deposit: bool}>
+     *         Decoded and type-coerced item list. `full_deposit` marks a line
+     *         that must be paid in full upfront; it defaults to false for older
+     *         quotes whose JSON predates the flag.
      *
      * @throws \JsonException When $itemsJson is non-empty but not valid JSON.
      *
@@ -81,9 +83,10 @@ final class QuoteService
 
         return array_map(
             static fn (mixed $item): array => [
-                'description' => (string) ($item['description'] ?? ''),
-                'qty'         => (int)    ($item['qty']         ?? 0),
-                'unit_price'  => (float)  ($item['unit_price']  ?? 0.0),
+                'description'  => (string) ($item['description'] ?? ''),
+                'qty'          => (int)    ($item['qty']         ?? 0),
+                'unit_price'   => (float)  ($item['unit_price']  ?? 0.0),
+                'full_deposit' => (bool)   ($item['full_deposit'] ?? false),
             ],
             $decoded
         );
@@ -111,6 +114,49 @@ final class QuoteService
                 $carry + ($item['unit_price'] * $item['qty']),
             0.0
         );
+    }
+
+    /**
+     * Calculates the deposit due from a decoded items array.
+     *
+     * Line items flagged `full_deposit` must be paid in full upfront, so their
+     * whole line total counts toward the deposit; every other item contributes
+     * only $depositPct percent of its line total. The result is therefore:
+     *
+     *   deposit = Σ(flagged line totals) + depositPct% × Σ(unflagged line totals)
+     *
+     * When no item is flagged this reduces to the plain `subtotal × pct/100`.
+     * Missing `full_deposit` keys are treated as false (not a full-deposit item).
+     *
+     * @param array<int, array{qty: int|float, unit_price: int|float, full_deposit?: bool}> $items
+     *        Decoded items as returned by {@see decodeItems()}.
+     * @param int $depositPct Deposit percentage (0–100) applied to unflagged items.
+     *
+     * @return float The deposit amount in dollars, rounded to 2 decimal places.
+     *
+     * @example
+     *   // $50 item flagged full, $100 item at 50% → 50 + 50 = 100.00
+     *   QuoteService::calculateDeposit([
+     *       ['qty' => 1, 'unit_price' => 50.0, 'full_deposit' => true],
+     *       ['qty' => 1, 'unit_price' => 100.0, 'full_deposit' => false],
+     *   ], 50); // 100.00
+     */
+    public static function calculateDeposit(array $items, int $depositPct): float
+    {
+        $fullTotal      = 0.0;
+        $remainingTotal = 0.0;
+
+        foreach ($items as $item) {
+            $lineTotal = (float) $item['unit_price'] * (int) $item['qty'];
+
+            if (!empty($item['full_deposit'])) {
+                $fullTotal += $lineTotal;
+            } else {
+                $remainingTotal += $lineTotal;
+            }
+        }
+
+        return round($fullTotal + $remainingTotal * ($depositPct / 100), 2);
     }
 
     /**

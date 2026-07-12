@@ -144,6 +144,31 @@ final class Order
     }
 
     /**
+     * Links an order to the quote prepared in response to it.
+     *
+     * Sets the `quote_id` foreign key so the bouquet request and the draft quote
+     * built from it are connected. Called right after the quote is created at
+     * form-submission time; mirrors {@see setStripeCheckoutSession()} in writing
+     * a single correlation column on the read-write connection.
+     *
+     * @param int $id      The order ID.
+     * @param int $quoteId The quote ID to associate with this order.
+     *
+     * @return void
+     *
+     * @example
+     *   $quoteId = Quote::create([...]);
+     *   Order::setQuoteId($orderId, $quoteId);
+     */
+    public static function setQuoteId(int $id, int $quoteId): void
+    {
+        $stmt = Database::rw()->prepare(
+            'UPDATE orders SET quote_id = ? WHERE id = ?'
+        );
+        $stmt->execute([$quoteId, $id]);
+    }
+
+    /**
      * Creates a new shop-cart checkout order and returns its auto-increment ID.
      *
      * Populates both the existing quote-request columns and the new Phase-4

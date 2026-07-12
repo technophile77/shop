@@ -91,14 +91,26 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     ?>
     <link rel="stylesheet" href="/public/assets/css/main.css?v=<?= htmlspecialchars((string) $mainCssVer) ?>">
 
-    <?php if (\App\Core\Config::get('GA4_MEASUREMENT_ID')): ?>
-    <!-- Google Analytics 4 -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=<?= htmlspecialchars(\App\Core\Config::get('GA4_MEASUREMENT_ID')) ?>"></script>
+    <?php
+    // Hoisted here (rather than down in the event-loop setup below) because the
+    // gtag loader needs both ids before the event loop does; the event loop
+    // reuses these same variables instead of recomputing them.
+    $__ga4Id = (string) \App\Core\Config::get('GA4_MEASUREMENT_ID', '');
+    $__adsId = (string) \App\Core\Config::get('GOOGLE_ADS_ID', '');
+    ?>
+    <?php if ($__ga4Id !== '' || $__adsId !== ''): ?>
+    <!-- Google gtag.js: loaded ONCE regardless of how many of GA4/Ads are configured. -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=<?= htmlspecialchars($__ga4Id !== '' ? $__ga4Id : $__adsId) ?>"></script>
     <script>
     window.dataLayer = window.dataLayer || [];
     function gtag() { dataLayer.push(arguments); }
     gtag('js', new Date());
-    gtag('config', '<?= htmlspecialchars(\App\Core\Config::get('GA4_MEASUREMENT_ID')) ?>');
+    <?php if ($__ga4Id !== ''): ?>
+    gtag('config', '<?= htmlspecialchars($__ga4Id) ?>');
+    <?php endif; ?>
+    <?php if ($__adsId !== ''): ?>
+    gtag('config', '<?= htmlspecialchars($__adsId) ?>');
+    <?php endif; ?>
     </script>
     <?php endif; ?>
 
@@ -122,9 +134,13 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     // Ecommerce funnel events (view_item, add_to_cart, begin_checkout, purchase).
     // Page-scoped events arrive via $analyticsEvents; events fired right before a
     // redirect (e.g. add_to_cart) arrive via the one-time session queue. Both are
-    // normalized App\Support\Analytics specs.
-    $__ga4Id    = (string) \App\Core\Config::get('GA4_MEASUREMENT_ID', '');
-    $__pixelId  = (string) \App\Core\Config::get('META_PIXEL_ID', '');
+    // normalized App\Support\Analytics specs. ($__ga4Id / $__adsId are computed
+    // above, next to the gtag loader, and reused here.)
+    $__pixelId   = (string) \App\Core\Config::get('META_PIXEL_ID', '');
+    $__adsLabels = [
+        'purchase' => (string) \App\Core\Config::get('GOOGLE_ADS_PURCHASE_LABEL', ''),
+        'lead'     => (string) \App\Core\Config::get('GOOGLE_ADS_LEAD_LABEL', ''),
+    ];
     $__events   = $analyticsEvents ?? [];
     if (!empty($_SESSION['analytics_pending']) && is_array($_SESSION['analytics_pending'])) {
         $__events = array_merge($__events, $_SESSION['analytics_pending']);
@@ -132,7 +148,7 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     }
     $__jsonFlags = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE;
     ?>
-    <?php if ($__events !== [] && ($__ga4Id !== '' || $__pixelId !== '')): ?>
+    <?php if ($__events !== [] && ($__ga4Id !== '' || $__pixelId !== '' || $__adsId !== '')): ?>
     <script>
     <?php foreach ($__events as $__ev): ?>
     <?php if ($__ga4Id !== '' && !empty($__ev['ga4'])): ?>
@@ -141,7 +157,37 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     <?php if ($__pixelId !== '' && !empty($__ev['pixel'])): ?>
     if (typeof fbq === 'function') fbq('track', <?= json_encode($__ev['pixel']['event'], $__jsonFlags) ?>, <?= json_encode($__ev['pixel']['params'], $__jsonFlags) ?>);
     <?php endif; ?>
+    <?php $__adsLabel = $__adsId !== '' && !empty($__ev['ads']) ? ($__adsLabels[$__ev['ads']['conversion']] ?? '') : ''; ?>
+    <?php if ($__adsLabel !== ''): ?>
+    if (typeof gtag === 'function') gtag('event', 'conversion', <?= json_encode(['send_to' => $__adsId . '/' . $__adsLabel] + $__ev['ads']['params'], $__jsonFlags) ?>);
+    <?php endif; ?>
     <?php endforeach; ?>
+    </script>
+    <?php endif; ?>
+
+    <?php
+    // The bouquet-request form submits via AJAX (see views/public/order.php),
+    // so there is no server-rendered "thank you" page load to hang a lead
+    // conversion off. Instead we expose a one-shot JS hook the form calls
+    // directly from its success handler. Fire-once guarded, since a double
+    // submit (e.g. a slow network retry) must not double-count the conversion.
+    $__leadSpec = \App\Support\Analytics::lead();
+    ?>
+    <?php if ($__ga4Id !== '' || $__pixelId !== '' || $__adsId !== ''): ?>
+    <script>
+    window.pfTrackLead = function () {
+        if (window.__pfLeadFired) return;
+        window.__pfLeadFired = true;
+        <?php if ($__ga4Id !== ''): ?>
+        if (typeof gtag === 'function') gtag('event', <?= json_encode($__leadSpec['ga4']['name'], $__jsonFlags) ?>, <?= json_encode($__leadSpec['ga4']['params'], $__jsonFlags) ?>);
+        <?php endif; ?>
+        <?php if ($__adsId !== '' && $__adsLabels['lead'] !== ''): ?>
+        if (typeof gtag === 'function') gtag('event', 'conversion', <?= json_encode(['send_to' => $__adsId . '/' . $__adsLabels['lead']] + $__leadSpec['ads']['params'], $__jsonFlags) ?>);
+        <?php endif; ?>
+        <?php if ($__pixelId !== ''): ?>
+        if (typeof fbq === 'function') fbq('track', <?= json_encode($__leadSpec['pixel']['event'], $__jsonFlags) ?>, <?= json_encode($__leadSpec['pixel']['params'], $__jsonFlags) ?>);
+        <?php endif; ?>
+    };
     </script>
     <?php endif; ?>
 

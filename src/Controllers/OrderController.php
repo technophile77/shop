@@ -12,7 +12,9 @@ use App\Core\Settings;
 use App\Models\Customer;
 use App\Models\Addon;
 use App\Models\Order;
+use App\Models\Quote;
 use App\Services\MailService;
+use App\Support\QuoteDraft;
 
 /**
  * Handles the public custom bouquet request form.
@@ -157,7 +159,7 @@ final class OrderController extends BaseController
         ]);
 
         // Create the order.
-        Order::create([
+        $orderId = Order::create([
             'customer_id'       => $customerId,
             'event_date'        => $eventDate !== '' ? $eventDate : null,
             'delivery_type'     => $deliveryType,
@@ -171,17 +173,142 @@ final class OrderController extends BaseController
             'addons'            => $addons !== [] ? json_encode($addons) : null,
         ]);
 
+        // Pre-build a draft quote from the request so the owner can review and
+        // send pricing in one click instead of re-keying everything.
+        $quoteId = $this->createDraftQuoteForOrder(
+            $orderId, $customerId,
+            [
+                'event_date'        => $eventDate !== '' ? $eventDate : null,
+                'occasion'          => $occasion,
+                'arrangement_style' => $arrangementStyle,
+                'color_preferences' => $colorPreferences,
+                'budget_range'      => $budgetRange,
+                'notes'             => $notes,
+                'delivery_type'     => $deliveryType,
+                'delivery_address'  => $deliveryType === 'delivery' ? $deliveryAddress : '',
+                'delivery_fee'      => $deliveryType === 'delivery' ? $deliveryFee : null,
+            ],
+            $addons,
+        );
+
         $this->sendOrderNotification(
             $name, $email, $phone, $eventDate,
             $occasion, $arrangementStyle, $colorPreferences, $budgetRange, $notes,
             $deliveryType, $deliveryAddress, $deliveryFee,
-            $addons
+            $addons, $quoteId
         );
 
         return Response::json([
             'success' => true,
             'message' => __t('order.success'),
         ]);
+    }
+
+    /**
+     * Build and persist a draft quote pre-filled from a bouquet request.
+     *
+     * Resolves each selected add-on to its catalogue price via {@see Addon::find()},
+     * maps the request into line items and notes through {@see QuoteDraft}, creates
+     * the quote in `draft` status (the owner reviews/sends it), and links it back
+     * to the order via {@see Order::setQuoteId()}. The bouquet line is seeded at
+     * the midpoint of the stated budget range.
+     *
+     * Best-effort: any failure is logged and swallowed so a quote-building problem
+     * never blocks the customer's form submission (mirrors the notification email).
+     *
+     * @param int   $orderId    The order the quote responds to.
+     * @param int   $customerId The customer the quote belongs to (0 when unknown).
+     * @param array{event_date: ?string, occasion: string, arrangement_style: string,
+     *              color_preferences: string, budget_range: string, notes: string,
+     *              delivery_type: string, delivery_address: string,
+     *              delivery_fee: ?float} $fields Sanitised request fields.
+     * @param list<array{id: int, name_en: string, name_es: ?string}> $addons
+     *        Add-on snapshots as submitted (price is looked up from the catalogue).
+     *
+     * @return int|null The new quote ID, or null when creation failed.
+     */
+    private function createDraftQuoteForOrder(
+        int $orderId,
+        int $customerId,
+        array $fields,
+        array $addons,
+    ): ?int {
+        try {
+            $pricedAddons = [];
+            foreach ($addons as $addon) {
+                $row = Addon::find((int) $addon['id']);
+                if ($row === null) {
+                    continue;
+                }
+                $pricedAddons[] = [
+                    'name'  => (string) ($addon['name_en'] ?? $row['name_en']),
+                    'price' => (float) $row['price'],
+                ];
+            }
+
+            $items = QuoteDraft::lineItems(
+                [
+                    'arrangement_style' => $fields['arrangement_style'],
+                    'budget_range'      => $fields['budget_range'],
+                ],
+                $pricedAddons,
+            );
+
+            $notes = QuoteDraft::notes(
+                $fields['occasion'],
+                $fields['color_preferences'],
+                $fields['notes'],
+                $this->deliveryNoteLine(
+                    $fields['delivery_type'],
+                    $fields['delivery_address'],
+                    $fields['delivery_fee'],
+                ),
+            );
+
+            $quoteId = Quote::create([
+                'customer_id' => $customerId > 0 ? $customerId : null,
+                'event_date'  => $fields['event_date'],
+                'items'       => $items,
+                'notes'       => $notes !== '' ? $notes : null,
+            ]);
+
+            Order::setQuoteId($orderId, $quoteId);
+
+            return $quoteId;
+        } catch (\Throwable $e) {
+            error_log('[OrderController] Draft quote build failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Format a one-line delivery/pickup summary for the draft quote notes.
+     *
+     * Delivery is recorded in the notes rather than as a taxed line item, so the
+     * owner can decide how to bill it. Returns '' for pickup orders so the line
+     * is omitted entirely.
+     *
+     * @param string     $deliveryType    'pickup' or 'delivery'.
+     * @param string     $deliveryAddress Destination address; empty for pickup.
+     * @param float|null $deliveryFee     Quoted delivery fee, if any.
+     *
+     * @return string e.g. 'Delivery: 123 Main St — fee $11.42', or '' for pickup.
+     */
+    private function deliveryNoteLine(
+        string $deliveryType,
+        string $deliveryAddress,
+        ?float $deliveryFee,
+    ): string {
+        if ($deliveryType !== 'delivery') {
+            return '';
+        }
+
+        $line = 'Delivery: ' . ($deliveryAddress !== '' ? $deliveryAddress : '(address pending)');
+        if ($deliveryFee !== null) {
+            $line .= ' — fee $' . number_format($deliveryFee, 2);
+        }
+
+        return $line;
     }
 
     /**
@@ -194,6 +321,9 @@ final class OrderController extends BaseController
      * @param string      $deliveryAddress Customer delivery address; empty for pickup orders.
      * @param float|null  $deliveryFee     Calculated delivery fee; null for pickup orders.
      * @param array  $addons          Selected add-on snapshots; empty array when none were chosen.
+     * @param int|null    $quoteId         ID of the draft quote pre-built from this
+     *                                     request; null when none was created. When
+     *                                     set, the email links straight to it.
      */
     private function sendOrderNotification(
         string $name,
@@ -209,6 +339,7 @@ final class OrderController extends BaseController
         string $deliveryAddress = '',
         ?float $deliveryFee = null,
         array  $addons = [],
+        ?int   $quoteId = null,
     ): void {
         $to = (string) Config::get('BUSINESS_EMAIL', '');
         if ($to === '' || !MailService::isConfigured()) {
@@ -262,9 +393,21 @@ final class OrderController extends BaseController
                 . '</tr>';
         }
 
+        $quoteCallout = '';
+        if ($quoteId !== null) {
+            $quoteUrl = htmlspecialchars((string) Config::get('APP_URL', '') . '/admin/quotes/' . $quoteId);
+            $quoteCallout =
+                '<p style="margin:1.5rem 0 0;font-size:0.95rem">'
+                . 'A draft quote (#' . (int) $quoteId . ') has been prepared from this request — '
+                . '<a href="' . $quoteUrl . '" style="color:#B55AA0;font-weight:600">review &amp; send it</a>. '
+                . 'Prices are estimates from the stated budget; adjust before sending.'
+                . '</p>';
+        }
+
         $html = MailService::buildHtml(
             '<h2 style="margin:0 0 1rem;font-size:1.2rem">New Bouquet Request</h2>'
             . '<table style="border-collapse:collapse;width:100%">' . $rows . '</table>'
+            . $quoteCallout
             . '<p style="margin:1.5rem 0 0;font-size:0.9rem">Enjoyed our service? <a href="https://g.page/r/CXreQ_QPNWNOEBM/review" style="color:#B55AA0">Leave us a Google review</a> — it means the world to us! 🌸</p>'
             . '<p style="margin:1.5rem 0 0;font-size:0.85rem;color:#999">'
             . 'View all orders in the <a href="' . htmlspecialchars((string) Config::get('APP_URL', '')) . '/admin">admin panel</a>.'

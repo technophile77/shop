@@ -29,6 +29,17 @@ $taxRate   = (float) ($quote['tax_rate']   ?? 0.0);
 $taxAmount = (float) ($quote['tax_amount'] ?? 0.0);
 $total     = $subtotal + $taxAmount;
 
+// Deposit breakdown: items flagged "full deposit" are charged in full; the rest
+// at deposit_pct. $fullDepositTotal is the paid-in-full portion of the deposit.
+$fullDepositTotal = 0.0;
+foreach ($items as $itm) {
+    if (!empty($itm['full_deposit'])) {
+        $fullDepositTotal += (float) $itm['unit_price'] * (int) $itm['qty'];
+    }
+}
+$depositRemainingBase = $subtotal - $fullDepositTotal;
+$hasFullDepositItems  = $fullDepositTotal > 0;
+
 $orderedStatuses = ['draft', 'sent', 'accepted', 'deposit_confirmed', 'completed'];
 
 /**
@@ -107,7 +118,7 @@ $statusLabel = static function (string $s): string {
                 $<?= number_format($total, 2) ?>
             </div>
             <div style="font-size:0.875rem; color:var(--color-muted)">
-                Deposit (<?= $depositPct ?>%): <strong>$<?= number_format($deposit, 2) ?></strong>
+                Deposit<?= $hasFullDepositItems ? '' : ' (' . $depositPct . '%)' ?>: <strong>$<?= number_format($deposit, 2) ?></strong>
             </div>
             <?php if (\App\Models\Quote::isEditable($status)): ?>
             <div style="margin-top:0.75rem">
@@ -164,6 +175,9 @@ $statusLabel = static function (string $s): string {
                     <tr>
                         <td style="padding-left:1.5rem">
                             <?= htmlspecialchars((string) $item['description']) ?>
+                            <?php if (!empty($item['full_deposit'])): ?>
+                            <span style="display:inline-block; margin-left:0.5rem; padding:0.1rem 0.5rem; font-size:0.7rem; font-weight:600; color:var(--color-accent); background:rgba(181,90,160,0.12); border-radius:999px; vertical-align:middle">Paid in full</span>
+                            <?php endif; ?>
                         </td>
                         <td style="text-align:center">
                             <?= (int) $item['qty'] ?>
@@ -206,7 +220,12 @@ $statusLabel = static function (string $s): string {
                     <?php endif; ?>
                     <tr>
                         <td colspan="3" style="text-align:right; padding:0.5rem 1rem; color:var(--color-muted)">
-                            Deposit (<?= $depositPct ?>%)
+                            Deposit due
+                            <?php if ($hasFullDepositItems): ?>
+                            <br><span style="font-size:0.78rem">$<?= number_format($fullDepositTotal, 2) ?> paid in full + <?= $depositPct ?>% of $<?= number_format($depositRemainingBase, 2) ?></span>
+                            <?php else: ?>
+                            (<?= $depositPct ?>%)
+                            <?php endif; ?>
                         </td>
                         <td style="text-align:right; padding:0.5rem 1.5rem; font-weight:600; color:var(--color-accent)">
                             $<?= number_format($deposit, 2) ?>
