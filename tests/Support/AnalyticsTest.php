@@ -8,10 +8,11 @@ use App\Support\Analytics;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Unit tests for the pure GA4 + Meta Pixel event builders in App\Support\Analytics.
+ * Unit tests for the pure GA4 + Meta Pixel + Google Ads event builders in App\Support\Analytics.
  *
  * Each builder must return the expected GA4 event name and Pixel event with the
- * right ids, value, currency, and item shape.
+ * right ids, value, currency, and item shape. Conversion events (purchase, lead)
+ * must also carry the symbolic Google Ads 'ads' key; funnel events must not.
  *
  * @see \App\Support\Analytics
  */
@@ -25,6 +26,7 @@ final class AnalyticsTest extends TestCase
         self::assertSame('ViewContent', $spec['pixel']['event']);
         self::assertSame('USD', $spec['ga4']['params']['currency']);
         self::assertSame(45.0, $spec['ga4']['params']['value']);
+        self::assertArrayNotHasKey('ads', $spec);
 
         $item = $spec['ga4']['params']['items'][0];
         self::assertSame('12', $item['item_id']);
@@ -46,6 +48,7 @@ final class AnalyticsTest extends TestCase
         // value = unit_price × qty
         self::assertSame(90.0, $spec['ga4']['params']['value']);
         self::assertSame(90.0, $spec['pixel']['params']['value']);
+        self::assertArrayNotHasKey('ads', $spec);
 
         $item = $spec['ga4']['params']['items'][0];
         self::assertSame('7', $item['item_id']);
@@ -75,6 +78,7 @@ final class AnalyticsTest extends TestCase
         // num_items sums the per-line quantities (2 + 1).
         self::assertSame(3, $spec['pixel']['params']['num_items']);
         self::assertSame('USD', $spec['pixel']['params']['currency']);
+        self::assertArrayNotHasKey('ads', $spec);
     }
 
     public function testPurchaseUsesOrderTotalAndId(): void
@@ -95,6 +99,21 @@ final class AnalyticsTest extends TestCase
 
         self::assertSame(['1', '2'], $spec['pixel']['params']['content_ids']);
         self::assertSame(3, $spec['pixel']['params']['num_items']);
+
+        self::assertSame('purchase', $spec['ads']['conversion']);
+        self::assertSame(96.83, $spec['ads']['params']['value']);
+        self::assertSame('USD', $spec['ads']['params']['currency']);
+        self::assertSame('87', $spec['ads']['params']['transaction_id']);
+    }
+
+    public function testLeadHasNoValueButCarriesAdsConversion(): void
+    {
+        $spec = Analytics::lead();
+
+        self::assertSame('generate_lead', $spec['ga4']['name']);
+        self::assertSame('Lead', $spec['pixel']['event']);
+        self::assertSame('lead', $spec['ads']['conversion']);
+        self::assertSame([], $spec['ads']['params']);
     }
 
     public function testItemMapperFallsBackAcrossKeyNames(): void

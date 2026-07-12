@@ -431,6 +431,7 @@ function orderForm(availableAddons = []) {
 
                 if (data.success) {
                     this.success = true;
+                    if (window.pfTrackLead) window.pfTrackLead();
                 } else {
                     this.error = data.error || '<?= htmlspecialchars(__t('order.error'), ENT_QUOTES) ?>';
                 }

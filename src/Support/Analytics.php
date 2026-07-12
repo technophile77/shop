@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * Pure builder for GA4 + Meta Pixel ecommerce event payloads.
+ * Pure builder for GA4 + Meta Pixel + Google Ads ecommerce event payloads.
  *
- * Each builder returns a normalized two-platform spec:
+ * Each builder returns a normalized platform spec:
  * <pre>
  * [
  *   'ga4'   => ['name' => 'view_item',   'params' => [...]],
  *   'pixel' => ['event' => 'ViewContent', 'params' => [...]],
+ *   'ads'   => ['conversion' => 'purchase', 'params' => [...]], // conversion events only
  * ]
  * </pre>
  * The layout emits one `gtag('event', name, params)` and one
@@ -19,11 +20,19 @@ namespace App\Support;
  * to cents; item ids/names are coerced to strings. No database, session, or
  * output — just a deterministic transform, which is what makes it unit-testable.
  *
+ * The optional `ads` key appears only on conversion events ({@see self::purchase()},
+ * {@see self::lead()}). It carries a SYMBOLIC conversion name ('purchase' or
+ * 'lead') rather than a Google Ads conversion id/label — this class must stay
+ * config-free, so it is the layout's job to resolve that symbolic name to the
+ * `AW-.../label` pair read from env before calling `gtag('event', 'conversion', ...)`.
+ * Funnel events ({@see self::viewItem()}, {@see self::addToCart()},
+ * {@see self::beginCheckout()}) carry no `ads` key since they are not conversions.
+ *
  * Input rows are read leniently: product rows, cart lines, and order-snapshot
  * rows use different key names for the same concept, so {@see self::item()}
  * accepts any of them.
  *
- * @see views/layouts/public.php          Emits the specs as <script> tags.
+ * @see views/layouts/public.php          Emits the specs as <script> tags and resolves 'ads' conversion names to labels.
  * @see \App\Controllers\ShopController    view_item.
  * @see \App\Controllers\CartController    add_to_cart.
  * @see \App\Controllers\CheckoutController begin_checkout + purchase.
@@ -155,7 +164,7 @@ final class Analytics
      * @param array<string, mixed>             $order The order row (id, total).
      * @param array<int, array<string, mixed>> $items The order's snapshot line items.
      *
-     * @return array{ga4: array{name: string, params: array<string, mixed>}, pixel: array{event: string, params: array<string, mixed>}}
+     * @return array{ga4: array{name: string, params: array<string, mixed>}, pixel: array{event: string, params: array<string, mixed>}, ads: array{conversion: string, params: array<string, mixed>}}
      *
      * @example
      *   Analytics::purchase(['id' => 87, 'total' => 96.83], $items);
@@ -186,6 +195,49 @@ final class Analytics
                     'value'        => $value,
                     'currency'     => self::CURRENCY,
                 ],
+            ],
+            'ads' => [
+                'conversion' => 'purchase',
+                'params'     => [
+                    'value'          => $value,
+                    'currency'       => self::CURRENCY,
+                    'transaction_id' => (string) ($order['id'] ?? ''),
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Build a `generate_lead` / `Lead` / Google Ads lead-conversion spec for a submitted bouquet request.
+     *
+     * Fired client-side from the bouquet-request form's AJAX success handler —
+     * there is no server-rendered thank-you page to attach a pageview event to.
+     * A bouquet request has no price yet (it becomes a quote later), so unlike
+     * {@see self::purchase()} there is no `value` to report.
+     *
+     * @return array{ga4: array{name: string, params: array<string, mixed>}, pixel: array{event: string, params: array<string, mixed>}, ads: array{conversion: string, params: array<string, mixed>}}
+     *
+     * @example
+     *   Analytics::lead();
+     */
+    public static function lead(): array
+    {
+        return [
+            'ga4' => [
+                'name'   => 'generate_lead',
+                'params' => [
+                    'currency' => self::CURRENCY,
+                ],
+            ],
+            'pixel' => [
+                'event'  => 'Lead',
+                'params' => [
+                    'currency' => self::CURRENCY,
+                ],
+            ],
+            'ads' => [
+                'conversion' => 'lead',
+                'params'     => [],
             ],
         ];
     }

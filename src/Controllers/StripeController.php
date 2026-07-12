@@ -11,6 +11,7 @@ use App\Models\Quote;
 use App\Services\MailService;
 use App\Services\QuoteService;
 use App\Services\StripeService;
+use App\Support\Analytics;
 
 /**
  * Handles Stripe Checkout flows for quote full-payment and webhook events.
@@ -97,10 +98,23 @@ final class StripeController extends BaseController
      * successful, and transitions the quote to 'deposit_confirmed'. Idempotent:
      * if the quote is already confirmed, just redirects without re-processing.
      *
+     * On the actual transition to paid (never on a re-hit of this URL, and never
+     * when the webhook already confirmed the quote), enqueues a GA4/Pixel/Google
+     * Ads `purchase` conversion into `$_SESSION['analytics_pending']` so
+     * {@see \App\Support\Analytics::purchase()}'s spec is drained and emitted by
+     * the very next page render (`views/layouts/public.php`, the redirect target
+     * below). The conversion value is the amount Stripe actually charged for
+     * this session (`amount_total`, in cents) rather than the quote's full total,
+     * since a quote may only require a partial deposit. The transaction id is
+     * namespaced `'quote-' . $quote['id']` so it can never collide with a shop
+     * order id and cause Google Ads to de-duplicate two distinct conversions.
+     *
      * @param Request              $request HTTP GET request.
      * @param array<string, mixed> $params  Route parameters; must contain 'token'.
      *
      * @return Response Redirect to /quote/{token}.
+     *
+     * @see \App\Support\Analytics::purchase()
      */
     public function handleQuoteSuccess(Request $request, array $params = []): Response
     {
@@ -144,6 +158,33 @@ final class StripeController extends BaseController
                 $total        = '$' . number_format((float) $quote['subtotal'] + (float) ($quote['tax_amount'] ?? 0), 2);
                 QuoteService::notifyOwner(
                     "Stripe payment received — {$customerName} — {$total} — Quote #{$quote['id']}"
+                );
+
+                // Report the conversion for ad platforms. Enqueued into the session
+                // so views/layouts/public.php drains and emits it on the very next
+                // render (the redirect target below, /quote/{token}). This only runs
+                // on the actual transition to paid above — the idempotency guard at
+                // the top of this method (already 'deposit_confirmed'/'completed')
+                // skips this whole block on a refresh or when the webhook beat us to
+                // the transition, so the purchase event fires at most once here.
+                $amountPaid   = (float) ($session->amount_total ?? 0) / 100;
+                $quoteItems   = QuoteService::decodeItems((string) ($quote['items_json'] ?? ''));
+                $lineItems    = [];
+                foreach ($quoteItems as $i => $item) {
+                    // Quote line items carry {description, qty, unit_price}, not the
+                    // {item_id/id, item_name/name, price, quantity} keys Analytics::item()
+                    // looks for — only qty/unit_price line up directly. Map description →
+                    // name and synthesize a positional id (quotes aren't catalogue items).
+                    $lineItems[] = [
+                        'id'    => (string) ($i + 1),
+                        'name'  => $item['description'],
+                        'price' => $item['unit_price'],
+                        'qty'   => $item['qty'],
+                    ];
+                }
+                $_SESSION['analytics_pending'][] = Analytics::purchase(
+                    ['id' => 'quote-' . $quote['id'], 'total' => $amountPaid],
+                    $lineItems,
                 );
             }
         } catch (\Exception $e) {
