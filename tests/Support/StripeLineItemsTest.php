@@ -246,6 +246,150 @@ class StripeLineItemsTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // Stripe Tax Rate object (STRIPE_TAX_RATE_ID) attachment
+    // -------------------------------------------------------------------------
+
+    public function testTaxRateAttachedToBouquetLineWhenIdSupplied(): void
+    {
+        $result = StripeLineItems::fromCart([$this->makeLine('Rose Bouquet', 45.00)], 0.00, 3.83, 'txr_123');
+
+        $this->assertSame(['txr_123'], $result[0]['tax_rates'] ?? null);
+    }
+
+    public function testTaxRateAttachedToAddonLine(): void
+    {
+        $addon  = ['addon_id' => 1, 'name_en' => 'Ribbon', 'price' => 5.00, 'custom_text' => null];
+        $result = StripeLineItems::fromCart([$this->makeLine('Bouquet', 45.00, 1, [$addon])], 0.00, 3.83, 'txr_123');
+
+        // Line 0 = bouquet, Line 1 = addon — both taxed.
+        $this->assertSame(['txr_123'], $result[0]['tax_rates'] ?? null);
+        $this->assertSame(['txr_123'], $result[1]['tax_rates'] ?? null);
+    }
+
+    public function testDeliveryNeverCarriesTaxRate(): void
+    {
+        $result = StripeLineItems::fromCart([$this->makeLine('Bouquet', 45.00)], 10.00, 3.83, 'txr_123');
+
+        $delivery = null;
+        foreach ($result as $li) {
+            if ($li['price_data']['product_data']['name'] === 'Delivery') {
+                $delivery = $li;
+            }
+        }
+        $this->assertNotNull($delivery);
+        $this->assertArrayNotHasKey('tax_rates', $delivery);
+    }
+
+    public function testNoSalesTaxLineWhenTaxRateSupplied(): void
+    {
+        $result = StripeLineItems::fromCart([$this->makeLine('Bouquet', 45.00)], 10.00, 3.83, 'txr_123');
+
+        $names = array_map(
+            static fn ($li) => $li['price_data']['product_data']['name'],
+            $result
+        );
+        // Tax is expressed via tax_rates on merchandise, not a fake product line.
+        $this->assertNotContains('Sales Tax', $names);
+    }
+
+    public function testNoTaxRateAttachedWhenTaxAmountZero(): void
+    {
+        $result = StripeLineItems::fromCart([$this->makeLine('Bouquet', 45.00)], 0.00, 0.00, 'txr_123');
+
+        $this->assertArrayNotHasKey('tax_rates', $result[0]);
+    }
+
+    public function testFallsBackToSalesTaxLineWhenNoRateId(): void
+    {
+        // Empty rate id but tax owed → plain Sales Tax line, no tax_rates key.
+        $result = StripeLineItems::fromCart([$this->makeLine('Bouquet', 45.00)], 0.00, 3.83, '');
+
+        $this->assertArrayNotHasKey('tax_rates', $result[0]);
+        $names = array_map(
+            static fn ($li) => $li['price_data']['product_data']['name'],
+            $result
+        );
+        $this->assertContains('Sales Tax', $names);
+    }
+
+    // -------------------------------------------------------------------------
+    // No double taxation — exactly one tax mechanism is ever active
+    // -------------------------------------------------------------------------
+
+    /**
+     * Count the tax mechanisms present in a line_items array: a flat "Sales Tax"
+     * product line, plus every line carrying a tax_rates entry. Used to assert
+     * tax is applied by exactly one path, never both.
+     *
+     * @return array{sales_tax_lines: int, taxed_lines: int}
+     */
+    private function taxMechanisms(array $lineItems): array
+    {
+        $salesTaxLines = 0;
+        $taxedLines    = 0;
+        foreach ($lineItems as $li) {
+            if (($li['price_data']['product_data']['name'] ?? '') === 'Sales Tax') {
+                $salesTaxLines++;
+            }
+            if (!empty($li['tax_rates'])) {
+                $taxedLines++;
+            }
+        }
+        return ['sales_tax_lines' => $salesTaxLines, 'taxed_lines' => $taxedLines];
+    }
+
+    public function testCartNeverBothTaxRateAndSalesTaxLine(): void
+    {
+        $addon = ['addon_id' => 1, 'name_en' => 'Ribbon', 'price' => 5.00, 'custom_text' => null];
+        $items = [$this->makeLine('Bouquet', 45.00, 1, [$addon])];
+
+        $withRate = $this->taxMechanisms(StripeLineItems::fromCart($items, 10.00, 3.83, 'txr_123'));
+        // Rate path: merchandise lines taxed, but zero flat Sales Tax lines.
+        $this->assertSame(0, $withRate['sales_tax_lines'], 'no flat tax line when rate is used');
+        $this->assertGreaterThan(0, $withRate['taxed_lines']);
+
+        $fallback = $this->taxMechanisms(StripeLineItems::fromCart($items, 10.00, 3.83, ''));
+        // Fallback path: exactly one flat Sales Tax line, and no tax_rates anywhere.
+        $this->assertSame(1, $fallback['sales_tax_lines']);
+        $this->assertSame(0, $fallback['taxed_lines'], 'no tax_rates when falling back to a flat line');
+    }
+
+    public function testQuoteNeverBothTaxRateAndSalesTaxLine(): void
+    {
+        $items = [
+            ['description' => 'Tulips',     'qty' => 1, 'unit_price' => 30.00],
+            ['description' => 'Hydrangeas', 'qty' => 1, 'unit_price' => 45.00],
+            ['description' => 'Delivery',   'qty' => 1, 'unit_price' => 10.00],
+        ];
+
+        $withRate = $this->taxMechanisms(StripeLineItems::fromQuoteItems($items, 7.24, 'txr_123'));
+        $this->assertSame(0, $withRate['sales_tax_lines'], 'no flat tax line when rate is used');
+        $this->assertSame(3, $withRate['taxed_lines'], 'quote taxes every line, including Delivery');
+
+        $fallback = $this->taxMechanisms(StripeLineItems::fromQuoteItems($items, 7.24, ''));
+        $this->assertSame(1, $fallback['sales_tax_lines']);
+        $this->assertSame(0, $fallback['taxed_lines']);
+    }
+
+    public function testQuoteNoTaxAppliesNeither(): void
+    {
+        $items = [['description' => 'Tulips', 'qty' => 1, 'unit_price' => 30.00]];
+        $m = $this->taxMechanisms(StripeLineItems::fromQuoteItems($items, 0.00, 'txr_123'));
+        $this->assertSame(0, $m['sales_tax_lines']);
+        $this->assertSame(0, $m['taxed_lines']);
+    }
+
+    public function testQuoteFromQuoteItemsCentsAndTaxRate(): void
+    {
+        $items  = [['description' => "baby's breath and roses", 'qty' => 1, 'unit_price' => 25.00]];
+        $result = StripeLineItems::fromQuoteItems($items, 2.13, 'txr_123');
+
+        $this->assertCount(1, $result);
+        $this->assertSame(2500, $result[0]['price_data']['unit_amount']);
+        $this->assertSame(['txr_123'], $result[0]['tax_rates']);
+    }
+
+    // -------------------------------------------------------------------------
     // Currency field
     // -------------------------------------------------------------------------
 

@@ -17,8 +17,14 @@ namespace App\Support;
  *    quantity = the add-on's quantity × the bouquet's qty (so per-unit add-ons
  *    such as chocolates ×3 across 2 bouquets bill 6 units).
  *    Add-ons priced at 0 are included only when they carry a custom_text value.
- *  - A single Delivery line when deliveryFee > 0.
- *  - A single Sales Tax line when taxAmount > 0.
+ *  - A single Delivery line when deliveryFee > 0 (never taxed — Oklahoma treats
+ *    separately-stated delivery as a non-taxable service).
+ *  - Sales tax: when taxAmount > 0 and a Stripe Tax Rate id is supplied, that
+ *    rate is attached to the merchandise (bouquet + add-on) lines so Stripe
+ *    computes and reports the tax. Delivery is deliberately excluded from the
+ *    tax base, matching {@see \App\Support\CheckoutPricing}. When no rate id is
+ *    supplied, a plain Sales Tax line is appended as a fallback so tax is still
+ *    charged (though Stripe will not classify it as tax).
  *
  * No database access, no Stripe SDK instantiation — this is a pure transform.
  *
@@ -34,31 +40,45 @@ final class StripeLineItems
     /**
      * Build a Stripe-ready line_items array from cart data and pricing totals.
      *
-     * @param array[] $items       Canonical cart line-item arrays from CartSession::items().
-     * @param float   $deliveryFee Delivery fee in dollars; adds a line when > 0.
-     * @param float   $taxAmount   Pre-computed sales tax in dollars; adds a line when > 0.
+     * @param array[]     $items       Canonical cart line-item arrays from CartSession::items().
+     * @param float       $deliveryFee Delivery fee in dollars; adds a (never-taxed) line when > 0.
+     * @param float       $taxAmount   Pre-computed sales tax in dollars; used as the signal for
+     *                                 whether tax applies (> 0). With a $taxRateId, Stripe
+     *                                 recomputes the exact cents, which may differ by a cent.
+     * @param string|null $taxRateId   Stripe Tax Rate object id (e.g. STRIPE_TAX_RATE_ID). When
+     *                                 non-empty and $taxAmount > 0, it is attached to merchandise
+     *                                 lines and no Sales Tax line is added. When null/empty, a
+     *                                 plain Sales Tax line is appended as a fallback.
      *
-     * @return list<array{price_data: array{currency: string, unit_amount: int, product_data: array{name: string}}, quantity: int}>
+     * @return list<array<string, mixed>>
      *         Array of Stripe line_item params ready for checkout->sessions->create().
      *
      * @example
-     *   $lineItems = StripeLineItems::fromCart($items, 10.00, 3.83);
+     *   $lineItems = StripeLineItems::fromCart($items, 10.00, 3.83, 'txr_123');
      *   // [
-     *   //   ['price_data'=>['currency'=>'usd','unit_amount'=>4500,'product_data'=>['name'=>'Rose Bouquet']],'quantity'=>1],
-     *   //   ['price_data'=>['currency'=>'usd','unit_amount'=>1000,'product_data'=>['name'=>'Delivery']],'quantity'=>1],
-     *   //   ['price_data'=>['currency'=>'usd','unit_amount'=>383,'product_data'=>['name'=>'Sales Tax']],'quantity'=>1],
+     *   //   ['price_data'=>[...'Rose Bouquet'],'quantity'=>1,'tax_rates'=>['txr_123']],
+     *   //   ['price_data'=>[...'Delivery'],'quantity'=>1],   // no tax_rates — delivery untaxed
      *   // ]
      */
-    public static function fromCart(array $items, float $deliveryFee, float $taxAmount): array
-    {
+    public static function fromCart(
+        array $items,
+        float $deliveryFee,
+        float $taxAmount,
+        ?string $taxRateId = null,
+    ): array {
         $lineItems = [];
+
+        // Attach the rate to merchandise lines only when tax applies and a rate
+        // object is configured; delivery is excluded from the tax base.
+        $rateId       = $taxRateId ?? '';
+        $applyTaxRate = $taxAmount > 0.0 && $rateId !== '';
 
         foreach ($items as $item) {
             $bouquetName = (string) ($item['name_en'] ?? 'Bouquet');
             $unitAmount  = (int) round((float) ($item['unit_price'] ?? 0) * 100);
             $qty         = max(1, (int) ($item['qty'] ?? 1));
 
-            $lineItems[] = [
+            $bouquetLine = [
                 'price_data' => [
                     'currency'     => 'usd',
                     'unit_amount'  => $unitAmount,
@@ -66,6 +86,10 @@ final class StripeLineItems
                 ],
                 'quantity' => $qty,
             ];
+            if ($applyTaxRate) {
+                $bouquetLine['tax_rates'] = [$rateId];
+            }
+            $lineItems[] = $bouquetLine;
 
             foreach ((array) ($item['addons'] ?? []) as $addon) {
                 $addonPrice      = (float) ($addon['price'] ?? 0.0);
@@ -85,7 +109,7 @@ final class StripeLineItems
 
                 // Per-unit price; total units = the add-on's quantity across each
                 // bouquet in the line (addon qty × bouquet qty).
-                $lineItems[] = [
+                $addonLine = [
                     'price_data' => [
                         'currency'     => 'usd',
                         'unit_amount'  => $addonCents,
@@ -93,6 +117,10 @@ final class StripeLineItems
                     ],
                     'quantity' => $addonQty * $qty,
                 ];
+                if ($applyTaxRate) {
+                    $addonLine['tax_rates'] = [$rateId];
+                }
+                $lineItems[] = $addonLine;
             }
         }
 
@@ -107,17 +135,93 @@ final class StripeLineItems
             ];
         }
 
-        if ($taxAmount > 0.0) {
-            $lineItems[] = [
-                'price_data' => [
-                    'currency'     => 'usd',
-                    'unit_amount'  => (int) round($taxAmount * 100),
-                    'product_data' => ['name' => 'Sales Tax'],
-                ],
-                'quantity' => 1,
-            ];
+        // Fallback only: no Tax Rate object configured but tax is owed. Charge it
+        // as a plain line so revenue is correct, even though Stripe won't report
+        // it as tax. Prefer supplying $taxRateId so this branch never runs.
+        if ($taxAmount > 0.0 && !$applyTaxRate) {
+            $lineItems[] = self::salesTaxLine($taxAmount);
         }
 
         return $lineItems;
+    }
+
+    /**
+     * Build a Stripe-ready line_items array from decoded quote items.
+     *
+     * Mirrors the quote's tax base, which taxes **every** item (the quote
+     * subtotal is the sum of all lines, including any Delivery line — see
+     * {@see \App\Models\Quote::create()}). When tax applies and a Stripe Tax
+     * Rate id is supplied, that rate is attached to every line so Stripe
+     * computes and reports the tax; otherwise a single plain Sales Tax line is
+     * appended as a fallback.
+     *
+     * Tax is expressed by **exactly one** mechanism — either tax_rates on the
+     * item lines or the fallback Sales Tax line, never both — so a quote is
+     * never taxed twice.
+     *
+     * @param array<int, array{description: string, qty: int, unit_price: float}> $items
+     *        Decoded quote items from QuoteService::decodeItems().
+     * @param float       $taxAmount Pre-computed tax in dollars from quote['tax_amount'];
+     *                               used only as the signal for whether tax applies (> 0).
+     *                               With a $taxRateId, Stripe recomputes the exact cents.
+     * @param string|null $taxRateId Stripe Tax Rate object id (STRIPE_TAX_RATE_ID). When
+     *                               non-empty and $taxAmount > 0, attached to every line and
+     *                               no Sales Tax line is added. When null/empty, a Sales Tax
+     *                               line is appended instead.
+     *
+     * @return list<array<string, mixed>>
+     *         Array of Stripe line_item params ready for checkout->sessions->create().
+     *
+     * @example
+     *   $lineItems = StripeLineItems::fromQuoteItems($items, 7.24, 'txr_123');
+     *   // every product line carries 'tax_rates' => ['txr_123']; no Sales Tax line.
+     */
+    public static function fromQuoteItems(array $items, float $taxAmount, ?string $taxRateId = null): array
+    {
+        $rateId       = $taxRateId ?? '';
+        $applyTaxRate = $taxAmount > 0.0 && $rateId !== '';
+
+        $lineItems = array_map(static function (array $item) use ($applyTaxRate, $rateId): array {
+            $line = [
+                'price_data' => [
+                    'currency'     => 'usd',
+                    'unit_amount'  => (int) round((float) $item['unit_price'] * 100),
+                    'product_data' => ['name' => (string) $item['description']],
+                ],
+                'quantity' => max(1, (int) $item['qty']),
+            ];
+            if ($applyTaxRate) {
+                $line['tax_rates'] = [$rateId];
+            }
+            return $line;
+        }, $items);
+
+        // Fallback only — never in addition to tax_rates, so tax is applied once.
+        if ($taxAmount > 0.0 && !$applyTaxRate) {
+            $lineItems[] = self::salesTaxLine($taxAmount);
+        }
+
+        return $lineItems;
+    }
+
+    /**
+     * Build the fallback flat "Sales Tax" product line for a dollar tax amount.
+     *
+     * Used only when no Stripe Tax Rate object is configured; Stripe treats this
+     * as an ordinary product and will not report it as tax.
+     *
+     * @param float $taxAmount Tax in dollars (> 0).
+     * @return array<string, mixed> A single Stripe line_item param.
+     */
+    private static function salesTaxLine(float $taxAmount): array
+    {
+        return [
+            'price_data' => [
+                'currency'     => 'usd',
+                'unit_amount'  => (int) round($taxAmount * 100),
+                'product_data' => ['name' => 'Sales Tax'],
+            ],
+            'quantity' => 1,
+        ];
     }
 }

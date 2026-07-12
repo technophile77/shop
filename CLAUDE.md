@@ -1,12 +1,15 @@
 # Perla's Flowers — Developer Notes
 
+@../shared/pair-hosting.md
+
 ## Deployment
 
 There is no local dev environment. All testing is done against the live site at
-`https://flowers.cresswell.org` via the `pair` SSH alias (see server memory).
+`https://flowers.cresswell.org` via the `pair` SSH alias.
 
-Files are deployed by uploading directly via SSH. After uploading, smoke-test
-every changed route with `curl` via `mcp__ssh-manager__ssh_execute`.
+Files are deployed by uploading directly via SSH to
+`~/public_html/flowers.cresswell.org`. After uploading, smoke-test every changed
+route with `curl` via `mcp__ssh-manager__ssh_execute`.
 
 ### Adding a new controller class
 
@@ -43,9 +46,10 @@ has no OPcache bytecode entry yet (typically new routes).
 
 ### Debugging a silent 500 on pair.com
 
-1. Check syntax: `php82 -l path/to/file.php`
-2. Check classmap: `grep "MyClass" vendor/composer/autoload_classmap.php`
-3. Drop a standalone PHP file in `public/` with `ini_set('display_errors', 1)`
-   at the top — Apache serves real files directly, so errors appear as 200 with
-   error HTML rather than being swallowed.
-4. Remove test files when done: `rm public/test_*.php`
+See the shared doc's general silent-500 triage (lint, temp display_errors file,
+cleanup). For this project specifically, also check the autoload classmap before
+anything else, since a missing classmap entry is the most common cause here:
+
+```bash
+grep "MyClass" ~/public_html/flowers.cresswell.org/vendor/composer/autoload_classmap.php
+```

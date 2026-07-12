@@ -309,7 +309,12 @@ final class CheckoutController extends BaseController
         }
 
         try {
-            $lineItems = StripeLineItems::fromCart($items, $totals['delivery_fee'], $totals['tax_amount']);
+            $lineItems = StripeLineItems::fromCart(
+                $items,
+                $totals['delivery_fee'],
+                $totals['tax_amount'],
+                (string) Config::get('STRIPE_TAX_RATE_ID', ''),
+            );
             $session   = StripeService::createCartCheckoutSession($orderId, $lineItems, $email, [
                 'delivery_type' => $fulfillType,
                 'fulfill_at'    => $fulfillAt ?? '',
@@ -340,6 +345,12 @@ final class CheckoutController extends BaseController
      * cleared and the thank-you page is shown without re-notifying. The owner is
      * notified once, on the first transition to paid (the webhook also confirms
      * the order as a backstop).
+     *
+     * On the first transition to paid, the order row is re-read after
+     * {@see \App\Models\Order::markPaid()} so {@see renderSuccess()} receives the
+     * post-payment snapshot (payment_status = 'paid', etc.) rather than the stale
+     * row fetched before markPaid() ran — otherwise the customer's first render of
+     * the receipt would be missing the Total block.
      *
      * @param Request              $request HTTP request with ?session_id=.
      * @param array<string, mixed> $params  Route parameters (none).
@@ -382,6 +393,12 @@ final class CheckoutController extends BaseController
 
                 Order::markPaid((int) $order['id'], $paymentIntentId);
                 $this->notifyOwner($order);
+
+                // Re-read so renderSuccess() gets the post-markPaid row (payment_status
+                // = 'paid' and any other fields markPaid() touched) instead of the stale
+                // pre-payment snapshot fetched above. Fall back to the stale row if the
+                // re-read somehow comes back empty, so the receipt still renders.
+                $order = Order::findByStripeSessionId($sessionId) ?? $order;
 
                 CartSession::clear();
                 Destination::clear();
