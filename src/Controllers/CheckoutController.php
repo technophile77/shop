@@ -309,7 +309,12 @@ final class CheckoutController extends BaseController
         }
 
         try {
-            $lineItems = StripeLineItems::fromCart($items, $totals['delivery_fee'], $totals['tax_amount']);
+            $lineItems = StripeLineItems::fromCart(
+                $items,
+                $totals['delivery_fee'],
+                $totals['tax_amount'],
+                (string) Config::get('STRIPE_TAX_RATE_ID', ''),
+            );
             $session   = StripeService::createCartCheckoutSession($orderId, $lineItems, $email, [
                 'delivery_type' => $fulfillType,
                 'fulfill_at'    => $fulfillAt ?? '',

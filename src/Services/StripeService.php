@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\Config;
+use App\Support\StripeLineItems;
 use Stripe\StripeClient;
 use Stripe\Checkout\Session;
 use Stripe\Event;
@@ -47,8 +48,13 @@ final class StripeService
      * Creates a Stripe Checkout Session for paying the full quote amount.
      *
      * Line items are built from the decoded quote items array so the Stripe
-     * receipt mirrors the quote exactly. Sales tax is appended as a separate
-     * line item when tax_amount > 0.00.
+     * receipt mirrors the quote exactly. When tax_amount > 0.00, the reusable
+     * Stripe Tax Rate object named by STRIPE_TAX_RATE_ID is attached to every
+     * line item so Stripe itself computes and *classifies* the amount as sales
+     * tax — making it appear in Stripe's Tax reports. This mirrors the quote's
+     * tax base, which taxes all items (including any Delivery line). If
+     * STRIPE_TAX_RATE_ID is not configured, tax falls back to a plain "Sales
+     * Tax" line item so tax is still collected (though not reported as tax).
      *
      * Sets metadata['quote_token'] on the session so the webhook handler can
      * look up the quote without trusting URL parameters.
@@ -57,13 +63,18 @@ final class StripeService
      * @param string $token         Quote opaque token (used in return URLs and metadata).
      * @param array<int, array{description: string, qty: int, unit_price: float}> $items
      *        Decoded quote items from QuoteService::decodeItems().
-     * @param float  $taxAmount     Pre-computed tax in dollars from quote['tax_amount'].
-     *                              Pass the stored value directly — do not recalculate.
+     * @param float  $taxAmount     Pre-computed tax in dollars from quote['tax_amount'];
+     *                              used only as the signal for whether tax applies
+     *                              (> 0.00). When a tax rate object is configured,
+     *                              Stripe recomputes the exact cents from the rate,
+     *                              which may differ by a cent from this figure.
      * @param string $customerEmail Pre-fills the email field on Stripe's hosted page.
      *
      * @return array{id: string, url: string}
      *
      * @throws \Stripe\Exception\ApiErrorException On Stripe API failure.
+     *
+     * @see \App\Support\StripeLineItems::fromQuoteItems()  Pure line-item builder (unit-tested).
      *
      * @example
      *   $result = StripeService::createQuoteCheckoutSession(
@@ -80,25 +91,11 @@ final class StripeService
     ): array {
         $appUrl = rtrim((string) Config::get('APP_URL', ''), '/');
 
-        $lineItems = array_map(static fn(array $item): array => [
-            'price_data' => [
-                'currency'     => 'usd',
-                'unit_amount'  => (int) round((float) $item['unit_price'] * 100),
-                'product_data' => ['name' => (string) $item['description']],
-            ],
-            'quantity' => max(1, (int) $item['qty']),
-        ], $items);
-
-        if ($taxAmount > 0.00) {
-            $lineItems[] = [
-                'price_data' => [
-                    'currency'     => 'usd',
-                    'unit_amount'  => (int) round($taxAmount * 100),
-                    'product_data' => ['name' => 'Sales Tax'],
-                ],
-                'quantity' => 1,
-            ];
-        }
+        $lineItems = StripeLineItems::fromQuoteItems(
+            $items,
+            $taxAmount,
+            (string) Config::get('STRIPE_TAX_RATE_ID', ''),
+        );
 
         $params = [
             'mode'        => 'payment',
