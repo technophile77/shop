@@ -127,4 +127,80 @@ final class ShopOrderSnapshot
 
         return $out;
     }
+
+    /**
+     * Sum the quantities across every line item in a decoded snapshot.
+     *
+     * Counts total physical items (each line's `qty`), not the number of distinct
+     * lines — a single line with qty 3 counts as 3. Missing or non-positive
+     * quantities are treated as 1, matching {@see itemsSnapshot()}'s own clamping.
+     *
+     * @param array<int, array<string, mixed>> $items A decoded items_json snapshot.
+     *
+     * @return int The total item count; 0 for an empty snapshot.
+     *
+     * @example
+     *   ShopOrderSnapshot::lineCount([['qty' => 2], ['qty' => 1]]); // 3
+     *   ShopOrderSnapshot::lineCount([]);                            // 0
+     */
+    public static function lineCount(array $items): int
+    {
+        $total = 0;
+        foreach ($items as $item) {
+            $total += max(1, (int) ($item['qty'] ?? 1));
+        }
+
+        return $total;
+    }
+
+    /**
+     * Build a short one-line summary of a snapshot for order-list rows.
+     *
+     * Combines the total item count with the first couple of product names, e.g.
+     * "3 items · Rose Bouquet, Spring Mix". When more than two distinct products
+     * are present the remainder is abbreviated with an ellipsis. Blank names are
+     * skipped. Returns "No items" for an empty snapshot so the list never shows a
+     * bare separator.
+     *
+     * @param array<int, array<string, mixed>> $items A decoded items_json snapshot.
+     * @param int                              $maxNames Maximum product names to
+     *        list before abbreviating with "…"; defaults to 2.
+     *
+     * @return string A display label safe to escape and print in the list.
+     *
+     * @example
+     *   ShopOrderSnapshot::summaryLabel([
+     *       ['name' => 'Rose Bouquet', 'qty' => 2],
+     *       ['name' => 'Spring Mix',   'qty' => 1],
+     *   ]); // "3 items · Rose Bouquet, Spring Mix"
+     *   ShopOrderSnapshot::summaryLabel([]); // "No items"
+     */
+    public static function summaryLabel(array $items, int $maxNames = 2): string
+    {
+        $count = self::lineCount($items);
+        if ($count === 0) {
+            return 'No items';
+        }
+
+        $names = [];
+        foreach ($items as $item) {
+            $name = trim((string) ($item['name'] ?? $item['name_en'] ?? ''));
+            if ($name !== '') {
+                $names[] = $name;
+            }
+        }
+
+        $noun  = $count === 1 ? 'item' : 'items';
+        $label = $count . ' ' . $noun;
+
+        if ($names === []) {
+            return $label;
+        }
+
+        $shown     = array_slice($names, 0, max(1, $maxNames));
+        $remaining = count($names) - count($shown);
+        $nameList  = implode(', ', $shown) . ($remaining > 0 ? ', …' : '');
+
+        return $label . ' · ' . $nameList;
+    }
 }

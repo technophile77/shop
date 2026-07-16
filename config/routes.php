@@ -128,6 +128,11 @@ return [
     ['POST', '/admin/media/upload', 'Admin\MediaController', 'upload', ['auth']],
     ['POST', '/admin/media/delete', 'Admin\MediaController', 'delete', ['auth']],
 
+    // Orders (shop-cart checkout purchases)
+    ['GET',  '/admin/orders',               'Admin\OrdersController',      'index',           ['auth']],
+    ['GET',  '/admin/orders/{id}',          'Admin\OrdersController',      'show',            ['auth']],
+    ['POST', '/admin/orders/{id}/status',   'Admin\OrdersController',      'updateStatus',    ['auth']],
+
     // Quotes
     ['GET',  '/admin/quotes',               'Admin\QuotesController',      'index',           ['auth']],
     ['GET',  '/admin/quotes/new',           'Admin\QuotesController',      'newForm',         ['auth']],

@@ -171,6 +171,15 @@ $currentUri = $_SERVER['REQUEST_URI'] ?? '/admin';
 
             <!-- Orders -->
             <div class="admin-nav-section">Orders</div>
+            <a href="/admin/orders" class="<?= str_starts_with($currentUri, '/admin/orders') ? 'active' : '' ?>">
+                <!-- Shopping bag icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M3 5h10l-0.8 9a1 1 0 0 1-1 0.9H4.8a1 1 0 0 1-1-0.9L3 5z" fill="currentColor" opacity="0.3"/>
+                    <path d="M3 5h10l-0.8 9a1 1 0 0 1-1 0.9H4.8a1 1 0 0 1-1-0.9L3 5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                    <path d="M5.5 5V4a2.5 2.5 0 0 1 5 0v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+                Orders
+            </a>
             <a href="/admin/quotes" class="<?= str_starts_with($currentUri, '/admin/quotes') ? 'active' : '' ?>">
                 <!-- Document icon: rectangle with lines -->
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">

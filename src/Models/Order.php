@@ -19,6 +19,23 @@ use App\Core\Database;
 final class Order
 {
     /**
+     * The fulfillment statuses an order may hold, in lifecycle order.
+     *
+     * Mirrors the `status` ENUM defined in migrations/001_initial_schema.sql.
+     * Used to validate status transitions before calling {@see updateStatus()}.
+     *
+     * @var list<string>
+     */
+    public const STATUSES = [
+        'pending',
+        'in_progress',
+        'ready',
+        'delivered',
+        'completed',
+        'cancelled',
+    ];
+
+    /**
      * Creates a new order record and returns its auto-increment ID.
      *
      * @param array<string, mixed> $data Recognised keys: customer_id,
@@ -89,6 +106,54 @@ final class Order
              LEFT JOIN customers c ON c.id = o.customer_id
              ORDER BY o.created_at DESC'
         );
+
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Returns shop-cart checkout orders with the customer's name, newest first.
+     *
+     * Restricts to shop-cart purchases only — rows where `items_json IS NOT NULL`.
+     * Custom bouquet requests (from the /order form) never populate items_json, so
+     * they are excluded. Optional filters narrow the result to a single fulfillment
+     * status and/or payment status; unknown values should be filtered out by the
+     * caller before they reach here.
+     *
+     * @param array{status?: string, payment_status?: string} $filters Optional
+     *        exact-match filters. `status` matches Order::STATUSES; `payment_status`
+     *        matches 'paid' or 'unpaid'. Omit or pass '' to skip a filter.
+     *
+     * @return array<int, array<string, mixed>> Matching shop-order rows, each with
+     *         a `customer_name` column (null when no customer is linked).
+     *
+     * @example
+     *   $all    = Order::allShopOrders();
+     *   $unpaid = Order::allShopOrders(['payment_status' => 'unpaid']);
+     *   $ready  = Order::allShopOrders(['status' => 'ready']);
+     */
+    public static function allShopOrders(array $filters = []): array
+    {
+        $where  = ['o.items_json IS NOT NULL'];
+        $params = [];
+
+        if (!empty($filters['status'])) {
+            $where[]           = 'o.status = :status';
+            $params[':status'] = $filters['status'];
+        }
+
+        if (!empty($filters['payment_status'])) {
+            $where[]                   = 'o.payment_status = :payment_status';
+            $params[':payment_status'] = $filters['payment_status'];
+        }
+
+        $stmt = Database::ro()->prepare(
+            'SELECT o.*, c.name AS customer_name
+             FROM orders o
+             LEFT JOIN customers c ON c.id = o.customer_id
+             WHERE ' . implode(' AND ', $where) . '
+             ORDER BY o.created_at DESC'
+        );
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
