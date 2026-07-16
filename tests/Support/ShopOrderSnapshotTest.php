@@ -8,10 +8,12 @@ use App\Support\ShopOrderSnapshot;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Unit tests for ShopOrderSnapshot::itemsSnapshot().
+ * Unit tests for ShopOrderSnapshot.
  *
- * Verifies that resolved names are embedded, missing IDs degrade gracefully
- * to null, line_total math is correct, and both language paths work.
+ * itemsSnapshot(): verifies resolved names are embedded, missing IDs degrade
+ * gracefully to null, line_total math is correct, and both language paths work.
+ * lineCount()/summaryLabel(): verifies quantity summing and the list-row summary
+ * label, including empty carts, singular/plural, name fallback, and truncation.
  *
  * @see \App\Support\ShopOrderSnapshot
  */
@@ -236,5 +238,82 @@ class ShopOrderSnapshotTest extends TestCase
             [], $this->typeNames(), $this->colorNames(), $this->paperNames(), 'en'
         );
         $this->assertSame([], $snapshot);
+    }
+
+    // -------------------------------------------------------------------------
+    // lineCount()
+    // -------------------------------------------------------------------------
+
+    public function testLineCountSumsQuantities(): void
+    {
+        $this->assertSame(3, ShopOrderSnapshot::lineCount([['qty' => 2], ['qty' => 1]]));
+    }
+
+    public function testLineCountEmptyIsZero(): void
+    {
+        $this->assertSame(0, ShopOrderSnapshot::lineCount([]));
+    }
+
+    public function testLineCountTreatsMissingOrZeroQtyAsOne(): void
+    {
+        // Missing qty and a non-positive qty both clamp to 1, matching itemsSnapshot().
+        $this->assertSame(2, ShopOrderSnapshot::lineCount([[], ['qty' => 0]]));
+    }
+
+    // -------------------------------------------------------------------------
+    // summaryLabel()
+    // -------------------------------------------------------------------------
+
+    public function testSummaryLabelEmpty(): void
+    {
+        $this->assertSame('No items', ShopOrderSnapshot::summaryLabel([]));
+    }
+
+    public function testSummaryLabelSingularItem(): void
+    {
+        $this->assertSame(
+            '1 item · Rose Bouquet',
+            ShopOrderSnapshot::summaryLabel([['name' => 'Rose Bouquet', 'qty' => 1]])
+        );
+    }
+
+    public function testSummaryLabelCountsQuantitiesNotLines(): void
+    {
+        // A single line with qty 3 reads as "3 items", not "1 item".
+        $this->assertSame(
+            '3 items · Rose Bouquet',
+            ShopOrderSnapshot::summaryLabel([['name' => 'Rose Bouquet', 'qty' => 3]])
+        );
+    }
+
+    public function testSummaryLabelListsFirstTwoNamesThenEllipsis(): void
+    {
+        $items = [
+            ['name' => 'Rose Bouquet', 'qty' => 1],
+            ['name' => 'Spring Mix',   'qty' => 1],
+            ['name' => 'Tulip Basket', 'qty' => 1],
+        ];
+        $this->assertSame(
+            '3 items · Rose Bouquet, Spring Mix, …',
+            ShopOrderSnapshot::summaryLabel($items)
+        );
+    }
+
+    public function testSummaryLabelFallsBackToNameEnAndSkipsBlanks(): void
+    {
+        $items = [
+            ['name_en' => 'Rose Bouquet', 'qty' => 1],
+            ['name' => '', 'qty' => 1],
+        ];
+        $this->assertSame(
+            '2 items · Rose Bouquet',
+            ShopOrderSnapshot::summaryLabel($items)
+        );
+    }
+
+    public function testSummaryLabelCountOnlyWhenNoNames(): void
+    {
+        // Items with no usable name still report the count.
+        $this->assertSame('2 items', ShopOrderSnapshot::summaryLabel([['qty' => 2]]));
     }
 }
