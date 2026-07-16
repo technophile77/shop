@@ -12,8 +12,10 @@ use App\Core\Settings;
 use App\Models\Customer;
 use App\Models\Addon;
 use App\Models\Order;
+use App\Models\PageView;
 use App\Models\Quote;
 use App\Services\MailService;
+use App\Support\CustomerSource;
 use App\Support\QuoteDraft;
 
 /**
@@ -82,9 +84,11 @@ final class OrderController extends BaseController
      * Processes the custom bouquet order form submission.
      *
      * Validates CSRF, sanitises input, requires at least one of email or phone,
-     * upserts the customer, creates the order, and returns a JSON response.
-     * The client-side Alpine.js component reads `success` or `error` from the
-     * JSON body.
+     * upserts the customer (source resolved from the session's UTM attribution,
+     * falling back to 'order_form'), creates the order (recording the session
+     * token and marking the visitor's ad session as converted), and returns a
+     * JSON response. The client-side Alpine.js component reads `success` or
+     * `error` from the JSON body.
      *
      * @param Request              $request HTTP request.
      * @param array<string, mixed> $params  Route parameters (unused).
@@ -153,7 +157,7 @@ final class OrderController extends BaseController
             'name'           => $name,
             'email'          => $email,
             'phone'          => $phone,
-            'source'         => 'order_form',
+            'source'         => CustomerSource::resolve($_SESSION['utm'] ?? [], 'order_form'),
             'opted_in_email' => 0,
             'opted_in_sms'   => 0,
         ]);
@@ -171,7 +175,11 @@ final class OrderController extends BaseController
             'budget_range'      => $budgetRange,
             'notes'             => $notes,
             'addons'            => $addons !== [] ? json_encode($addons) : null,
+            'session_token'     => session_id() ?: null,
         ]);
+
+        // Mark the visitor's ad session as converted now that the order exists.
+        PageView::markConversion(session_id(), 'order');
 
         // Pre-build a draft quote from the request so the owner can review and
         // send pricing in one click instead of re-keying everything.

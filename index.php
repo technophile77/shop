@@ -41,6 +41,27 @@ if (!empty($_GET['utm_source'])) {
     ];
 }
 
+// Google Ads auto-tagging: a gclid (or consent-mode wbraid/gbraid) click ID
+// identifies a paid Google click even when no utm_* parameters are present.
+// Seed the session attribution so customer-source resolution can see it.
+// First-touch wins: never overwrite attribution from an earlier landing.
+$_googleClickId = '';
+foreach (['gclid', 'wbraid', 'gbraid'] as $_clickParam) {
+    if (!empty($_GET[$_clickParam])) {
+        $_googleClickId = (string) $_GET[$_clickParam];
+        break;
+    }
+}
+if ($_googleClickId !== '' && empty($_SESSION['utm']['source'])) {
+    $_SESSION['utm'] = [
+        'source'   => 'google',
+        'medium'   => 'cpc',
+        'campaign' => '',
+        'content'  => 'gclid:' . substr($_googleClickId, 0, 100),
+        'term'     => '',
+    ];
+}
+
 // --- Page view & ad session tracking ---
 $_sessionToken = session_id() ?: bin2hex(random_bytes(16));
 $_ipRaw        = $_SERVER['REMOTE_ADDR'] ?? '';
@@ -52,8 +73,9 @@ $_utmSession   = $_SESSION['utm'] ?? [];
 // Record page view (silently ignores errors).
 PageView::record($_sessionToken, $_pageUrl, $_referrer, $_utmSession, $_ipHash);
 
-// If UTM params are present in this request, record the ad session.
-if (!empty($_GET['utm_source'])) {
+// If UTM params or a Google click ID are present, record the ad session
+// (INSERT IGNORE in the model keeps first-touch attribution).
+if (!empty($_GET['utm_source']) || $_googleClickId !== '') {
     PageView::recordAdSession($_sessionToken, $_utmSession, $_ipHash);
 }
 

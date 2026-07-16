@@ -19,6 +19,20 @@ use App\Core\Database;
 final class Customer
 {
     /**
+     * The acquisition sources a customer record may hold.
+     *
+     * Mirrors the `source` ENUM in migrations/016_customer_source_attribution.sql
+     * exactly and is the code-level source of truth used to validate writes.
+     *
+     * @var list<string>
+     */
+    public const SOURCES = [
+        'website_chat', 'order_form', 'promotion_signup', 'facebook', 'instagram',
+        'doordash', 'manual', 'other', 'shop_checkout', 'quote_accept',
+        'admin_quote', 'google_ads',
+    ];
+
+    /**
      * Finds a customer by email address.
      *
      * @param string $email The email to look up.
@@ -69,7 +83,8 @@ final class Customer
      * found a new row is inserted.  Returns the customer ID in both cases.
      *
      * @param array<string, mixed> $data Recognised keys: name, email, phone,
-     *        source, opted_in_email, opted_in_sms, notes.
+     *        source, opted_in_email, opted_in_sms, notes. Source values outside
+     *        Customer::SOURCES are stored as 'other'.
      *
      * @return int The ID of the upserted customer row.
      *
@@ -258,11 +273,18 @@ final class Customer
                 (:name, :email, :phone, :source, :opted_in_email, :opted_in_sms, :notes)'
         );
 
+        // Previously an enum-invalid value was silently coerced to '' by MySQL;
+        // now it falls back to 'other' visibly.
+        $source = (string) ($data['source'] ?? 'other');
+        if (!in_array($source, self::SOURCES, true)) {
+            $source = 'other';
+        }
+
         $stmt->execute([
             ':name'           => $data['name']           ?? null,
             ':email'          => $data['email']          ?? null,
             ':phone'          => $data['phone']          ?? null,
-            ':source'         => $data['source']         ?? 'other',
+            ':source'         => $source,
             ':opted_in_email' => (int) ($data['opted_in_email'] ?? 0),
             ':opted_in_sms'   => (int) ($data['opted_in_sms']   ?? 0),
             ':notes'          => $data['notes']          ?? null,
@@ -287,6 +309,11 @@ final class Customer
     {
         $sets   = [];
         $params = [];
+
+        // An invalid incoming source must never overwrite the existing value.
+        if (isset($data['source']) && !in_array($data['source'], self::SOURCES, true)) {
+            unset($data['source']);
+        }
 
         foreach (['name', 'email', 'phone', 'source'] as $field) {
             if (!empty($data[$field]) && empty($existing[$field])) {

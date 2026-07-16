@@ -24,13 +24,24 @@ $filterSource  = $activeFilters['source']       ?? '';
 $filterSms     = $activeFilters['opted_in_sms'] ?? '';
 $filterSpend   = $activeFilters['min_spend']    ?? '';
 
-/** Source badge colour map — keys match source enum values in the DB. */
+/**
+ * Source badge colour map — keys cover every value in Customer::SOURCES
+ * (see src/Models/Customer.php, mirrored from migrations/016_customer_source_attribution.sql,
+ * the source of truth for the `source` ENUM). Unknown/legacy values fall back to 'other' below.
+ */
 $sourceBadgeStyle = [
-    'order_form'    => 'background:#e3f2fd; color:#1565c0',
-    'quote_form'    => 'background:#f3e5f5; color:#7b1fa2',
-    'signup_widget' => 'background:#e8f5e9; color:#1b5e20',
-    'manual'        => 'background:#f0f0f0; color:#555',
-    'other'         => 'background:#fff8e1; color:#f57f17',
+    'website_chat'     => 'background:#eceff1; color:#455a64',
+    'order_form'       => 'background:#e3f2fd; color:#1565c0',
+    'promotion_signup' => 'background:#fff3e0; color:#e65100',
+    'facebook'         => 'background:#e8eaf6; color:#3b5998',
+    'instagram'        => 'background:#fce4ec; color:#c13584',
+    'doordash'         => 'background:#fdece9; color:#d32f2f',
+    'manual'           => 'background:#f0f0f0; color:#555',
+    'other'            => 'background:#fff8e1; color:#f57f17',
+    'shop_checkout'    => 'background:#e6f4ea; color:#2e7d32',
+    'quote_accept'     => 'background:#e0f7fa; color:#00796b',
+    'admin_quote'      => 'background:#e0f2f1; color:#00838f',
+    'google_ads'       => 'background:#e8f0fe; color:#1a73e8',
 ];
 ?>
 
@@ -321,8 +332,9 @@ $sourceBadgeStyle = [
                     <select id="qc-source" name="source">
                         <option value="manual" selected>Manual</option>
                         <option value="order_form">Order Form</option>
-                        <option value="quote_form">Quote Form</option>
-                        <option value="signup_widget">Signup Widget</option>
+                        <option value="facebook">Facebook</option>
+                        <option value="instagram">Instagram</option>
+                        <option value="doordash">Doordash</option>
                         <option value="other">Other</option>
                     </select>
                 </div>

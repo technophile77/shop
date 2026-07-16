@@ -41,7 +41,8 @@ final class Order
      * @param array<string, mixed> $data Recognised keys: customer_id,
      *        event_date, delivery_type, delivery_address, delivery_fee,
      *        occasion, arrangement_style, color_preferences, budget_range,
-     *        notes, addons (JSON-encoded string or null).
+     *        notes, addons (JSON-encoded string or null),
+     *        session_token (the visitor's tracking session token, or null).
      *
      * @return int The newly created order ID.
      *
@@ -57,6 +58,7 @@ final class Order
      *       'color_preferences' => 'Pink and white',
      *       'budget_range'      => '$100–$200',
      *       'notes'             => 'Add a ribbon.',
+     *       'session_token'     => 'abc123def456',
      *   ]);
      */
     public static function create(array $data): int
@@ -64,10 +66,12 @@ final class Order
         $stmt = Database::rw()->prepare(
             'INSERT INTO orders
                 (customer_id, event_date, delivery_type, delivery_address, delivery_fee,
-                 occasion, arrangement_style, color_preferences, budget_range, notes, addons)
+                 occasion, arrangement_style, color_preferences, budget_range, notes, addons,
+                 session_token)
              VALUES
                 (:customer_id, :event_date, :delivery_type, :delivery_address, :delivery_fee,
-                 :occasion, :arrangement_style, :color_preferences, :budget_range, :notes, :addons)'
+                 :occasion, :arrangement_style, :color_preferences, :budget_range, :notes, :addons,
+                 :session_token)'
         );
 
         $stmt->execute([
@@ -82,6 +86,7 @@ final class Order
             ':budget_range'      => $data['budget_range']      ?? null,
             ':notes'             => $data['notes']             ?? null,
             ':addons'            => $data['addons']            ?? null,
+            ':session_token'     => $data['session_token']     ?? null,
         ]);
 
         return (int) Database::rw()->lastInsertId();
@@ -248,7 +253,8 @@ final class Order
      *        occasion_type (string|null), subtotal (float),
      *        tax_amount (float), total (float),
      *        delivery_type ('delivery'|'pickup', default 'delivery'),
-     *        fulfill_at (string|null — requested 'Y-m-d H:i:s' delivery/pickup time).
+     *        fulfill_at (string|null — requested 'Y-m-d H:i:s' delivery/pickup time),
+     *        session_token (the visitor's tracking session token, or null).
      *
      * @return int The newly created order ID.
      *
@@ -266,6 +272,7 @@ final class Order
      *       'subtotal'           => 45.00,
      *       'tax_amount'         => 3.83,
      *       'total'              => 58.83,
+     *       'session_token'      => 'abc123def456',
      *   ]);
      */
     public static function createShopOrder(array $data): int
@@ -276,11 +283,11 @@ final class Order
             'INSERT INTO orders
                 (customer_id, delivery_type, delivery_address, delivery_fee, fulfill_at,
                  occasion, items_json, card_message, delivery_venue_name,
-                 occasion_type, subtotal, tax_amount, total, payment_status)
+                 occasion_type, subtotal, tax_amount, total, payment_status, session_token)
              VALUES
                 (:customer_id, :delivery_type, :delivery_address, :delivery_fee, :fulfill_at,
                  :occasion, :items_json, :card_message, :delivery_venue_name,
-                 :occasion_type, :subtotal, :tax_amount, :total, :payment_status)'
+                 :occasion_type, :subtotal, :tax_amount, :total, :payment_status, :session_token)'
         );
 
         $stmt->execute([
@@ -298,6 +305,7 @@ final class Order
             ':tax_amount'          => $data['tax_amount']          ?? 0.00,
             ':total'               => $data['total']               ?? 0.00,
             ':payment_status'      => 'unpaid',
+            ':session_token'       => $data['session_token']       ?? null,
         ]);
 
         return (int) Database::rw()->lastInsertId();

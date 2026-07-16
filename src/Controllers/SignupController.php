@@ -8,6 +8,8 @@ use App\Core\Database;
 use App\Core\Request;
 use App\Core\Response;
 use App\Models\Customer;
+use App\Models\PageView;
+use App\Support\CustomerSource;
 
 /**
  * Handles promotion / newsletter signup form submissions.
@@ -26,7 +28,9 @@ final class SignupController extends BaseController
      * Processes the promotion signup form.
      *
      * Validates CSRF, requires at least one of email or phone, upserts the
-     * customer, records the signup event, and returns JSON.
+     * customer (source resolved from the session's UTM attribution, falling
+     * back to 'promotion_signup'), records the signup event, marks the
+     * visitor's ad session as converted, and returns JSON.
      *
      * @param Request              $request HTTP request.
      * @param array<string, mixed> $params  Route parameters (unused).
@@ -57,7 +61,7 @@ final class SignupController extends BaseController
         $customerId = Customer::upsert([
             'email'          => $email,
             'phone'          => $phone,
-            'source'         => 'promotion_signup',
+            'source'         => CustomerSource::resolve($_SESSION['utm'] ?? [], 'promotion_signup'),
             'opted_in_email' => $optedInEmail,
             'opted_in_sms'   => $optedInSms,
         ]);
@@ -80,6 +84,9 @@ final class SignupController extends BaseController
             ':opted_in_sms'   => $optedInSms,
             ':source_page'    => $sourcePage,
         ]);
+
+        // Mark the visitor's ad session as converted now that the signup is recorded.
+        PageView::markConversion(session_id(), 'signup');
 
         return Response::json(['success' => true]);
     }

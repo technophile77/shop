@@ -13,6 +13,7 @@ use App\Models\FlowerColor;
 use App\Models\FlowerType;
 use App\Models\FlowerTypeColor;
 use App\Models\Order;
+use App\Models\PageView;
 use App\Models\PaperColor;
 use App\Services\MailService;
 use App\Services\StripeService;
@@ -20,6 +21,7 @@ use App\Support\Analytics;
 use App\Support\CartPricing;
 use App\Support\CartSession;
 use App\Support\CheckoutPricing;
+use App\Support\CustomerSource;
 use App\Support\Destination;
 use App\Support\Fulfillment;
 use App\Support\LocalArea;
@@ -169,7 +171,10 @@ final class CheckoutController extends BaseController
      * Recomputes the delivery fee server-side from the posted latitude/longitude
      * (never trusting a client-sent fee), rejects addresses beyond the delivery
      * radius, snapshots the cart into items_json with resolved names, creates the
-     * order as unpaid, and starts a Stripe Checkout Session.
+     * order as unpaid, and starts a Stripe Checkout Session. The customer's
+     * source is resolved from the session's UTM attribution (falling back to
+     * 'shop_checkout'), and the order records the session token for later
+     * webhook-side conversion tracking.
      *
      * @param Request              $request HTTP request with the checkout form body.
      * @param array<string, mixed> $params  Route parameters (none).
@@ -283,7 +288,7 @@ final class CheckoutController extends BaseController
             'name'           => $name,
             'email'          => $email,
             'phone'          => $phone,
-            'source'         => 'shop_checkout',
+            'source'         => CustomerSource::resolve($_SESSION['utm'] ?? [], 'shop_checkout'),
             'opted_in_email' => 0,
             'opted_in_sms'   => 0,
         ]);
@@ -301,6 +306,7 @@ final class CheckoutController extends BaseController
             'subtotal'            => $totals['subtotal'],
             'tax_amount'          => $totals['tax_amount'],
             'total'               => $totals['total'],
+            'session_token'       => session_id() ?: null,
         ]);
 
         if (!StripeService::isConfigured()) {
@@ -421,7 +427,8 @@ final class CheckoutController extends BaseController
      * Fires the GA4 `purchase` / Pixel `Purchase` event exactly once: only when
      * the order is paid AND its id matches the `pending_purchase_order_id` set at
      * submit time, then clears that flag. This avoids a double count on refresh
-     * and when the Stripe webhook confirmed the order before this redirect.
+     * and when the Stripe webhook confirmed the order before this redirect. The
+     * same fire-once block also marks the visitor's ad session as converted.
      *
      * @param array<string, mixed> $order The order row.
      * @param string               $lang  Active locale.
@@ -437,6 +444,9 @@ final class CheckoutController extends BaseController
             $decoded = json_decode((string) ($order['items_json'] ?? ''), true);
             $items   = is_array($decoded) ? $decoded : [];
             $events[] = Analytics::purchase($order, $items);
+            // Marks the visitor's ad session as converted; fire-once semantics
+            // shared with the analytics event above.
+            PageView::markConversion(session_id(), 'order');
             unset($_SESSION['pending_purchase_order_id']);
         }
 
