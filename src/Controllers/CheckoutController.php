@@ -15,12 +15,14 @@ use App\Models\FlowerTypeColor;
 use App\Models\Order;
 use App\Models\PageView;
 use App\Models\PaperColor;
+use App\Models\StoreClosure;
 use App\Services\MailService;
 use App\Services\StripeService;
 use App\Support\Analytics;
 use App\Support\CartPricing;
 use App\Support\CartSession;
 use App\Support\CheckoutPricing;
+use App\Support\Closures;
 use App\Support\CustomerSource;
 use App\Support\Destination;
 use App\Support\Fulfillment;
@@ -70,6 +72,11 @@ final class CheckoutController extends BaseController
      * can't cover the cart) and `hasStockWarning` to the view. This only surfaces
      * a notice — it never blocks the order or constrains the date picker.
      *
+     * Also passes `closedDates` (every store-closed day in the next 365 days,
+     * for the client-side Alpine guard in the view) and `closedLabel` (the
+     * same closures formatted as a human-readable list for the notice). The
+     * server remains authoritative — see {@see submit()} — this is UX only.
+     *
      * @param Request              $request HTTP request.
      * @param array<string, mixed> $params  Route parameters (none).
      *
@@ -115,6 +122,19 @@ final class CheckoutController extends BaseController
         $cutoff = (string) Config::get('BUSINESS_SAMEDAY_CUTOFF', '13:00');
         $now    = new DateTimeImmutable('now');
 
+        // Store closures: closedDatesBetween() returns [] for windows over
+        // 366 days, so +365 (not +366 or more) is deliberate — do not widen
+        // this. Used to warn the customer and drive the client-side guard in
+        // the view; submit() re-checks authoritatively via Closures::isClosed().
+        $closures    = StoreClosure::upcoming($now->format('Y-m-d'));
+        $closedDates = Closures::closedDatesBetween(
+            $now->format('Y-m-d'),
+            $now->modify('+365 days')->format('Y-m-d'),
+            $closures,
+        );
+        ['months' => $closureMonths] = $this->closureStrings($lang);
+        $closedLabel = Closures::formatList($closures, $closureMonths);
+
         // Warn-only stock check: gather localized labels for chosen colors whose
         // tracked stock can't cover cart demand. Never blocks the order.
         $stockMap     = FlowerTypeColor::stockMap();
@@ -153,6 +173,8 @@ final class CheckoutController extends BaseController
             'pickupAddress' => (string) Config::get('BUSINESS_ADDRESS', ''),
             'outOfStockColors' => $outOfStockColors,
             'hasStockWarning'  => $outOfStockColors !== [],
+            'closedDates'  => $closedDates,
+            'closedLabel'  => $closedLabel,
             'analyticsEvents' => [Analytics::beginCheckout($items, $subtotal)],
             'pageTitle'    => __t('checkout.heading'),
             'metaDesc'     => '',
@@ -175,6 +197,13 @@ final class CheckoutController extends BaseController
      * source is resolved from the session's UTM attribution (falling back to
      * 'shop_checkout'), and the order records the session token for later
      * webhook-side conversion tracking.
+     *
+     * Also hard-rejects any requested date that falls inside a store closure
+     * ({@see \App\Support\Closures::isClosed()}), for both delivery and
+     * pickup — a closure means nobody is there to fulfill either. The check
+     * runs immediately after {@see \App\Support\Fulfillment::validate()} and
+     * before anything is persisted or Stripe is contacted, so a closed date
+     * never creates an order row or a Stripe session.
      *
      * @param Request              $request HTTP request with the checkout form body.
      * @param array<string, mixed> $params  Route parameters (none).
@@ -224,6 +253,17 @@ final class CheckoutController extends BaseController
             $this->setFlash('error', $scheduleErrors[0]);
             return $this->redirect('/' . $lang . '/checkout');
         }
+
+        // Hard reject: a store closure blocks both delivery and pickup, so
+        // this does not branch on $fulfillType. Nothing is persisted and
+        // Stripe is never contacted past this point.
+        $closures = StoreClosure::upcoming($when->format('Y-m-d'));
+        if (Closures::isClosed($fulfillDate, $closures)) {
+            ['months' => $months, 'strings' => $strings] = $this->closureStrings($lang);
+            $this->setFlash('error', Closures::rejectionMessage($fulfillDate, $closures, $strings, $months));
+            return $this->redirect('/' . $lang . '/checkout');
+        }
+
         $fulfillAt = Fulfillment::parse($fulfillDate, $fulfillTime)?->format('Y-m-d H:i:s');
 
         // Delivery needs a geocoded in-range address + a computed fee; pickup

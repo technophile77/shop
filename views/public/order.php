@@ -12,6 +12,14 @@
  *   string $occasionHint    Pre-fill value for the occasion field (may be empty).
  *   string $pageTitle       Localised page title from site settings.
  *   array  $addons          Active add-ons for the checkbox grid (may be empty).
+ *   string $todayYmd        Server-rendered 'Y-m-d' for today, used as the date
+ *                           input's min so the picker isn't computed from the
+ *                           browser's UTC clock.
+ *   array  $closedDates     Store-closure dates over the next year, 'Y-m-d' strings
+ *                           (may be empty). Client-side courtesy check only — the
+ *                           server is authoritative (see OrderController::submit()).
+ *   string $closedLabel     Human-readable, localised closure ranges for the notice
+ *                           banner, e.g. 'Jul 4 – Jul 8, 2026; Sep 1, 2026'.
  *
  * @see \App\Controllers\OrderController::form()
  */
@@ -162,9 +170,22 @@ $addonsJson = json_encode(
                         <input type="date"
                                name="event_date"
                                x-model="form.event_date"
-                               :min="new Date().toISOString().split('T')[0]">
+                               min="<?= htmlspecialchars($todayYmd) ?>"
+                               @change="checkClosedDate">
+                        <p x-show="closedWarning"
+                           x-text="closedWarning"
+                           style="background:#fff4e5; border:1px solid #ffcc80; color:#8a5300; border-radius:8px; padding:0.75rem 1rem; font-size:0.85rem; margin-top:0.5rem"
+                           role="alert"></p>
                     </div>
                 </div>
+
+                <?php if (!empty($closedDates)): ?>
+                <div role="status"
+                     style="background:#fff4e5; border:1px solid #ffcc80; color:#8a5300; border-radius:8px; padding:0.75rem 1rem; font-size:0.85rem; margin:-0.5rem 0 1.5rem">
+                    <?= htmlspecialchars(__t('closure.notice')) ?>
+                    <?= htmlspecialchars($closedLabel) ?>
+                </div>
+                <?php endif; ?>
 
                 <!-- Email + Phone -->
                 <div class="grid-2">
@@ -320,10 +341,44 @@ $addonsJson = json_encode(
  * for address selection and the Haversine formula for distance. No
  * server-side geocoding call is made.
  *
+ * The closed-date check ({@see checkClosedDate}) is a client-side courtesy
+ * only, using the closure list the server rendered into the page — the
+ * server remains authoritative and re-checks on submit (see
+ * OrderController::submit()), so a stale or bypassed client check can never
+ * let a closed date through.
+ *
  * @param {Array} availableAddons Active add-ons from the server, shaped as
  *        [{id, name_en, name_es, image}, …]. Empty when none are configured.
  */
 function orderForm(availableAddons = []) {
+    // Translated sprintf-style templates for the client-side closed-date
+    // warning. json_encode (not htmlspecialchars) is deliberate: the
+    // translated copy contains apostrophes ("we're closed…"), and
+    // htmlspecialchars(ENT_QUOTES) would emit HTML entities into this
+    // <script> block, which the browser does NOT decode inside raw-text
+    // elements — json_encode() emits a valid, safe JS string literal instead.
+    const closedDateTemplate      = <?= json_encode(__t('closure.rejected')) ?>;
+    const closedDateChooseAnother = <?= json_encode(__t('closure.choose_another')) ?>;
+    const closedDateMonths        = <?= json_encode(explode(',', __t('closure.months'))) ?>;
+
+    /**
+     * Format a 'Y-m-d' date the same way Closures::formatRange() does server-side,
+     * so the client-side courtesy warning and the authoritative server rejection
+     * read identically ('Jul 4, 2026' — never a raw '2026-07-04').
+     *
+     * Parses the string by parts rather than via `new Date(str)`, which would
+     * interpret a bare 'Y-m-d' as UTC and shift the day in America/Chicago.
+     *
+     * @param {string} ymd Date as 'Y-m-d'.
+     * @returns {string} e.g. 'Jul 4, 2026'; the input unchanged when malformed.
+     */
+    function formatClosedDate(ymd) {
+        const parts = String(ymd).split('-');
+        if (parts.length !== 3) return ymd;
+        const month = closedDateMonths[Number(parts[1]) - 1];
+        return month ? month + ' ' + Number(parts[2]) + ', ' + parts[0] : ymd;
+    }
+
     return {
         availableAddons: availableAddons,
         submitting: false,
@@ -331,6 +386,8 @@ function orderForm(availableAddons = []) {
         error:      '',
         feeResult:  null,
         feeError:   '',
+        closedDates:   <?= json_encode($closedDates ?? []) ?>,
+        closedWarning: '',
         form: {
             name:              '',
             email:             '',
@@ -388,6 +445,24 @@ function orderForm(availableAddons = []) {
             this.form.delivery_fee     = Math.round(fee * 100) / 100;
             this.feeResult             = { distance: Math.round(distance * 10) / 10, fee: this.form.delivery_fee };
             this.feeError              = '';
+        },
+
+        /**
+         * Client-side courtesy check for the picked event date.
+         *
+         * Warns immediately when the chosen date is one of the store's
+         * known upcoming closures, so the customer doesn't wait for a
+         * round-trip to find out. This is UX sugar only — the server
+         * independently re-validates on submit (see
+         * OrderController::submit()) and is the sole source of truth, so a
+         * stale closedDates list (e.g. a closure added moments ago) never
+         * lets a bad date slip through, it just delays the warning to the
+         * submit response.
+         */
+        checkClosedDate() {
+            this.closedWarning = this.closedDates.includes(this.form.event_date)
+                ? closedDateTemplate.replace('%s', formatClosedDate(this.form.event_date)) + ' ' + closedDateChooseAnother
+                : '';
         },
 
         /**

@@ -17,6 +17,14 @@
  *   string                $bodyClass  Optional CSS class(es) for <body>.
  *   string                $content    Rendered inner view HTML.
  *
+ * Also renders the one-shot `$_SESSION['flash']` set by controllers via
+ * `BaseController`-style `setFlash()` helpers (e.g. checkout rejections),
+ * then clears it, so every public route — not just admin ones — surfaces
+ * redirect-then-render error/success messages instead of bouncing the
+ * visitor to a blank page with no explanation. Renders as green for
+ * `'success'`, amber for `'warning'`, red for anything else (including the
+ * common `'error'` type).
+ *
  * @see \App\Controllers\BaseController::render()
  */
 
@@ -342,6 +350,28 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
      MAIN CONTENT
      ============================================================ -->
 <main id="main-content">
+    <?php
+    // Render the one-shot session flash set by controllers (e.g. checkout
+    // rejections, form errors) then clear it so it never survives a second
+    // page load. Null-safe reads: the key is absent on most requests.
+    $__flashType = $_SESSION['flash']['type'] ?? '';
+    $__flashMsg  = $_SESSION['flash']['message'] ?? '';
+    unset($_SESSION['flash']);
+    ?>
+    <?php if ($__flashMsg !== ''): ?>
+    <?php
+    $__flashStyle = $__flashType === 'success'
+        ? 'background:#e6f4ea; color:#2e7d32; border:1px solid #a8d5b1'
+        : ($__flashType === 'warning'
+            ? 'background:#fff4e5; color:#8a5300; border:1px solid #ffcc80'
+            : 'background:#ffebee; color:#b71c1c; border:1px solid #f5c6cb');
+    ?>
+    <div class="container" style="margin-top:1.5rem">
+        <div role="alert" style="<?= $__flashStyle ?>; border-radius:8px; padding:0.9rem 1.25rem; font-size:0.95rem">
+            <?= htmlspecialchars($__flashMsg) ?>
+        </div>
+    </div>
+    <?php endif; ?>
     <?= $content ?>
 </main>
 

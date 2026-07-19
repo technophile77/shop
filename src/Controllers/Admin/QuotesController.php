@@ -10,7 +10,9 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Models\Customer;
 use App\Models\Quote;
+use App\Models\StoreClosure;
 use App\Services\QuoteService;
+use App\Support\Closures;
 
 /**
  * Admin controller for the Quotes section.
@@ -22,8 +24,11 @@ use App\Services\QuoteService;
  * math live in {@see QuoteService}.
  *
  * Flash messages are written to $_SESSION['flash'] as
- * ['type' => 'success'|'error', 'message' => '…'] and are consumed by the
- * corresponding view on the following request.
+ * ['type' => 'success'|'warning'|'error', 'message' => '…'] and are consumed
+ * by the corresponding view on the following request. 'warning' is used when
+ * a create/update succeeds but the submitted event_date falls inside a store
+ * closure (see {@see create()}, {@see update()}); unlike the customer-facing
+ * forms, the admin quote builder never blocks the save for this.
  *
  * Auth enforcement is handled by the Router's 'auth' middleware — this
  * controller performs no session checks of its own.
@@ -131,6 +136,13 @@ final class QuotesController extends BaseController
      * is required. On success the quote is immediately transitioned from 'draft'
      * to 'sent' via {@see Quote::markSent()} so the share link is ready.
      *
+     * The quote saves unconditionally even when event_date falls inside a
+     * store closure — the admin may legitimately be scheduling around a
+     * closure or quoting a past event. When {@see Closures::adminWarning()}
+     * returns a non-empty string for the submitted date, the success flash is
+     * downgraded to a 'warning' flash with the closure notice appended, but
+     * the quote is still created.
+     *
      * @param Request              $request HTTP request with POST body.
      * @param array<string,string> $params  Route parameters (none for this route).
      *
@@ -178,7 +190,17 @@ final class QuotesController extends BaseController
         // Mark as sent immediately — the admin is creating the quote to share.
         Quote::markSent($quoteId);
 
-        $this->setFlash('success', 'Quote created successfully. Copy the link below to share it.');
+        $successMessage = 'Quote created successfully. Copy the link below to share it.';
+        $warning = $eventDate !== ''
+            ? Closures::adminWarning($eventDate, StoreClosure::all(), $this->closureStrings('en')['months'])
+            : '';
+
+        if ($warning !== '') {
+            $this->setFlash('warning', $successMessage . ' ' . $warning);
+        } else {
+            $this->setFlash('success', $successMessage);
+        }
+
         return $this->redirect('/admin/quotes/' . $quoteId);
     }
 
@@ -362,6 +384,13 @@ final class QuotesController extends BaseController
      * which recomputes the totals and refreshes the validity window. The quote's
      * status and share token are left untouched.
      *
+     * The update saves unconditionally even when event_date falls inside a
+     * store closure — the admin may legitimately be scheduling around a
+     * closure or quoting a past event. When {@see Closures::adminWarning()}
+     * returns a non-empty string for the submitted date, the success flash is
+     * downgraded to a 'warning' flash with the closure notice appended, but
+     * the update is still saved.
+     *
      * @param Request              $request HTTP request with POST body.
      * @param array<string,string> $params  Route parameters; expects 'id'.
      *
@@ -411,7 +440,17 @@ final class QuotesController extends BaseController
             'valid_days'  => (int) $request->post('valid_days', 14),
         ]);
 
-        $this->setFlash('success', 'Quote updated successfully.');
+        $successMessage = 'Quote updated successfully.';
+        $warning = $eventDate !== ''
+            ? Closures::adminWarning($eventDate, StoreClosure::all(), $this->closureStrings('en')['months'])
+            : '';
+
+        if ($warning !== '') {
+            $this->setFlash('warning', $successMessage . ' ' . $warning);
+        } else {
+            $this->setFlash('success', $successMessage);
+        }
+
         return $this->redirect('/admin/quotes/' . $id);
     }
 
@@ -539,8 +578,13 @@ final class QuotesController extends BaseController
     /**
      * Store a flash message in the session for the next page render.
      *
-     * @param 'success'|'error' $type    Severity level.
-     * @param string            $message Human-readable message text.
+     * @param 'success'|'warning'|'error' $type    Severity level. 'warning' is
+     *                                             used for a successful save
+     *                                             that also triggers a
+     *                                             non-blocking store-closure
+     *                                             notice (see {@see create()},
+     *                                             {@see update()}).
+     * @param string                      $message Human-readable message text.
      *
      * @return void
      */
