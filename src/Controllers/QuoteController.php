@@ -8,8 +8,10 @@ use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
 use App\Models\Customer;
+use App\Models\PageView;
 use App\Models\Quote;
 use App\Services\QuoteService;
+use App\Support\CustomerSource;
 
 /**
  * Handles the customer-facing quote acceptance flow.
@@ -87,10 +89,12 @@ final class QuoteController extends BaseController
      * Accepts the quote on behalf of the customer.
      *
      * Validates the CSRF token, then verifies the quote is in `sent` status.
-     * Upserts the customer from the posted name / email / phone, links the
-     * customer to the quote if not already linked, and transitions the quote
-     * to `accepted`. Returns JSON so the Alpine.js component can advance the
-     * step without a full page reload.
+     * Upserts the customer from the posted name / email / phone (source
+     * resolved from the session's UTM attribution, falling back to
+     * 'quote_accept'), links the customer to the quote if not already linked,
+     * and transitions the quote to `accepted`, marking the visitor's ad
+     * session as converted. Returns JSON so the Alpine.js component can
+     * advance the step without a full page reload.
      *
      * @param Request              $request HTTP request (JSON or form POST).
      * @param array<string, mixed> $params  Route parameters; must contain 'token'.
@@ -129,7 +133,7 @@ final class QuoteController extends BaseController
             'name'           => $name  !== '' ? $name  : null,
             'email'          => $email !== '' ? $email : null,
             'phone'          => $phone !== '' ? $phone : null,
-            'source'         => 'quote_accept',
+            'source'         => CustomerSource::resolve($_SESSION['utm'] ?? [], 'quote_accept'),
             'opted_in_email' => 0,
             'opted_in_sms'   => 0,
         ]);
@@ -142,6 +146,9 @@ final class QuoteController extends BaseController
         }
 
         Quote::transition((int) $quote['id'], 'accepted');
+
+        // Mark the visitor's ad session as converted now that the quote is accepted.
+        PageView::markConversion(session_id(), 'quote');
 
         return Response::json(['success' => true, 'step' => 'payment']);
     }

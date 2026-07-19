@@ -7,6 +7,7 @@ use App\Core\Config;
 use App\Core\Request;
 use App\Core\Response;
 use App\Models\Order;
+use App\Models\PageView;
 use App\Models\Quote;
 use App\Services\MailService;
 use App\Services\QuoteService;
@@ -308,7 +309,10 @@ final class StripeController extends BaseController
      * Handles checkout.session.completed for a shop-cart order session.
      *
      * Idempotent: skips the update when the order is already marked paid.
-     * Notifies the owner by email after marking the order paid.
+     * Notifies the owner by email after marking the order paid, and marks the
+     * ad session tracked on the order (if any) as converted — webhooks carry
+     * no customer session of their own, so the token stored on the order at
+     * creation time is used instead.
      *
      * @param \Stripe\Checkout\Session $session     The Stripe Session object.
      * @param int                      $shopOrderId The order ID from metadata.
@@ -336,6 +340,13 @@ final class StripeController extends BaseController
 
         try {
             Order::markPaid($shopOrderId, $paymentIntentId);
+
+            // Webhooks carry no customer session — use the tracking token stored on
+            // the order at creation to mark the ad session converted (no-op when the
+            // visitor had no ad session or the column is empty).
+            if (!empty($order['session_token'])) {
+                PageView::markConversion((string) $order['session_token'], 'order');
+            }
 
             $customerName = (string) ($order['customer_name'] ?? 'Customer');
             $total        = '$' . number_format((float) ($order['total'] ?? 0), 2);
