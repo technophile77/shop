@@ -139,4 +139,41 @@ abstract class BaseController
     {
         return Response::json($data, $status);
     }
+
+    /**
+     * Build the locale-specific strings App\Support\Closures needs to stay locale-free.
+     *
+     * Closures never hardcodes English/Spanish copy itself (see its class
+     * DocBlock), so this method bridges the translation layer: it pulls the
+     * 'closure.*' keys for the given language out of Lang and shapes them
+     * into the two arrays Closures::formatRange()/formatList()/
+     * rejectionMessage() expect. Safe to call even before the 'closure.*'
+     * lang keys exist — Lang::get() falls back to returning the key itself,
+     * so a missing translation degrades to a visible-but-harmless string
+     * rather than an exception.
+     *
+     * @param string $lang Language code to look up, e.g. 'en' or 'es'.
+     *
+     * @return array{months: list<string>, strings: array<string, string>}
+     *   'months' is 12 short month names (index 0 = January) parsed from the
+     *   'closure.months' key (expected as a comma-separated list, e.g.
+     *   'Jan,Feb,Mar,...'). 'strings' maps 'rejected', 'rejected_reason',
+     *   'upcoming', and 'choose_another' to their translated sprintf
+     *   templates.
+     *
+     * @example
+     *   ['months' => $months, 'strings' => $strings] = $this->closureStrings('en');
+     *   $message = Closures::rejectionMessage($date, $upcoming, $strings, $months);
+     */
+    protected function closureStrings(string $lang): array
+    {
+        $months = array_map('trim', explode(',', Lang::get('closure.months', $lang)));
+
+        $strings = [];
+        foreach (['rejected', 'rejected_reason', 'upcoming', 'choose_another'] as $key) {
+            $strings[$key] = Lang::get('closure.' . $key, $lang);
+        }
+
+        return ['months' => $months, 'strings' => $strings];
+    }
 }

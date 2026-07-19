@@ -75,6 +75,16 @@ return [
     'order.delivery_type'        => 'How would you like to receive your order?',
     'order.delivery_outside_range' => 'Sorry, we only deliver within 30 miles of our location.',
 
+    // ── Store closures ────────────────────────────────────────────────────────
+    'closure.notice'          => "We're closed on these dates and can't deliver or offer pickup:",
+    'closure.rejected'        => "Sorry — we're closed on %s, so we can't deliver or offer pickup that day.",
+    'closure.rejected_reason' => "Sorry — we're closed on %s (%s), so we can't deliver or offer pickup that day.",
+    'closure.upcoming'        => 'Our upcoming closed dates are: %s',
+    'closure.choose_another'  => 'Please choose another date.',
+    // Comma-joined list of short month names (not a nested array — every value in
+    // this file must be a scalar string); consumers explode(',', ...) it.
+    'closure.months'          => 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
+
     // ── Quote acceptance page ─────────────────────────────────────────────────
     'quote.title'                => 'Your Custom Quote',
     'quote.event_date'           => 'Event Date',

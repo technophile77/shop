@@ -72,10 +72,14 @@ $statusLabel = static function (string $s): string {
 ?>
 
 <?php if (!empty($_SESSION['flash'])): ?>
-<div style="margin-bottom:1.5rem; padding:0.875rem 1.125rem; border-radius:6px;
-    <?= $_SESSION['flash']['type'] === 'success'
-        ? 'background:#e6f4ea; color:#2e7d32; border:1px solid #a8d5b1'
-        : 'background:#ffebee; color:#b71c1c; border:1px solid #f5c6cb' ?>">
+<?php
+    $flashStyle = match ($_SESSION['flash']['type']) {
+        'success' => 'background:#e6f4ea; color:#2e7d32; border:1px solid #a8d5b1',
+        'warning' => 'background:#fff4e5; color:#8a5300; border:1px solid #ffcc80',
+        default   => 'background:#ffebee; color:#b71c1c; border:1px solid #f5c6cb',
+    };
+?>
+<div style="margin-bottom:1.5rem; padding:0.875rem 1.125rem; border-radius:6px; <?= $flashStyle ?>">
     <?= htmlspecialchars((string) $_SESSION['flash']['message']) ?>
 </div>
 <?php unset($_SESSION['flash']); ?>

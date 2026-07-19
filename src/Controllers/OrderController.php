@@ -14,9 +14,12 @@ use App\Models\Addon;
 use App\Models\Order;
 use App\Models\PageView;
 use App\Models\Quote;
+use App\Models\StoreClosure;
 use App\Services\MailService;
+use App\Support\Closures;
 use App\Support\CustomerSource;
 use App\Support\QuoteDraft;
+use DateTimeImmutable;
 
 /**
  * Handles the public custom bouquet request form.
@@ -43,12 +46,21 @@ final class OrderController extends BaseController
      *                   over ?arrangement= when both are present.
      *   ?occasion=    — pre-fills the occasion field with a human-readable label.
      *
+     * Also feeds the view everything it needs to enforce store closures on
+     * the client side: today's date (server-rendered, so the date picker's
+     * `min` isn't computed from the browser's UTC clock — see
+     * {@see Closures}'s class doc for why that matters) and the list of
+     * closed dates over the next year, plus a human-readable label of the
+     * underlying closure ranges for the notice banner.
+     *
      * @param Request              $request HTTP request.
      * @param array<string, mixed> $params  Route parameters (unused).
      *
      * @return Response Rendered HTML response.
      *
      * @see \App\Models\Addon::allActive()
+     * @see \App\Support\Closures::closedDatesBetween()
+     * @see \App\Support\Closures::formatList()
      *
      * @example
      *   // GET /order?product=Eternal+Roses&occasion=Birthday
@@ -68,6 +80,13 @@ final class OrderController extends BaseController
         $occasionHint = $request->query('occasion', '');
         $pageTitle    = (string) Settings::get('order_page_title_' . $lang, 'Request a Custom Bouquet');
 
+        $today   = (new DateTimeImmutable('now'))->format('Y-m-d');
+        // closedDatesBetween() returns [] for windows over 366 days, so +365
+        // (not +366 or more) is deliberate — do not widen this.
+        $horizon = (new DateTimeImmutable('now'))->modify('+365 days')->format('Y-m-d');
+        $closures = StoreClosure::upcoming($today);
+        ['months' => $months] = $this->closureStrings($lang);
+
         $html = $this->render('public/order', [
             'csrfToken'       => $request->csrfToken(),
             'arrangementHint' => $arrangementHint,
@@ -75,6 +94,9 @@ final class OrderController extends BaseController
             'lang'            => $lang,
             'pageTitle'       => $pageTitle,
             'addons'          => $addons,
+            'todayYmd'        => $today,
+            'closedDates'     => Closures::closedDatesBetween($today, $horizon, $closures),
+            'closedLabel'     => Closures::formatList($closures, $months),
         ]);
 
         return Response::html($html);
@@ -84,20 +106,27 @@ final class OrderController extends BaseController
      * Processes the custom bouquet order form submission.
      *
      * Validates CSRF, sanitises input, requires at least one of email or phone,
-     * upserts the customer (source resolved from the session's UTM attribution,
-     * falling back to 'order_form'), creates the order (recording the session
-     * token and marking the visitor's ad session as converted), and returns a
-     * JSON response. The client-side Alpine.js component reads `success` or
-     * `error` from the JSON body.
+     * rejects the request outright when the (optional) event_date falls on a
+     * store closure, upserts the customer (source resolved from the session's
+     * UTM attribution, falling back to 'order_form'), creates the order
+     * (recording the session token and marking the visitor's ad session as
+     * converted), and returns a JSON response. The closure check runs before
+     * any record is created, so a rejected request leaves no customer, order,
+     * draft quote, or owner notification behind. The client-side Alpine.js
+     * component reads `success` or `error` from the JSON body.
      *
      * @param Request              $request HTTP request.
      * @param array<string, mixed> $params  Route parameters (unused).
      *
      * @return Response JSON response with `success: true` or `error: string`.
      *
+     * @see \App\Support\Closures::isClosed()
+     * @see \App\Support\Closures::rejectionMessage()
+     *
      * @example
      *   // POST /order — returns {"success":true,"message":"Thank you! …"}
      *   // POST /order — returns {"success":false,"error":"…"} with 422 on invalid input
+     *   //   or when event_date falls on a store closure
      */
     public function submit(Request $request, array $params = []): Response
     {
@@ -150,6 +179,19 @@ final class OrderController extends BaseController
                 ['success' => false, 'error' => 'Please provide an email address or phone number.'],
                 422
             );
+        }
+
+        // Reject requests for closed dates before any record is created.
+        // event_date is optional on this form, so only enforce when supplied.
+        if ($eventDate !== '') {
+            $closures = StoreClosure::upcoming((new DateTimeImmutable('now'))->format('Y-m-d'));
+            if (Closures::isClosed($eventDate, $closures)) {
+                ['months' => $months, 'strings' => $strings] = $this->closureStrings(Lang::current());
+                return Response::json([
+                    'success' => false,
+                    'error'   => Closures::rejectionMessage($eventDate, $closures, $strings, $months),
+                ], 422);
+            }
         }
 
         // Upsert customer.

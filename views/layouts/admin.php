@@ -191,6 +191,16 @@ $currentUri = $_SERVER['REQUEST_URI'] ?? '/admin';
                 </svg>
                 Quotes
             </a>
+            <a href="/admin/closures" class="<?= str_starts_with($currentUri, '/admin/closures') ? 'active' : '' ?>">
+                <!-- Calendar/event icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <rect x="1" y="3" width="14" height="12" rx="1.5" fill="currentColor" opacity="0.2" stroke="currentColor" stroke-width="1.4"/>
+                    <line x1="5" y1="1" x2="5" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    <line x1="11" y1="1" x2="11" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    <line x1="1" y1="7" x2="15" y2="7" stroke="currentColor" stroke-width="1.2"/>
+                </svg>
+                Store Closures
+            </a>
 
             <!-- Customers -->
             <div class="admin-nav-section">Customers</div>

@@ -142,6 +142,11 @@ return [
     ['POST', '/admin/quotes/{id}/edit',     'Admin\QuotesController',      'update',          ['auth']],
     ['POST', '/admin/quotes/{id}/status',   'Admin\QuotesController',      'updateStatus',    ['auth']],
 
+    // Store Closures
+    ['GET',  '/admin/closures',             'Admin\ClosuresController',    'index',  ['auth']],
+    ['POST', '/admin/closures',             'Admin\ClosuresController',    'create', ['auth']],
+    ['POST', '/admin/closures/{id}/delete', 'Admin\ClosuresController',    'delete', ['auth']],
+
     // Customers
     ['GET',  '/admin/customers',            'Admin\CustomersController',   'index',           ['auth']],
     ['GET',  '/admin/customers/export',     'Admin\CustomersController',   'export',          ['auth']],

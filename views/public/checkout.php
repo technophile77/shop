@@ -24,6 +24,8 @@ declare(strict_types=1);
  *   @var string            $pickupAddress Studio pickup address.
  *   @var list<string>      $outOfStockColors Localized "{color} {type}" labels for out-of-stock chosen colors.
  *   @var bool              $hasStockWarning  Whether any chosen color is out of stock (warn-only).
+ *   @var list<string>      $closedDates   Store-closed dates ('Y-m-d') in the next 365 days.
+ *   @var string            $closedLabel   Same closures formatted as a human-readable list.
  *
  * @see \App\Controllers\CheckoutController
  */
@@ -159,6 +161,11 @@ $prefillAddress = $destination['venue_address'] ?? '';
               ? 'Pedidos para el mismo día deben hacerse antes de las ' . $samedayCutoff . '.'
               : 'Same-day orders must be placed before ' . $samedayCutoff . '.') ?>
         </p>
+        <?php if ($closedDates !== []): ?>
+        <div role="status" style="background:#fff4e5; border:1px solid #ffcc80; color:#8a5300; border-radius:8px; padding:0.75rem 1rem; font-size:0.85rem; margin:-0.25rem 0 1.25rem">
+          <?= htmlspecialchars(__t('closure.notice')) ?> <?= htmlspecialchars($closedLabel) ?>
+        </div>
+        <?php endif; ?>
         <?php if (!empty($hasStockWarning)): ?>
         <div role="status" style="background:#fff4e5; border:1px solid #ffcc80; color:#8a5300; border-radius:8px; padding:0.75rem 1rem; font-size:0.85rem; margin:-0.25rem 0 1.25rem">
           <?php
@@ -226,6 +233,13 @@ function checkoutForm() {
         lng: '',
         fee: <?= $estimatedFee !== null ? number_format((float) $estimatedFee, 2, '.', '') : 'null' ?>,
         feeError: '',
+        // Client-side UX only: blocks obviously-closed dates before submit so
+        // the customer doesn't have to round-trip to the server to find out.
+        // The server (CheckoutController::submit()) remains authoritative.
+        closedDates: <?= json_encode($closedDates) ?>,
+        closedDateTemplate: <?= json_encode(__t('closure.rejected')) ?>,
+        closedDateChooseAnother: <?= json_encode(__t('closure.choose_another')) ?>,
+        closedDateMonths: <?= json_encode(explode(',', __t('closure.months'))) ?>,
         submitting: false,
         subtotal: <?= json_encode(round((float) $subtotal, 2)) ?>,
         taxRate: <?= json_encode((float) $taxRate) ?>,
@@ -263,6 +277,24 @@ function checkoutForm() {
             this.address = place.formatted_address;
             this.feeError = '';
         },
+        /**
+         * Format a 'Y-m-d' date the way Closures::formatRange() does server-side,
+         * so the client-side warning and the authoritative server rejection read
+         * identically ('Jul 4, 2026' — never a raw '2026-07-04').
+         *
+         * Parses by parts rather than via `new Date(str)`, which would treat a
+         * bare 'Y-m-d' as UTC and shift the day in America/Chicago.
+         *
+         * @param {string} ymd Date as 'Y-m-d'.
+         * @returns {string} e.g. 'Jul 4, 2026'; the input unchanged when malformed.
+         */
+        formatClosedDate(ymd) {
+            const parts = String(ymd).split('-');
+            if (parts.length !== 3) return ymd;
+            const month = this.closedDateMonths[Number(parts[1]) - 1];
+            return month ? month + ' ' + Number(parts[2]) + ', ' + parts[0] : ymd;
+        },
+
         onSubmit(e) {
             // Delivery requires a geocoded address; pickup does not.
             if (this.fulfillType === 'delivery' && (!this.lat || !this.lng || !this.address)) {
@@ -273,6 +305,12 @@ function checkoutForm() {
             if (!this.fulfillDate || !this.fulfillTime) {
                 e.preventDefault();
                 this.feeError = '<?= htmlspecialchars($lang === 'es' ? 'Por favor elija una fecha y hora.' : 'Please choose a date and time.', ENT_QUOTES) ?>';
+                return;
+            }
+            if (this.closedDates.includes(this.fulfillDate)) {
+                e.preventDefault();
+                this.feeError = this.closedDateTemplate.replace('%s', this.formatClosedDate(this.fulfillDate))
+                    + ' ' + this.closedDateChooseAnother;
                 return;
             }
             this.submitting = true;
