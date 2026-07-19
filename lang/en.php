@@ -79,7 +79,7 @@ return [
     'closure.notice'          => "We're closed on these dates and can't deliver or offer pickup:",
     'closure.rejected'        => "Sorry — we're closed on %s, so we can't deliver or offer pickup that day.",
     'closure.rejected_reason' => "Sorry — we're closed on %s (%s), so we can't deliver or offer pickup that day.",
-    'closure.upcoming'        => 'Our upcoming closed dates are: %s',
+    'closure.upcoming'        => 'Our upcoming closed dates are: %s.',
     'closure.choose_another'  => 'Please choose another date.',
     // Comma-joined list of short month names (not a nested array — every value in
     // this file must be a scalar string); consumers explode(',', ...) it.

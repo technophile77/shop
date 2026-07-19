@@ -346,7 +346,7 @@ final class ClosuresTest extends TestCase
         $message  = Closures::rejectionMessage('2026-07-05', $closures, $this->fixtureStrings(), $this->enMonths());
 
         self::assertSame(
-            'CLOSEDREASON:2026-07-05:Holiday LIST:Jul 4 – Jul 8, 2026 PICKANOTHER',
+            'CLOSEDREASON:Jul 5, 2026:Holiday LIST:Jul 4 – Jul 8, 2026 PICKANOTHER',
             $message
         );
     }
@@ -357,9 +357,40 @@ final class ClosuresTest extends TestCase
         $message  = Closures::rejectionMessage('2026-07-05', $closures, $this->fixtureStrings(), $this->enMonths());
 
         self::assertSame(
-            'CLOSED:2026-07-05 LIST:Jul 4 – Jul 8, 2026 PICKANOTHER',
+            'CLOSED:Jul 5, 2026 LIST:Jul 4 – Jul 8, 2026 PICKANOTHER',
             $message
         );
+    }
+
+    /**
+     * The customer's requested date is rendered in the same human format as the
+     * closed-date list — never the raw ISO string, which they never typed.
+     *
+     * Regression test: the live smoke test surfaced "we're closed on 2099-01-02"
+     * on the production order form. The original assertions above used only
+     * fixture templates, so a raw %s substitution looked correct to them.
+     */
+    public function testRejectionMessageFormatsTheRequestedDateAndNeverLeaksIso(): void
+    {
+        $closures = [$this->c('2099-01-01', '2099-01-03', 'Smoke test')];
+        $message  = Closures::rejectionMessage('2099-01-02', $closures, $this->fixtureStrings(), $this->enMonths());
+
+        self::assertStringContainsString('Jan 2, 2099', $message);
+        self::assertStringNotContainsString('2099-01-02', $message);
+    }
+
+    /**
+     * The Spanish month table is honoured for the requested date too, so a
+     * customer on /es never sees an English month abbreviation.
+     */
+    public function testRejectionMessageFormatsTheRequestedDateWithSpanishMonths(): void
+    {
+        $closures = [$this->c('2099-01-01', '2099-01-03', null)];
+        $months   = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        $message  = Closures::rejectionMessage('2099-01-02', $closures, $this->fixtureStrings(), $months);
+
+        self::assertStringContainsString('Ene 2, 2099', $message);
+        self::assertStringNotContainsString('Jan', $message);
     }
 
     // -------------------------------------------------------------------------

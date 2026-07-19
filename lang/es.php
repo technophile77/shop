@@ -79,7 +79,7 @@ return [
     'closure.notice'          => 'Estamos cerrados en estas fechas y no hay entregas ni recogidas:',
     'closure.rejected'        => 'Lo sentimos: estamos cerrados el %s, por lo que no hay entregas ni recogidas ese día.',
     'closure.rejected_reason' => 'Lo sentimos: estamos cerrados el %s (%s), por lo que no hay entregas ni recogidas ese día.',
-    'closure.upcoming'        => 'Nuestros próximos días cerrados son: %s',
+    'closure.upcoming'        => 'Nuestros próximos días cerrados son: %s.',
     'closure.choose_another'  => 'Por favor elija otra fecha.',
     // Comma-joined list of short month names (not a nested array — every value in
     // this file must be a scalar string); consumers explode(',', ...) it.

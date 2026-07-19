@@ -356,9 +356,17 @@ final class Closures
         $covering = self::covering($requestedDate, $closures);
         $reason   = trim((string) ($covering['reason'] ?? ''));
 
+        // Present the customer's own date the same way as the closed-date list
+        // ('Jan 2, 2099'), never the raw ISO string they never typed. Reusing
+        // formatRange() with a single-day span keeps one formatting rule.
+        $shownDate = self::formatRange(
+            ['start_date' => $requestedDate, 'end_date' => $requestedDate],
+            $months
+        );
+
         $intro = $reason !== ''
-            ? sprintf($strings['rejected_reason'] ?? '', $requestedDate, $reason)
-            : sprintf($strings['rejected'] ?? '', $requestedDate);
+            ? sprintf($strings['rejected_reason'] ?? '', $shownDate, $reason)
+            : sprintf($strings['rejected'] ?? '', $shownDate);
 
         $upcoming = sprintf($strings['upcoming'] ?? '', self::formatList($closures, $months));
 
