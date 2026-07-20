@@ -165,6 +165,7 @@ $statusLabel = static function (string $s): string {
             <div class="admin-card-header" style="padding:1rem 1.5rem">
                 <span class="admin-card-title">Line Items</span>
             </div>
+            <div class="admin-table-wrap">
             <table class="admin-table" style="margin-bottom:0">
                 <thead>
                     <tr>
@@ -213,6 +214,7 @@ $statusLabel = static function (string $s): string {
                             $<?= number_format($taxAmount, 2) ?>
                         </td>
                     </tr>
+                    <?php endif; ?>
                     <tr>
                         <td colspan="3" style="text-align:right; padding:0.5rem 1rem; font-weight:700">
                             Total
@@ -221,7 +223,6 @@ $statusLabel = static function (string $s): string {
                             $<?= number_format($total, 2) ?>
                         </td>
                     </tr>
-                    <?php endif; ?>
                     <tr>
                         <td colspan="3" style="text-align:right; padding:0.5rem 1rem; color:var(--color-muted)">
                             Deposit due
@@ -237,6 +238,7 @@ $statusLabel = static function (string $s): string {
                     </tr>
                 </tfoot>
             </table>
+            </div><!-- /.admin-table-wrap -->
         </div>
 
         <!-- Notes -->
