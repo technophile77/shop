@@ -870,6 +870,74 @@ select {
 }
 
 /**
+ * Line-item column widths/alignment — pulled out of inline `style`
+ * attributes on the <th>/<td> elements so the mobile breakpoint can
+ * override them (a media query cannot win against an inline `style`
+ * without resorting to `!important`). Desktop values match the widths the
+ * inline styles used to carry, so desktop appearance is unchanged.
+ */
+.quote-table .col-desc {
+  text-align: left;
+}
+
+.quote-table .col-qty {
+  width: 60px;
+  text-align: center;
+}
+
+.quote-table .col-price,
+.quote-table .col-amount {
+  width: 120px;
+  text-align: right;
+}
+
+/**
+ * Scroll container for the line-items table — a safety net for viewports
+ * narrow enough that qty/price/amount still don't fit even after the
+ * mobile column-width and padding overrides below (e.g. an unusually long,
+ * unbreakable item description). Rows then scroll horizontally within this
+ * wrapper instead of being clipped by `.quote-card`'s `overflow: hidden`
+ * (which exists only to clip the dark header's rounded corners and must
+ * stay in place). The totals table below is a sibling, not a child, of
+ * this wrapper, so the Total is never dragged into the scrolled area.
+ */
+.quote-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Items and totals were a single <table> before the split, so no gap sat
+ * between the last line item and the Subtotal row. Both tables now carry
+ * `.quote-table` and therefore its 1.5rem bottom margin, which would open
+ * one. Drop it from the items table; the totals table keeps its own margin
+ * so the spacing below the block is unchanged.
+ */
+.quote-table-wrap .quote-table {
+  margin-bottom: 0;
+}
+
+/**
+ * Totals table (Subtotal/Tax/Delivery/Total) — deliberately a second,
+ * separate <table> from the scrollable line items above, so the Total
+ * (the single most important number on the page) can never scroll off
+ * screen along with the items. See the doc comment above .quote-table-wrap
+ * and the comment in quote-accept.php for the full rationale.
+ */
+.quote-totals-table {
+  width: 100%;
+}
+
+.quote-total-label {
+  text-align: right;
+}
+
+.quote-total-value {
+  width: 120px;
+  text-align: right;
+}
+
+/**
  * Deposit box — dark panel summarising the deposit amount and
  * available payment methods.
  */
@@ -1210,6 +1278,41 @@ footer.site-footer {
   .quote-body,
   .quote-header {
     padding: 1.5rem;
+  }
+
+  /*
+   * Quote table (public quote-accept page) — tighten cell spacing and
+   * shrink the fixed qty/price/amount columns so the line items fit
+   * within a 320px viewport wherever possible, preferring a table that
+   * fits over one that needs .quote-table-wrap's horizontal scroll.
+   */
+  .quote-table th,
+  .quote-table td {
+    padding: 0.5rem 0.4rem;
+    font-size: 0.8rem;
+  }
+
+  .quote-table .col-qty {
+    width: 34px;
+  }
+
+  .quote-table .col-price,
+  .quote-table .col-amount {
+    width: 62px;
+  }
+
+  /*
+   * Totals table — flip the label to the left and let the value shrink
+   * to its content (instead of a fixed 120px) so each row reads as a
+   * clear, full-width "label ... value" pair that always fits without
+   * horizontal scrolling, however narrow the screen.
+   */
+  .quote-total-label {
+    text-align: left;
+  }
+
+  .quote-total-value {
+    width: auto;
   }
 
   /* Promo strip */

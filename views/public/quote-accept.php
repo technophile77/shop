@@ -11,9 +11,9 @@
  *
  * Variables injected by QuoteController::show():
  *   array<string, mixed>                              $quote      Quote row (includes token, status,
- *                                                                 subtotal, deposit_amount, event_date,
- *                                                                 valid_until, notes, items_json,
- *                                                                 customer_* columns).
+ *                                                                 subtotal, tax_amount, deposit_amount,
+ *                                                                 event_date, valid_until, notes,
+ *                                                                 items_json, customer_* columns).
  *   array<int, array{description,qty,unit_price}>     $items      Decoded items from QuoteService::decodeItems().
  *   string                                            $csrfToken  Session CSRF token.
  *   bool                                              $expired    True when valid_until is in the past.
@@ -64,9 +64,9 @@ use App\Core\Config;
       <?php else: ?>
 
       <?php
-      $taxRate    = (float) ($quote['tax_rate']   ?? 0.0);
-      $taxAmount  = (float) ($quote['tax_amount'] ?? 0.0);
-      $quoteTotal = (float) $quote['subtotal'] + $taxAmount;
+      $taxRate     = (float) ($quote['tax_rate']     ?? 0.0);
+      $taxAmount   = (float) ($quote['tax_amount']   ?? 0.0);
+      $quoteTotal  = (float) $quote['subtotal'] + $taxAmount;
 
       // Deposit breakdown: items flagged full_deposit are charged in full; the
       // remainder follows deposit_pct. Used to explain the deposit total below.
@@ -83,57 +83,72 @@ use App\Core\Config;
 
       <!-- ─── Always-visible quote summary ─────────────────────────────────── -->
       <div class="quote-body" style="border-bottom:1px solid var(--color-border)">
-        <table class="quote-table" style="width:100%">
-          <thead>
-            <tr>
-              <th style="text-align:left"><?= htmlspecialchars(__t('quote.items_heading')) ?></th>
-              <th style="text-align:center; width:60px"><?= htmlspecialchars(__t('quote.qty')) ?></th>
-              <th style="text-align:right; width:120px"><?= htmlspecialchars(__t('quote.unit_price')) ?></th>
-              <th style="text-align:right; width:120px"><?= htmlspecialchars(__t('quote.subtotal')) ?></th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($items as $item): ?>
-            <tr>
-              <td>
-                <?= htmlspecialchars((string) $item['description']) ?>
-                <?php if (!empty($item['full_deposit'])): ?>
-                <span style="display:inline-block; margin-left:0.4rem; padding:0.1rem 0.5rem; font-size:0.68rem; font-weight:600; color:var(--color-primary); background:#f3e8f1; border-radius:999px; white-space:nowrap"><?= htmlspecialchars(__t('quote.paid_in_full')) ?></span>
-                <?php endif; ?>
-              </td>
-              <td style="text-align:center"><?= (int) $item['qty'] ?></td>
-              <td style="text-align:right">$<?= number_format((float) $item['unit_price'], 2) ?></td>
-              <td style="text-align:right">$<?= number_format((float) $item['qty'] * (float) $item['unit_price'], 2) ?></td>
-            </tr>
-            <?php endforeach; ?>
-          </tbody>
+        <!--
+          The line items and the totals are two separate <table>s on purpose.
+          .quote-table-wrap below gives the item rows a horizontal-scroll
+          safety net (see its CSS doc comment) for viewports too narrow to
+          fit qty/price/amount even after the mobile column-width and
+          padding overrides. If the totals lived inside that same scrollable
+          table, the Total — the single most important number on the page —
+          could scroll out of view along with the items. Keeping totals in
+          their own (never-scrolled) table guarantees it can't.
+        -->
+        <div class="quote-table-wrap">
+          <table class="quote-table" style="width:100%">
+            <thead>
+              <tr>
+                <th class="col-desc"><?= htmlspecialchars(__t('quote.items_heading')) ?></th>
+                <th class="col-qty"><?= htmlspecialchars(__t('quote.qty')) ?></th>
+                <th class="col-price"><?= htmlspecialchars(__t('quote.unit_price')) ?></th>
+                <th class="col-amount"><?= htmlspecialchars(__t('quote.subtotal')) ?></th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($items as $item): ?>
+              <tr>
+                <td class="col-desc">
+                  <?= htmlspecialchars((string) $item['description']) ?>
+                  <?php if (!empty($item['full_deposit'])): ?>
+                  <span style="display:inline-block; margin-left:0.4rem; padding:0.1rem 0.5rem; font-size:0.68rem; font-weight:600; color:var(--color-primary); background:#f3e8f1; border-radius:999px; white-space:nowrap"><?= htmlspecialchars(__t('quote.paid_in_full')) ?></span>
+                  <?php endif; ?>
+                </td>
+                <td class="col-qty"><?= (int) $item['qty'] ?></td>
+                <td class="col-price">$<?= number_format((float) $item['unit_price'], 2) ?></td>
+                <td class="col-amount">$<?= number_format((float) $item['qty'] * (float) $item['unit_price'], 2) ?></td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div><!-- /.quote-table-wrap -->
+
+        <table class="quote-table quote-totals-table">
           <tfoot>
             <tr class="quote-total-row">
-              <td colspan="3" style="text-align:right; padding-top:1rem; font-weight:600">
+              <td class="quote-total-label" style="padding-top:1rem; font-weight:600">
                 <?= htmlspecialchars(__t('quote.subtotal')) ?>
               </td>
-              <td style="text-align:right; padding-top:1rem; color:var(--color-primary); font-weight:700; font-size:1.2rem">
+              <td class="quote-total-value" style="padding-top:1rem; color:var(--color-primary); font-weight:700; font-size:1.2rem">
                 $<?= number_format((float) $quote['subtotal'], 2) ?>
               </td>
             </tr>
             <?php if ($taxAmount > 0): ?>
             <tr>
-              <td colspan="3" style="text-align:right; padding-top:0.5rem; color:var(--color-muted)">
+              <td class="quote-total-label" style="padding-top:0.5rem; color:var(--color-muted)">
                 Tax (<?= number_format($taxRate * 100, 3) ?>%)
               </td>
-              <td style="text-align:right; padding-top:0.5rem; color:var(--color-primary); font-weight:600">
+              <td class="quote-total-value" style="padding-top:0.5rem; color:var(--color-primary); font-weight:600">
                 $<?= number_format($taxAmount, 2) ?>
               </td>
             </tr>
+            <?php endif; ?>
             <tr class="quote-total-row">
-              <td colspan="3" style="text-align:right; padding-top:0.5rem; font-weight:700">
+              <td class="quote-total-label" style="padding-top:0.5rem; font-weight:700">
                 Total
               </td>
-              <td style="text-align:right; padding-top:0.5rem; color:var(--color-primary); font-weight:700; font-size:1.2rem">
+              <td class="quote-total-value" style="padding-top:0.5rem; color:var(--color-primary); font-weight:700; font-size:1.2rem">
                 $<?= number_format($quoteTotal, 2) ?>
               </td>
             </tr>
-            <?php endif; ?>
           </tfoot>
         </table>
 
