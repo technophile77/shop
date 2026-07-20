@@ -128,13 +128,17 @@ final class QuotesController extends BaseController
     /**
      * Create a new quote and redirect to its detail page.
      *
-     * Parses POST data for customer info, event details, deposit settings, and
-     * line items. When customer_id is 0 (new customer) and at least a name or
-     * email is supplied, the customer is upserted via {@see Customer::upsert()}.
-     * Items are assembled from parallel arrays (item_description[], item_qty[],
-     * item_unit_price[]). At least one item with a description and unit_price > 0
-     * is required. On success the quote is immediately transitioned from 'draft'
-     * to 'sent' via {@see Quote::markSent()} so the share link is ready.
+     * Parses POST data for customer info, event details, deposit settings, a
+     * delivery fee, and line items. When customer_id is 0 (new customer) and at
+     * least a name or email is supplied, the customer is upserted via
+     * {@see Customer::upsert()}. Items are assembled from parallel arrays
+     * (item_description[], item_qty[], item_unit_price[]). At least one item
+     * with a description and unit_price > 0 is required. delivery_fee is
+     * posted as a single field (not per-item) and is stored separately from
+     * the items — it is an untaxed, deposit-exempt charge; see
+     * {@see Quote::create()}. On success the quote is immediately transitioned
+     * from 'draft' to 'sent' via {@see Quote::markSent()} so the share link is
+     * ready.
      *
      * The quote saves unconditionally even when event_date falls inside a
      * store closure — the admin may legitimately be scheduling around a
@@ -164,10 +168,11 @@ final class QuotesController extends BaseController
         $customerId = $this->resolveCustomerId($request);
 
         // --- Event and quote settings ---
-        $eventDate  = trim((string) $request->post('event_date', ''));
-        $depositPct = (int) $request->post('deposit_pct', 50);
-        $validDays  = (int) $request->post('valid_days', 14);
-        $notes      = trim((string) $request->post('notes', ''));
+        $eventDate   = trim((string) $request->post('event_date', ''));
+        $depositPct  = (int) $request->post('deposit_pct', 50);
+        $deliveryFee = (float) $request->post('delivery_fee', 0);
+        $validDays   = (int) $request->post('valid_days', 14);
+        $notes       = trim((string) $request->post('notes', ''));
 
         // --- Line items ---
         $items = $this->buildItems($request);
@@ -179,12 +184,13 @@ final class QuotesController extends BaseController
 
         // --- Persist ---
         $quoteId = Quote::create([
-            'customer_id' => $customerId > 0 ? $customerId : null,
-            'event_date'  => $eventDate !== '' ? $eventDate : null,
-            'items'       => $items,
-            'deposit_pct' => $depositPct,
-            'notes'       => $notes !== '' ? $notes : null,
-            'valid_days'  => $validDays,
+            'customer_id'  => $customerId > 0 ? $customerId : null,
+            'event_date'   => $eventDate !== '' ? $eventDate : null,
+            'items'        => $items,
+            'deposit_pct'  => $depositPct,
+            'delivery_fee' => $deliveryFee,
+            'notes'        => $notes !== '' ? $notes : null,
+            'valid_days'   => $validDays,
         ]);
 
         // Mark as sent immediately — the admin is creating the quote to share.
@@ -354,6 +360,7 @@ final class QuotesController extends BaseController
             'eventDate'     => (string) ($quote['event_date'] ?? ''),
             'validDays'     => $this->validityDays($quote),
             'depositPct'    => (int) $quote['deposit_pct'],
+            'deliveryFee'   => (float) ($quote['delivery_fee'] ?? 0.0),
             'notes'         => (string) ($quote['notes'] ?? ''),
             'items'         => $items,
         ];
@@ -379,10 +386,11 @@ final class QuotesController extends BaseController
      *
      * Validates CSRF, re-checks that the quote exists and is still editable
      * (guarding against a status change between load and submit), then resolves
-     * the customer and rebuilds the line items the same way {@see create()} does.
-     * Requires at least one valid item. Persists via {@see Quote::update()},
-     * which recomputes the totals and refreshes the validity window. The quote's
-     * status and share token are left untouched.
+     * the customer and rebuilds the line items and delivery_fee the same way
+     * {@see create()} does. Requires at least one valid item. Persists via
+     * {@see Quote::update()}, which recomputes the totals (delivery_fee untaxed
+     * and excluded from the deposit, same as create()) and refreshes the
+     * validity window. The quote's status and share token are left untouched.
      *
      * The update saves unconditionally even when event_date falls inside a
      * store closure — the admin may legitimately be scheduling around a
@@ -432,12 +440,13 @@ final class QuotesController extends BaseController
         $notes      = trim((string) $request->post('notes', ''));
 
         Quote::update($id, [
-            'customer_id' => $customerId > 0 ? $customerId : null,
-            'event_date'  => $eventDate !== '' ? $eventDate : null,
-            'items'       => $items,
-            'deposit_pct' => (int) $request->post('deposit_pct', 50),
-            'notes'       => $notes !== '' ? $notes : null,
-            'valid_days'  => (int) $request->post('valid_days', 14),
+            'customer_id'  => $customerId > 0 ? $customerId : null,
+            'event_date'   => $eventDate !== '' ? $eventDate : null,
+            'items'        => $items,
+            'deposit_pct'  => (int) $request->post('deposit_pct', 50),
+            'delivery_fee' => (float) $request->post('delivery_fee', 0),
+            'notes'        => $notes !== '' ? $notes : null,
+            'valid_days'   => (int) $request->post('valid_days', 14),
         ]);
 
         $successMessage = 'Quote updated successfully.';

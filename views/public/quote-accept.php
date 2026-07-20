@@ -11,9 +11,13 @@
  *
  * Variables injected by QuoteController::show():
  *   array<string, mixed>                              $quote      Quote row (includes token, status,
- *                                                                 subtotal, tax_amount, deposit_amount,
- *                                                                 event_date, valid_until, notes,
- *                                                                 items_json, customer_* columns).
+ *                                                                 subtotal, tax_amount, delivery_fee,
+ *                                                                 deposit_amount, event_date,
+ *                                                                 valid_until, notes, items_json,
+ *                                                                 customer_* columns). delivery_fee is a
+ *                                                                 separately-stated, untaxed charge (see
+ *                                                                 App\Support\QuotePricing) shown as its
+ *                                                                 own row only when > 0.
  *   array<int, array{description,qty,unit_price}>     $items      Decoded items from QuoteService::decodeItems().
  *   string                                            $csrfToken  Session CSRF token.
  *   bool                                              $expired    True when valid_until is in the past.
@@ -66,7 +70,8 @@ use App\Core\Config;
       <?php
       $taxRate     = (float) ($quote['tax_rate']     ?? 0.0);
       $taxAmount   = (float) ($quote['tax_amount']   ?? 0.0);
-      $quoteTotal  = (float) $quote['subtotal'] + $taxAmount;
+      $deliveryFee = (float) ($quote['delivery_fee'] ?? 0.0);
+      $quoteTotal  = (float) $quote['subtotal'] + $taxAmount + $deliveryFee;
 
       // Deposit breakdown: items flagged full_deposit are charged in full; the
       // remainder follows deposit_pct. Used to explain the deposit total below.
@@ -138,6 +143,16 @@ use App\Core\Config;
               </td>
               <td class="quote-total-value" style="padding-top:0.5rem; color:var(--color-primary); font-weight:600">
                 $<?= number_format($taxAmount, 2) ?>
+              </td>
+            </tr>
+            <?php endif; ?>
+            <?php if ($deliveryFee > 0): ?>
+            <tr>
+              <td class="quote-total-label" style="padding-top:0.5rem; color:var(--color-muted)">
+                Delivery
+              </td>
+              <td class="quote-total-value" style="padding-top:0.5rem; color:var(--color-primary); font-weight:600">
+                $<?= number_format($deliveryFee, 2) ?>
               </td>
             </tr>
             <?php endif; ?>
@@ -260,7 +275,9 @@ use App\Core\Config;
         </div>
 
         <?php
-        $quoteTotal = (float) ($quote['subtotal'] ?? 0) + (float) ($quote['tax_amount'] ?? 0);
+        $quoteTotal = (float) ($quote['subtotal'] ?? 0)
+            + (float) ($quote['tax_amount'] ?? 0)
+            + (float) ($quote['delivery_fee'] ?? 0);
         ?>
         <?php if (\App\Services\StripeService::isConfigured()): ?>
         <div style="border-top:1px solid var(--color-border); margin-top:2rem; padding-top:1.5rem">

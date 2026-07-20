@@ -132,18 +132,25 @@ final class QuoteDraft
      * as labelled lines for the owner's reference on the draft. Empty values are
      * omitted, and an all-empty input yields an empty string.
      *
+     * The delivery *fee* is no longer part of $deliveryLine — it is persisted as
+     * its own structured, untaxed `delivery_fee` field on the quote (see
+     * {@see \App\Models\Quote::create()}), so the caller passes only the address
+     * summary here. This method stays a pure text formatter regardless of what
+     * the caller includes; it does not itself decide what belongs in the note.
+     *
      * @param string|null $occasion      Occasion label, e.g. 'Quinceañera'.
      * @param string|null $colors        Colour preferences, e.g. 'Pink and white'.
      * @param string|null $customerNotes The customer's free-text notes.
      * @param string      $deliveryLine  Pre-formatted delivery/pickup summary, or
-     *                                    '' to omit. Built by the caller because
-     *                                    it depends on address and fee lookups.
+     *                                    '' to omit. Built by the caller — since
+     *                                    the fee now has its own field, this is
+     *                                    ordinarily just the address.
      *
      * @return string Newline-joined notes, or '' when nothing was supplied.
      *
      * @example
-     *   QuoteDraft::notes('Quinceañera', 'Pink and white', 'Surprise gift', 'Delivery: 123 Main St — $11.42');
-     *   // "Occasion: Quinceañera\nColors: Pink and white\nDelivery: 123 Main St — $11.42\nCustomer notes: Surprise gift"
+     *   QuoteDraft::notes('Quinceañera', 'Pink and white', 'Surprise gift', 'Delivery: 123 Main St');
+     *   // "Occasion: Quinceañera\nColors: Pink and white\nDelivery: 123 Main St\nCustomer notes: Surprise gift"
      */
     public static function notes(
         ?string $occasion,

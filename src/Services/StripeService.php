@@ -50,11 +50,13 @@ final class StripeService
      * Line items are built from the decoded quote items array so the Stripe
      * receipt mirrors the quote exactly. When tax_amount > 0.00, the reusable
      * Stripe Tax Rate object named by STRIPE_TAX_RATE_ID is attached to every
-     * line item so Stripe itself computes and *classifies* the amount as sales
-     * tax — making it appear in Stripe's Tax reports. This mirrors the quote's
-     * tax base, which taxes all items (including any Delivery line). If
-     * STRIPE_TAX_RATE_ID is not configured, tax falls back to a plain "Sales
-     * Tax" line item so tax is still collected (though not reported as tax).
+     * merchandise line item so Stripe itself computes and *classifies* the
+     * amount as sales tax — making it appear in Stripe's Tax reports. This
+     * mirrors the quote's tax base, which taxes merchandise only — delivery is
+     * never taxed (see {@see \App\Support\QuotePricing}). If STRIPE_TAX_RATE_ID
+     * is not configured, tax falls back to a plain "Sales Tax" line item so
+     * tax is still collected (though not reported as tax). When
+     * $deliveryFee > 0.00, a separate untaxed "Delivery" line is appended.
      *
      * Sets metadata['quote_token'] on the session so the webhook handler can
      * look up the quote without trusting URL parameters.
@@ -69,6 +71,8 @@ final class StripeService
      *                              Stripe recomputes the exact cents from the rate,
      *                              which may differ by a cent from this figure.
      * @param string $customerEmail Pre-fills the email field on Stripe's hosted page.
+     * @param float  $deliveryFee   Delivery fee in dollars from quote['delivery_fee'];
+     *                              adds a (never-taxed) Delivery line when > 0.00.
      *
      * @return array{id: string, url: string}
      *
@@ -78,7 +82,8 @@ final class StripeService
      *
      * @example
      *   $result = StripeService::createQuoteCheckoutSession(
-     *       $quote['id'], $quote['token'], $items, (float)$quote['tax_amount'], $email
+     *       $quote['id'], $quote['token'], $items, (float)$quote['tax_amount'], $email,
+     *       (float)$quote['delivery_fee'],
      *   );
      *   header('Location: ' . $result['url']);
      */
@@ -88,6 +93,7 @@ final class StripeService
         array  $items,
         float  $taxAmount = 0.00,
         string $customerEmail = '',
+        float  $deliveryFee = 0.00,
     ): array {
         $appUrl = rtrim((string) Config::get('APP_URL', ''), '/');
 
@@ -95,6 +101,7 @@ final class StripeService
             $items,
             $taxAmount,
             (string) Config::get('STRIPE_TAX_RATE_ID', ''),
+            $deliveryFee,
         );
 
         $params = [

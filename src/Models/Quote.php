@@ -6,7 +6,7 @@ namespace App\Models;
 
 use App\Core\Database;
 use App\Core\Config;
-use App\Services\QuoteService;
+use App\Support\QuotePricing;
 
 /**
  * Represents a custom-quote record in the `quotes` table.
@@ -99,11 +99,14 @@ final class Quote
     /**
      * Creates a new quote and returns its auto-increment ID.
      *
-     * Generates a 64-character hex token for the public share URL. Computes
-     * `subtotal` from the item list and derives `deposit_amount` via
-     * {@see QuoteService::calculateDeposit()} (items flagged `full_deposit` are
-     * charged in full, the rest at `deposit_pct`). Stores items as a JSON blob.
-     * Sets `valid_until` to today + `valid_days` days.
+     * Generates a 64-character hex token for the public share URL. Delegates
+     * `subtotal`, `tax_amount`, and `deposit_amount` to
+     * {@see \App\Support\QuotePricing::compute()}, which taxes the merchandise
+     * subtotal only — `delivery_fee` is stored separately and is deliberately
+     * excluded from both the tax base and the deposit base: Oklahoma treats a
+     * separately-stated delivery charge as non-taxable, and delivery falls due
+     * with the balance rather than up front. Stores items as a JSON blob. Sets
+     * `valid_until` to today + `valid_days` days.
      *
      * @param array<string, mixed> $data Recognised keys:
      *        - customer_id (int|null): linked customer; may be null for drafts.
@@ -113,6 +116,8 @@ final class Quote
      *        - deposit_pct (int): percentage of subtotal required as deposit; default 50.
      *        - tax_rate (float): sales tax rate applied; read from BUSINESS_SALES_TAX_RATE config.
      *        - tax_amount (float): computed tax on the subtotal; stored for display.
+     *        - delivery_fee (float): separately-stated, untaxed delivery charge;
+     *          default 0.0. Not included in tax_amount or deposit_amount.
      *        - notes (string|null): freeform note shown on the quote.
      *        - valid_days (int): days until the quote expires; default 14.
      *
@@ -120,44 +125,37 @@ final class Quote
      *
      * @example
      *   $id = Quote::create([
-     *       'customer_id' => 7,
-     *       'event_date'  => '2026-09-01',
-     *       'items'       => [
+     *       'customer_id'  => 7,
+     *       'event_date'   => '2026-09-01',
+     *       'items'        => [
      *           ['description' => 'Bouquet de rosas', 'qty' => 2, 'unit_price' => 75.00],
      *       ],
-     *       'deposit_pct' => 50,
-     *       'notes'       => 'Pink and white only.',
-     *       'valid_days'  => 14,
+     *       'deposit_pct'  => 50,
+     *       'delivery_fee' => 15.00,
+     *       'notes'        => 'Pink and white only.',
+     *       'valid_days'   => 14,
      *   ]);
      */
     public static function create(array $data): int
     {
-        $token      = bin2hex(random_bytes(32));
-        $depositPct = (int) ($data['deposit_pct'] ?? 50);
-        $validDays  = (int) ($data['valid_days']  ?? 14);
-        $items      = $data['items'] ?? [];
+        $token       = bin2hex(random_bytes(32));
+        $depositPct  = (int) ($data['deposit_pct'] ?? 50);
+        $validDays   = (int) ($data['valid_days']  ?? 14);
+        $items       = $data['items'] ?? [];
+        $deliveryFee = (float) ($data['delivery_fee'] ?? 0.0);
 
-        $subtotal = array_reduce(
-            $items,
-            static fn (float $carry, array $item): float =>
-                $carry + ((float) $item['unit_price'] * (int) $item['qty']),
-            0.0
-        );
-
-        $depositAmount = QuoteService::calculateDeposit($items, $depositPct);
-        $validUntil    = date('Y-m-d', strtotime("+{$validDays} days"));
-
-        $taxRate   = (float) Config::get('BUSINESS_SALES_TAX_RATE', 0.0);
-        $taxAmount = round($subtotal * $taxRate, 2);
+        $validUntil = date('Y-m-d', strtotime("+{$validDays} days"));
+        $taxRate    = (float) Config::get('BUSINESS_SALES_TAX_RATE', 0.0);
+        $pricing    = QuotePricing::compute($items, $depositPct, $taxRate, $deliveryFee);
 
         $stmt = Database::rw()->prepare(
             'INSERT INTO quotes
                 (token, customer_id, event_date, items_json, subtotal,
-                 deposit_pct, tax_rate, tax_amount, deposit_amount,
+                 deposit_pct, tax_rate, tax_amount, delivery_fee, deposit_amount,
                  notes, valid_until, status)
              VALUES
                 (:token, :customer_id, :event_date, :items_json, :subtotal,
-                 :deposit_pct, :tax_rate, :tax_amount, :deposit_amount,
+                 :deposit_pct, :tax_rate, :tax_amount, :delivery_fee, :deposit_amount,
                  :notes, :valid_until, :status)'
         );
 
@@ -166,11 +164,12 @@ final class Quote
             ':customer_id'    => $data['customer_id'] ?? null,
             ':event_date'     => $data['event_date']  ?? null,
             ':items_json'     => json_encode($items, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-            ':subtotal'       => $subtotal,
+            ':subtotal'       => $pricing['subtotal'],
             ':deposit_pct'    => $depositPct,
             ':tax_rate'       => $taxRate,
-            ':tax_amount'     => $taxAmount,
-            ':deposit_amount' => $depositAmount,
+            ':tax_amount'     => $pricing['tax_amount'],
+            ':delivery_fee'   => $pricing['delivery_fee'],
+            ':deposit_amount' => $pricing['deposit_amount'],
             ':notes'          => $data['notes'] ?? null,
             ':valid_until'    => $validUntil,
             ':status'         => 'draft',
@@ -182,48 +181,44 @@ final class Quote
     /**
      * Updates an existing quote's editable content and recomputes its totals.
      *
-     * Recalculates `subtotal`, `deposit_amount`, and `tax_amount` from the
-     * supplied items and `deposit_pct` exactly as {@see create()} does, and
-     * refreshes `valid_until` to today + `valid_days` (so an edit re-arms the
-     * quote's validity window). Does **not** change `status`, `token`, or any
-     * lifecycle timestamp — callers should restrict this to editable statuses
-     * via {@see isEditable()}.
+     * Recalculates `subtotal`, `deposit_amount`, `tax_amount`, and
+     * `delivery_fee` from the supplied items, `deposit_pct`, and `delivery_fee`
+     * exactly as {@see create()} does (via {@see \App\Support\QuotePricing::compute()}),
+     * and refreshes `valid_until` to today + `valid_days` (so an edit re-arms
+     * the quote's validity window). As in create(), `delivery_fee` is excluded
+     * from both `tax_amount` and `deposit_amount`. Does **not** change
+     * `status`, `token`, or any lifecycle timestamp — callers should restrict
+     * this to editable statuses via {@see isEditable()}.
      *
      * @param int                  $id   The quote ID to update.
      * @param array<string, mixed> $data Recognised keys match {@see create()}:
      *        customer_id (int|null), event_date (string|null), items (array),
-     *        deposit_pct (int), notes (string|null), valid_days (int).
+     *        deposit_pct (int), delivery_fee (float), notes (string|null),
+     *        valid_days (int).
      *
      * @return void
      *
      * @example
      *   Quote::update(12, [
-     *       'customer_id' => 7,
-     *       'event_date'  => '2026-09-01',
-     *       'items'       => [['description' => 'Bouquet', 'qty' => 3, 'unit_price' => 60.0]],
-     *       'deposit_pct' => 50,
-     *       'notes'       => 'Updated colour scheme.',
-     *       'valid_days'  => 14,
+     *       'customer_id'  => 7,
+     *       'event_date'   => '2026-09-01',
+     *       'items'        => [['description' => 'Bouquet', 'qty' => 3, 'unit_price' => 60.0]],
+     *       'deposit_pct'  => 50,
+     *       'delivery_fee' => 15.00,
+     *       'notes'        => 'Updated colour scheme.',
+     *       'valid_days'   => 14,
      *   ]);
      */
     public static function update(int $id, array $data): void
     {
-        $depositPct = (int) ($data['deposit_pct'] ?? 50);
-        $validDays  = (int) ($data['valid_days']  ?? 14);
-        $items      = $data['items'] ?? [];
+        $depositPct  = (int) ($data['deposit_pct'] ?? 50);
+        $validDays   = (int) ($data['valid_days']  ?? 14);
+        $items       = $data['items'] ?? [];
+        $deliveryFee = (float) ($data['delivery_fee'] ?? 0.0);
 
-        $subtotal = array_reduce(
-            $items,
-            static fn (float $carry, array $item): float =>
-                $carry + ((float) $item['unit_price'] * (int) $item['qty']),
-            0.0
-        );
-
-        $depositAmount = QuoteService::calculateDeposit($items, $depositPct);
-        $validUntil    = date('Y-m-d', strtotime("+{$validDays} days"));
-
-        $taxRate   = (float) Config::get('BUSINESS_SALES_TAX_RATE', 0.0);
-        $taxAmount = round($subtotal * $taxRate, 2);
+        $validUntil = date('Y-m-d', strtotime("+{$validDays} days"));
+        $taxRate    = (float) Config::get('BUSINESS_SALES_TAX_RATE', 0.0);
+        $pricing    = QuotePricing::compute($items, $depositPct, $taxRate, $deliveryFee);
 
         $stmt = Database::rw()->prepare(
             'UPDATE quotes SET
@@ -234,6 +229,7 @@ final class Quote
                 deposit_pct    = :deposit_pct,
                 tax_rate       = :tax_rate,
                 tax_amount     = :tax_amount,
+                delivery_fee   = :delivery_fee,
                 deposit_amount = :deposit_amount,
                 notes          = :notes,
                 valid_until    = :valid_until
@@ -244,11 +240,12 @@ final class Quote
             ':customer_id'    => $data['customer_id'] ?? null,
             ':event_date'     => $data['event_date']  ?? null,
             ':items_json'     => json_encode($items, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-            ':subtotal'       => $subtotal,
+            ':subtotal'       => $pricing['subtotal'],
             ':deposit_pct'    => $depositPct,
             ':tax_rate'       => $taxRate,
-            ':tax_amount'     => $taxAmount,
-            ':deposit_amount' => $depositAmount,
+            ':tax_amount'     => $pricing['tax_amount'],
+            ':delivery_fee'   => $pricing['delivery_fee'],
+            ':deposit_amount' => $pricing['deposit_amount'],
             ':notes'          => $data['notes'] ?? null,
             ':valid_until'    => $validUntil,
             ':id'             => $id,

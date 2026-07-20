@@ -261,7 +261,10 @@ final class OrderController extends BaseController
      * maps the request into line items and notes through {@see QuoteDraft}, creates
      * the quote in `draft` status (the owner reviews/sends it), and links it back
      * to the order via {@see Order::setQuoteId()}. The bouquet line is seeded at
-     * the midpoint of the stated budget range.
+     * the midpoint of the stated budget range. $fields['delivery_fee'] is passed
+     * straight through to {@see Quote::create()}'s separately-stated, untaxed
+     * `delivery_fee` field (null/pickup collapses to 0.0) rather than folded into
+     * the note text as a dollar figure.
      *
      * Best-effort: any failure is logged and swallowed so a quote-building problem
      * never blocks the customer's form submission (mirrors the notification email).
@@ -311,15 +314,18 @@ final class OrderController extends BaseController
                 $this->deliveryNoteLine(
                     $fields['delivery_type'],
                     $fields['delivery_address'],
-                    $fields['delivery_fee'],
                 ),
             );
 
             $quoteId = Quote::create([
-                'customer_id' => $customerId > 0 ? $customerId : null,
-                'event_date'  => $fields['event_date'],
-                'items'       => $items,
-                'notes'       => $notes !== '' ? $notes : null,
+                'customer_id'  => $customerId > 0 ? $customerId : null,
+                'event_date'   => $fields['event_date'],
+                'items'        => $items,
+                // Delivery is a separately-stated, untaxed field on the quote
+                // (mirrors the shop-cart checkout path) — no longer folded into
+                // notes as a dollar figure. Pickup orders carry null here.
+                'delivery_fee' => $fields['delivery_fee'] ?? 0.0,
+                'notes'        => $notes !== '' ? $notes : null,
             ]);
 
             Order::setQuoteId($orderId, $quoteId);
@@ -332,33 +338,27 @@ final class OrderController extends BaseController
     }
 
     /**
-     * Format a one-line delivery/pickup summary for the draft quote notes.
+     * Format a one-line delivery/pickup address summary for the draft quote notes.
      *
-     * Delivery is recorded in the notes rather than as a taxed line item, so the
-     * owner can decide how to bill it. Returns '' for pickup orders so the line
-     * is omitted entirely.
+     * The delivery *fee* is no longer part of this line — it is passed straight
+     * to {@see Quote::create()}'s `delivery_fee` field (a separately-stated,
+     * untaxed amount), so this only records the address for the owner's
+     * reference. Returns '' for pickup orders so the line is omitted entirely.
      *
-     * @param string     $deliveryType    'pickup' or 'delivery'.
-     * @param string     $deliveryAddress Destination address; empty for pickup.
-     * @param float|null $deliveryFee     Quoted delivery fee, if any.
+     * @param string $deliveryType    'pickup' or 'delivery'.
+     * @param string $deliveryAddress Destination address; empty for pickup.
      *
-     * @return string e.g. 'Delivery: 123 Main St — fee $11.42', or '' for pickup.
+     * @return string e.g. 'Delivery: 123 Main St', or '' for pickup.
      */
     private function deliveryNoteLine(
         string $deliveryType,
         string $deliveryAddress,
-        ?float $deliveryFee,
     ): string {
         if ($deliveryType !== 'delivery') {
             return '';
         }
 
-        $line = 'Delivery: ' . ($deliveryAddress !== '' ? $deliveryAddress : '(address pending)');
-        if ($deliveryFee !== null) {
-            $line .= ' — fee $' . number_format($deliveryFee, 2);
-        }
-
-        return $line;
+        return 'Delivery: ' . ($deliveryAddress !== '' ? $deliveryAddress : '(address pending)');
     }
 
     /**

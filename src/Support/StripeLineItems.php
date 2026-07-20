@@ -148,12 +148,15 @@ final class StripeLineItems
     /**
      * Build a Stripe-ready line_items array from decoded quote items.
      *
-     * Mirrors the quote's tax base, which taxes **every** item (the quote
-     * subtotal is the sum of all lines, including any Delivery line — see
-     * {@see \App\Models\Quote::create()}). When tax applies and a Stripe Tax
-     * Rate id is supplied, that rate is attached to every line so Stripe
-     * computes and reports the tax; otherwise a single plain Sales Tax line is
-     * appended as a fallback.
+     * Mirrors the quote's tax base, which now taxes only the merchandise
+     * items (the quote subtotal), never the delivery fee — see
+     * {@see \App\Models\Quote::create()} and {@see \App\Support\QuotePricing}.
+     * When tax applies and a Stripe Tax Rate id is supplied, that rate is
+     * attached to every merchandise line so Stripe computes and reports the
+     * tax; otherwise a single plain Sales Tax line is appended as a fallback.
+     * When $deliveryFee is > 0, a single "Delivery" line is appended with no
+     * `tax_rates` key, exactly as {@see fromCart()} does — Oklahoma treats a
+     * separately-stated delivery charge as non-taxable.
      *
      * Tax is expressed by **exactly one** mechanism — either tax_rates on the
      * item lines or the fallback Sales Tax line, never both — so a quote is
@@ -161,23 +164,30 @@ final class StripeLineItems
      *
      * @param array<int, array{description: string, qty: int, unit_price: float}> $items
      *        Decoded quote items from QuoteService::decodeItems().
-     * @param float       $taxAmount Pre-computed tax in dollars from quote['tax_amount'];
-     *                               used only as the signal for whether tax applies (> 0).
-     *                               With a $taxRateId, Stripe recomputes the exact cents.
-     * @param string|null $taxRateId Stripe Tax Rate object id (STRIPE_TAX_RATE_ID). When
-     *                               non-empty and $taxAmount > 0, attached to every line and
-     *                               no Sales Tax line is added. When null/empty, a Sales Tax
-     *                               line is appended instead.
+     * @param float       $taxAmount   Pre-computed tax in dollars from quote['tax_amount'];
+     *                                 used only as the signal for whether tax applies (> 0).
+     *                                 With a $taxRateId, Stripe recomputes the exact cents.
+     * @param string|null $taxRateId   Stripe Tax Rate object id (STRIPE_TAX_RATE_ID). When
+     *                                 non-empty and $taxAmount > 0, attached to every
+     *                                 merchandise line and no Sales Tax line is added. When
+     *                                 null/empty, a Sales Tax line is appended instead.
+     * @param float       $deliveryFee Delivery fee in dollars from quote['delivery_fee'];
+     *                                 adds a (never-taxed) Delivery line when > 0.
      *
      * @return list<array<string, mixed>>
      *         Array of Stripe line_item params ready for checkout->sessions->create().
      *
      * @example
-     *   $lineItems = StripeLineItems::fromQuoteItems($items, 7.24, 'txr_123');
-     *   // every product line carries 'tax_rates' => ['txr_123']; no Sales Tax line.
+     *   $lineItems = StripeLineItems::fromQuoteItems($items, 7.24, 'txr_123', 15.00);
+     *   // every merchandise line carries 'tax_rates' => ['txr_123']; no Sales Tax
+     *   // line; a trailing Delivery line with no tax_rates.
      */
-    public static function fromQuoteItems(array $items, float $taxAmount, ?string $taxRateId = null): array
-    {
+    public static function fromQuoteItems(
+        array   $items,
+        float   $taxAmount,
+        ?string $taxRateId = null,
+        float   $deliveryFee = 0.0,
+    ): array {
         $rateId       = $taxRateId ?? '';
         $applyTaxRate = $taxAmount > 0.0 && $rateId !== '';
 
@@ -195,6 +205,17 @@ final class StripeLineItems
             }
             return $line;
         }, $items);
+
+        if ($deliveryFee > 0.0) {
+            $lineItems[] = [
+                'price_data' => [
+                    'currency'     => 'usd',
+                    'unit_amount'  => (int) round($deliveryFee * 100),
+                    'product_data' => ['name' => 'Delivery'],
+                ],
+                'quantity' => 1,
+            ];
+        }
 
         // Fallback only — never in addition to tax_rates, so tax is applied once.
         if ($taxAmount > 0.0 && !$applyTaxRate) {
