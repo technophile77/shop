@@ -390,6 +390,62 @@ class StripeLineItemsTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // fromQuoteItems() delivery fee (separately-stated, untaxed)
+    // -------------------------------------------------------------------------
+
+    public function testQuoteDeliveryLineAbsentWhenFeeZero(): void
+    {
+        $items  = [['description' => 'Tulips', 'qty' => 1, 'unit_price' => 30.00]];
+        $result = StripeLineItems::fromQuoteItems($items, 0.00, null, 0.00);
+
+        $names = array_map(
+            static fn ($li) => $li['price_data']['product_data']['name'],
+            $result
+        );
+        $this->assertNotContains('Delivery', $names);
+    }
+
+    public function testQuoteDeliveryLinePresentWhenFeePositive(): void
+    {
+        $items  = [['description' => 'Tulips', 'qty' => 1, 'unit_price' => 30.00]];
+        $result = StripeLineItems::fromQuoteItems($items, 0.00, null, 15.00);
+
+        $delivery = null;
+        foreach ($result as $li) {
+            if ($li['price_data']['product_data']['name'] === 'Delivery') {
+                $delivery = $li;
+            }
+        }
+        $this->assertNotNull($delivery, 'Expected a Delivery line when the fee is positive.');
+        $this->assertSame(1500, $delivery['price_data']['unit_amount']);
+    }
+
+    public function testQuoteDeliveryLineNeverCarriesTaxRate(): void
+    {
+        $items  = [['description' => 'Tulips', 'qty' => 1, 'unit_price' => 30.00]];
+        $result = StripeLineItems::fromQuoteItems($items, 2.56, 'txr_123', 15.00);
+
+        $delivery = null;
+        foreach ($result as $li) {
+            if ($li['price_data']['product_data']['name'] === 'Delivery') {
+                $delivery = $li;
+            }
+        }
+        $this->assertNotNull($delivery);
+        $this->assertArrayNotHasKey('tax_rates', $delivery);
+    }
+
+    public function testQuoteDeliveryLineOmittedByDefault(): void
+    {
+        // The $deliveryFee parameter defaults to 0.0 for backward compatibility
+        // with callers (and existing quotes) that don't pass one.
+        $items  = [['description' => 'Tulips', 'qty' => 1, 'unit_price' => 30.00]];
+        $result = StripeLineItems::fromQuoteItems($items, 0.00);
+
+        $this->assertCount(1, $result);
+    }
+
+    // -------------------------------------------------------------------------
     // Currency field
     // -------------------------------------------------------------------------
 

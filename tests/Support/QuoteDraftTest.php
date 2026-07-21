@@ -145,13 +145,13 @@ class QuoteDraftTest extends TestCase
             'Quinceañera',
             'Pink and white',
             'Es para el regalo sorpresa',
-            'Delivery: 123 Main St — $11.42',
+            'Delivery: 123 Main St',
         );
 
         $this->assertSame(
             "Occasion: Quinceañera\n"
             . "Colors: Pink and white\n"
-            . "Delivery: 123 Main St — $11.42\n"
+            . "Delivery: 123 Main St\n"
             . 'Customer notes: Es para el regalo sorpresa',
             $notes,
         );

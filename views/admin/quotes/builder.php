@@ -18,7 +18,8 @@
  *   array  $initialState  Seed for the Alpine component (edit mode pre-fill).
  *                         Keys: customerId, customerName, customerEmail,
  *                         customerPhone, eventDate, validDays, depositPct,
- *                         notes, items[]. Defaults to an empty new-quote state.
+ *                         deliveryFee, notes, items[]. Defaults to an empty
+ *                         new-quote state.
  *
  * @see \App\Controllers\Admin\QuotesController::newForm()
  * @see \App\Controllers\Admin\QuotesController::create()
@@ -193,6 +194,16 @@ $initialState = $initialState ?? [];
                 <span style="color:var(--color-muted)">Tax (<span x-text="(taxRate * 100).toFixed(3)"></span>%)</span>
                 <strong x-text="'$' + taxAmount.toFixed(2)"></strong>
             </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; border-bottom:1px solid var(--color-border)">
+                <span style="color:var(--color-muted)">Delivery Fee <span style="font-size:0.8em">(untaxed)</span></span>
+                <div style="display:flex; align-items:center; gap:0.25rem">
+                    <span style="color:var(--color-muted)">$</span>
+                    <input type="number"
+                           x-model.number="deliveryFee"
+                           min="0" step="0.01" placeholder="0.00"
+                           style="width:80px; text-align:right; padding:0.25rem; border:1px solid var(--color-border); border-radius:4px">
+                </div>
+            </div>
             <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 0; border-bottom:1px solid var(--color-border)">
                 <div>
                     <span style="color:var(--color-muted)">Deposit</span>
@@ -231,6 +242,7 @@ $initialState = $initialState ?? [];
     <input type="hidden" name="customer_email" :value="customerEmail">
     <input type="hidden" name="customer_phone" :value="customerPhone">
     <input type="hidden" name="deposit_pct"    :value="depositPct">
+    <input type="hidden" name="delivery_fee"   :value="deliveryFee">
     <input type="hidden" name="valid_days"     :value="validDays">
     <input type="hidden" name="event_date"     :value="eventDate">
     <input type="hidden" name="notes"          :value="notes">
@@ -265,7 +277,7 @@ $initialState = $initialState ?? [];
  * edit mode; any omitted key falls back to the new-quote default.
  *
  * @param {object} [initial] Seed state: customerId, customerName, customerEmail,
- *   customerPhone, eventDate, validDays, depositPct, notes, items[].
+ *   customerPhone, eventDate, validDays, depositPct, deliveryFee, notes, items[].
  * @returns {object} Alpine component data and methods.
  */
 function quoteBuilder(initial) {
@@ -284,6 +296,13 @@ function quoteBuilder(initial) {
         validDays: initial.validDays || 14,
         /** Deposit percentage (25 | 50 | 75 | 100). */
         depositPct: initial.depositPct || 50,
+        /**
+         * Separately-stated delivery fee in dollars. Never taxed (Oklahoma
+         * treats a separately-stated delivery charge as non-taxable) and never
+         * included in the deposit — it falls due with the balance. Mirrors
+         * App\Support\QuotePricing on the server.
+         */
+        deliveryFee: initial.deliveryFee || 0,
         /** Sales tax rate from server config, e.g. 0.08517. */
         taxRate: <?= (float) \App\Core\Config::get('BUSINESS_SALES_TAX_RATE', 0) ?>,
         notes: initial.notes || '',
@@ -325,11 +344,11 @@ function quoteBuilder(initial) {
         },
 
         /**
-         * Grand total: subtotal plus tax.
+         * Grand total: subtotal plus tax plus the (untaxed) delivery fee.
          * @returns {number}
          */
         get total() {
-            return this.subtotal + this.taxAmount;
+            return this.subtotal + this.taxAmount + (Number(this.deliveryFee) || 0);
         },
 
         /** Append a blank line item to the table. */

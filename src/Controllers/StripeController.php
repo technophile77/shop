@@ -68,9 +68,10 @@ final class StripeController extends BaseController
         }
 
         try {
-            $items     = QuoteService::decodeItems((string) ($quote['items_json'] ?? ''));
-            $taxAmount = (float) ($quote['tax_amount'] ?? 0.00);
-            $email     = (string) ($quote['customer_email'] ?? '');
+            $items       = QuoteService::decodeItems((string) ($quote['items_json'] ?? ''));
+            $taxAmount   = (float) ($quote['tax_amount'] ?? 0.00);
+            $email       = (string) ($quote['customer_email'] ?? '');
+            $deliveryFee = (float) ($quote['delivery_fee'] ?? 0.00);
 
             $session = StripeService::createQuoteCheckoutSession(
                 (int) $quote['id'],
@@ -78,6 +79,7 @@ final class StripeController extends BaseController
                 $items,
                 $taxAmount,
                 $email,
+                $deliveryFee,
             );
 
             Quote::setStripeCheckoutSession((int) $quote['id'], $session['id']);
@@ -156,7 +158,10 @@ final class StripeController extends BaseController
 
                 // Notify owner via SMS
                 $customerName = (string) ($quote['customer_name'] ?? 'Customer');
-                $total        = '$' . number_format((float) $quote['subtotal'] + (float) ($quote['tax_amount'] ?? 0), 2);
+                $total        = '$' . number_format(
+                    (float) $quote['subtotal'] + (float) ($quote['tax_amount'] ?? 0) + (float) ($quote['delivery_fee'] ?? 0),
+                    2
+                );
                 QuoteService::notifyOwner(
                     "Stripe payment received — {$customerName} — {$total} — Quote #{$quote['id']}"
                 );
@@ -296,7 +301,10 @@ final class StripeController extends BaseController
             Quote::updateStripePayment((int) $quote['id'], $sessionId, $paymentIntentId, 'stripe_full');
 
             $customerName = (string) ($quote['customer_name'] ?? 'Customer');
-            $total        = '$' . number_format((float) $quote['subtotal'] + (float) ($quote['tax_amount'] ?? 0), 2);
+            $total        = '$' . number_format(
+                (float) $quote['subtotal'] + (float) ($quote['tax_amount'] ?? 0) + (float) ($quote['delivery_fee'] ?? 0),
+                2
+            );
             QuoteService::notifyOwner(
                 "Stripe payment received — {$customerName} — {$total} — Quote #{$quote['id']}"
             );

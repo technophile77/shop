@@ -25,9 +25,10 @@ $subtotal   = (float) $quote['subtotal'];
 $deposit    = (float) $quote['deposit_amount'];
 $depositPct = (int)   $quote['deposit_pct'];
 
-$taxRate   = (float) ($quote['tax_rate']   ?? 0.0);
-$taxAmount = (float) ($quote['tax_amount'] ?? 0.0);
-$total     = $subtotal + $taxAmount;
+$taxRate     = (float) ($quote['tax_rate']     ?? 0.0);
+$taxAmount   = (float) ($quote['tax_amount']   ?? 0.0);
+$deliveryFee = (float) ($quote['delivery_fee'] ?? 0.0);
+$total       = $subtotal + $taxAmount + $deliveryFee;
 
 // Deposit breakdown: items flagged "full deposit" are charged in full; the rest
 // at deposit_pct. $fullDepositTotal is the paid-in-full portion of the deposit.
@@ -212,6 +213,16 @@ $statusLabel = static function (string $s): string {
                         </td>
                         <td style="text-align:right; padding:0.5rem 1.5rem; font-weight:600">
                             $<?= number_format($taxAmount, 2) ?>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
+                    <?php if ($deliveryFee > 0): ?>
+                    <tr>
+                        <td colspan="3" style="text-align:right; padding:0.5rem 1rem; color:var(--color-muted)">
+                            Delivery
+                        </td>
+                        <td style="text-align:right; padding:0.5rem 1.5rem; font-weight:600">
+                            $<?= number_format($deliveryFee, 2) ?>
                         </td>
                     </tr>
                     <?php endif; ?>
