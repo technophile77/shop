@@ -13,6 +13,7 @@ use App\Services\MailService;
 use App\Services\QuoteService;
 use App\Services\StripeService;
 use App\Support\Analytics;
+use App\Support\QuotePaymentEmail;
 
 /**
  * Handles Stripe Checkout flows for quote full-payment and webhook events.
@@ -100,6 +101,8 @@ final class StripeController extends BaseController
      * Reads the ?session_id= query parameter, verifies the payment was
      * successful, and transitions the quote to 'deposit_confirmed'. Idempotent:
      * if the quote is already confirmed, just redirects without re-processing.
+     * On that transition, also notifies the owner by SMS and, additively, by
+     * email (see {@see notifyOwnerQuotePayment()}).
      *
      * On the actual transition to paid (never on a re-hit of this URL, and never
      * when the webhook already confirmed the quote), enqueues a GA4/Pixel/Google
@@ -118,6 +121,7 @@ final class StripeController extends BaseController
      * @return Response Redirect to /quote/{token}.
      *
      * @see \App\Support\Analytics::purchase()
+     * @see notifyOwnerQuotePayment()
      */
     public function handleQuoteSuccess(Request $request, array $params = []): Response
     {
@@ -156,6 +160,11 @@ final class StripeController extends BaseController
                 Quote::transition((int) $quote['id'], 'deposit_confirmed');
                 Quote::updateStripePayment((int) $quote['id'], $sessionId, $paymentIntentId, 'stripe_full');
 
+                // Amount Stripe actually charged for this session, in dollars. Hoisted
+                // above the notify calls below since both the owner email and the
+                // ad-platform conversion event (further down) need it.
+                $amountPaid = (float) ($session->amount_total ?? 0) / 100;
+
                 // Notify owner via SMS
                 $customerName = (string) ($quote['customer_name'] ?? 'Customer');
                 $total        = '$' . number_format(
@@ -166,6 +175,11 @@ final class StripeController extends BaseController
                     "Stripe payment received — {$customerName} — {$total} — Quote #{$quote['id']}"
                 );
 
+                // Notify owner via email, in addition to the SMS above. Additive
+                // only — inherits the idempotency guard at the top of this method,
+                // so it fires at most once per quote just like the SMS.
+                $this->notifyOwnerQuotePayment($quote, $amountPaid, $paymentIntentId);
+
                 // Report the conversion for ad platforms. Enqueued into the session
                 // so views/layouts/public.php drains and emits it on the very next
                 // render (the redirect target below, /quote/{token}). This only runs
@@ -173,7 +187,6 @@ final class StripeController extends BaseController
                 // the top of this method (already 'deposit_confirmed'/'completed')
                 // skips this whole block on a refresh or when the webhook beat us to
                 // the transition, so the purchase event fires at most once here.
-                $amountPaid   = (float) ($session->amount_total ?? 0) / 100;
                 $quoteItems   = QuoteService::decodeItems((string) ($quote['items_json'] ?? ''));
                 $lineItems    = [];
                 foreach ($quoteItems as $i => $item) {
@@ -204,9 +217,12 @@ final class StripeController extends BaseController
      * Handles incoming Stripe webhook events.
      *
      * Reads the raw request body directly (bypassing the Request object) so
-     * the stream is not consumed before signature verification. Only processes
-     * checkout.session.completed events. Always returns HTTP 200 to prevent
-     * Stripe from retrying.
+     * the stream is not consumed before signature verification. Processes both
+     * checkout.session.completed and checkout.session.async_payment_succeeded
+     * events, since some payment methods (e.g. bank debits) settle after the
+     * checkout session closes and only fire the latter — both must also be
+     * enabled on the webhook endpoint in the Stripe dashboard. Always returns
+     * HTTP 200 to prevent Stripe from retrying.
      *
      * This handler is intentionally idempotent: it checks the current quote
      * status before attempting a transition.
@@ -229,7 +245,7 @@ final class StripeController extends BaseController
             return Response::json(['error' => 'Invalid signature.'], 400);
         }
 
-        if ($event->type === 'checkout.session.completed') {
+        if (in_array($event->type, ['checkout.session.completed', 'checkout.session.async_payment_succeeded'], true)) {
             $this->handleCheckoutSessionCompleted($event->data->object);
         }
 
@@ -270,7 +286,9 @@ final class StripeController extends BaseController
      * Handles checkout.session.completed for a quote full-payment session.
      *
      * Extracted from the original handleCheckoutSessionCompleted() to keep the
-     * dispatch method readable. Logic and behaviour are identical to Phase 3.
+     * dispatch method readable. Logic and behaviour are identical to Phase 3,
+     * plus an owner email (in addition to the existing owner SMS) added
+     * alongside the Stripe payment-email feature.
      *
      * @param \Stripe\Checkout\Session $session The Stripe Session object.
      * @param string                   $token   The quote token from metadata.
@@ -295,6 +313,7 @@ final class StripeController extends BaseController
         $paymentIntentId = is_string($session->payment_intent)
             ? $session->payment_intent
             : (string) ($session->payment_intent->id ?? '');
+        $amountPaid      = (float) ($session->amount_total ?? 0) / 100;
 
         try {
             Quote::transition((int) $quote['id'], 'deposit_confirmed');
@@ -308,6 +327,11 @@ final class StripeController extends BaseController
             QuoteService::notifyOwner(
                 "Stripe payment received — {$customerName} — {$total} — Quote #{$quote['id']}"
             );
+
+            // Notify owner via email, in addition to the SMS above. Additive
+            // only — inherits the idempotency guard at the top of this method,
+            // so it fires at most once per quote just like the SMS.
+            $this->notifyOwnerQuotePayment($quote, $amountPaid, $paymentIntentId);
         } catch (\Exception $e) {
             error_log('[StripeController] Failed to confirm quote from webhook: ' . $e->getMessage());
         }
@@ -428,6 +452,47 @@ final class StripeController extends BaseController
 
         if (!$result['success']) {
             error_log('[StripeController] Shop order notification failed: ' . ($result['error'] ?? 'unknown'));
+        }
+    }
+
+    /**
+     * Sends the owner a notification email when a quote's Stripe payment is confirmed.
+     *
+     * Additive to the existing owner SMS sent by {@see \App\Services\QuoteService::notifyOwner()}
+     * — this is a second, richer channel, not a replacement. Failures (missing
+     * SMTP config, bad items JSON, or a send error) are silently logged so a
+     * mail problem never prevents the quote from being recorded as paid.
+     *
+     * @param array<string, mixed> $quote           The quote row from {@see \App\Models\Quote::findByToken()}.
+     * @param float                $amountPaid      Amount Stripe actually charged, in dollars.
+     * @param string               $paymentIntentId Stripe PaymentIntent id; may be empty.
+     *
+     * @see \App\Support\QuotePaymentEmail
+     */
+    private function notifyOwnerQuotePayment(array $quote, float $amountPaid, string $paymentIntentId): void
+    {
+        $to = (string) Config::get('BUSINESS_EMAIL', '');
+        if ($to === '' || !MailService::isConfigured()) {
+            return;
+        }
+
+        try {
+            $items = QuoteService::decodeItems((string) ($quote['items_json'] ?? ''));
+        } catch (\JsonException $e) {
+            error_log('[StripeController] Failed to decode quote items for payment email: ' . $e->getMessage());
+            $items = [];
+        }
+
+        $appUrl  = rtrim((string) Config::get('APP_URL', ''), '/');
+        $subject = QuotePaymentEmail::subject($quote, $amountPaid);
+        $html    = MailService::buildHtml(
+            QuotePaymentEmail::bodyHtml($quote, $items, $amountPaid, $paymentIntentId, $appUrl)
+        );
+
+        $result = MailService::send($to, '', $subject, $html);
+
+        if (!$result['success']) {
+            error_log('[StripeController] Quote payment notification failed: ' . ($result['error'] ?? 'unknown'));
         }
     }
 }
