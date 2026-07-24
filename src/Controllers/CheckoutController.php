@@ -514,7 +514,7 @@ final class CheckoutController extends BaseController
     private function notifyOwner(array $order): void
     {
         $to = (string) Config::get('BUSINESS_EMAIL', '');
-        if ($to === '' || !MailService::isConfigured()) {
+        if ($to === '' || !MailService::canSend()) {
             return;
         }
 

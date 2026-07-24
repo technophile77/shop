@@ -401,7 +401,7 @@ final class StripeController extends BaseController
     private function notifyOwnerShopOrder(array $order, string $customerName, string $total): void
     {
         $to = (string) Config::get('BUSINESS_EMAIL', '');
-        if ($to === '' || !MailService::isConfigured()) {
+        if ($to === '' || !MailService::canSend()) {
             return;
         }
 
@@ -472,7 +472,7 @@ final class StripeController extends BaseController
     private function notifyOwnerQuotePayment(array $quote, float $amountPaid, string $paymentIntentId): void
     {
         $to = (string) Config::get('BUSINESS_EMAIL', '');
-        if ($to === '' || !MailService::isConfigured()) {
+        if ($to === '' || !MailService::canSend()) {
             return;
         }
 
