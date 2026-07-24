@@ -115,7 +115,7 @@ final class ContactController extends BaseController
         string $message,
     ): void {
         $to = (string) Config::get('BUSINESS_EMAIL', '');
-        if ($to === '' || !MailService::isConfigured()) {
+        if ($to === '' || !MailService::canSend()) {
             return;
         }
 
