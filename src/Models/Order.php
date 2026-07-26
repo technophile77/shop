@@ -365,15 +365,26 @@ final class Order
     }
 
     /**
-     * Marks a shop order as paid and records the Stripe Payment Intent ID.
+     * Marks a shop order as paid, records the Stripe Payment Intent ID, and
+     * timestamps the payment.
      *
      * Idempotent: if the order is already marked paid this call is a no-op
-     * (the WHERE clause filters it out so no duplicate update occurs).
+     * (the WHERE clause filters it out so no duplicate update occurs). This
+     * is what makes it safe to call from both dual confirmation paths — the
+     * Stripe checkout success redirect and the webhook — since either one
+     * can fire first for a given order: the FIRST call to actually match the
+     * WHERE clause wins, and its paid_at is the one that sticks. A later
+     * call from the other path finds payment_status already 'paid' and does
+     * nothing, so paid_at is never overwritten by a second confirmation.
      *
      * @param int    $id              The order ID.
      * @param string $paymentIntentId The Stripe Payment Intent ID (pi_…).
      *
      * @return void
+     *
+     * @see \App\Support\WeeklySalesAggregator Reads paid_at (via
+     *      COALESCE(paid_at, created_at)) to date revenue for the weekly
+     *      sales report.
      *
      * @example
      *   Order::markPaid($orderId, 'pi_3abc123');
@@ -383,7 +394,8 @@ final class Order
         $stmt = Database::rw()->prepare(
             "UPDATE orders
              SET payment_status = 'paid',
-                 stripe_payment_intent_id = ?
+                 stripe_payment_intent_id = ?,
+                 paid_at = NOW()
              WHERE id = ?
                AND payment_status != 'paid'"
         );
