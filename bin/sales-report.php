@@ -54,6 +54,16 @@ use App\Support\SalesReportHtml;
 use App\Support\WeekBucket;
 use App\Support\WeeklySalesAggregator;
 
+// Refuse to run under a web SAPI, before loading anything. The site's docroot
+// is the project root and .htaccess serves any existing file directly, so this
+// script is reachable at https://…/bin/sales-report.php. It reads every sale
+// the business has ever made, so it must never be executable by an anonymous
+// HTTP request — and merely erroring on a missing $argv is luck, not a guard.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit(1);
+}
+
 require dirname(__DIR__) . '/vendor/autoload.php';
 require dirname(__DIR__) . '/config/app.php';
 
@@ -512,6 +522,45 @@ function loadQuoteRows(\PDO $pdo): array
 }
 
 /**
+ * Format a UTC database timestamp for a human-readable warning, in the
+ * business timezone and explicitly labelled.
+ *
+ * The report reads every TIMESTAMP as UTC (the session is pinned to the
+ * '+00:00' offset), so printing the raw value in a warning would show a human
+ * a date that disagrees with the one the sale is filed under: a deposit taken
+ * at 7:05pm Central on 2026-05-30 reads back as '2026-05-31 00:05:37'. For a
+ * report whose entire purpose is correct date attribution, that is worth the
+ * conversion — and the zone abbreviation is included so the value can never be
+ * mistaken for UTC again.
+ *
+ * @param string $utcTimestamp A 'Y-m-d H:i:s' value as read from MySQL with the
+ *                             session time zone pinned to '+00:00'.
+ *
+ * @return string The same instant in the business timezone with its zone
+ *                abbreviation appended, or the input unchanged if it cannot be
+ *                parsed — a warning must never itself throw.
+ *
+ * @example
+ *   businessTimeLabel('2026-05-31 00:05:37');  // '2026-05-30 19:05:37 CDT'
+ *
+ * @see \App\Support\WeekBucket::businessZone() The same zone the report buckets by.
+ */
+function businessTimeLabel(string $utcTimestamp): string
+{
+    $utc = \DateTimeImmutable::createFromFormat(
+        '!Y-m-d H:i:s',
+        $utcTimestamp,
+        new \DateTimeZone('UTC')
+    );
+
+    if ($utc === false) {
+        return $utcTimestamp;
+    }
+
+    return $utc->setTimezone(WeekBucket::businessZone())->format('Y-m-d H:i:s T');
+}
+
+/**
  * Load every quote in an inconsistent deposit-confirmation state, as
  * self-contained warning sentences.
  *
@@ -522,7 +571,8 @@ function loadQuoteRows(\PDO $pdo): array
  * @param \PDO $pdo A connection pinned to `SET SESSION time_zone = '+00:00'`.
  *
  * @return list<string> One warning per inconsistent quote, naming its id,
- *         status, and `deposit_confirmed_at` value.
+ *         status, and `deposit_confirmed_at` rendered in the business timezone
+ *         via {@see businessTimeLabel()}.
  *
  * @example
  *   // quote-7 has status 'draft' but a deposit_confirmed_at timestamp anyway:
@@ -543,7 +593,9 @@ function loadExceptions(\PDO $pdo): array
             'quote-%s: status "%s" with deposit_confirmed_at %s is an inconsistent state; excluded from the report.',
             $quote['id'],
             $quote['status'],
-            $quote['deposit_confirmed_at'] ?? 'NULL'
+            $quote['deposit_confirmed_at'] === null
+                ? 'NULL'
+                : businessTimeLabel($quote['deposit_confirmed_at'])
         );
     }
 
