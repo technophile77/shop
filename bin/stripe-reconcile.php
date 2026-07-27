@@ -279,8 +279,13 @@ function loadLocalPayments(\PDO $pdo, ?int $sinceGte): array
                    FROM orders o
                    LEFT JOIN customers c ON c.id = o.customer_id
                   WHERE o.payment_status = 'paid' AND o.items_json IS NOT NULL";
+    // Repeat the COALESCE expression in WHERE rather than filtering on the
+    // `recognized_at` alias in HAVING: HAVING without GROUP BY is a MySQL
+    // extension that treats the result as one implicit group, so under
+    // ONLY_FULL_GROUP_BY it can reject a non-aggregated column outright. Only
+    // two orders are ever paid, so scanning without an index costs nothing.
     if ($sinceGte !== null) {
-        $orderSql .= ' HAVING recognized_at >= :since';
+        $orderSql .= ' AND COALESCE(o.paid_at, o.created_at) >= :since';
     }
     $orderSql .= ' ORDER BY recognized_at';
 

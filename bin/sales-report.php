@@ -42,11 +42,13 @@ declare(strict_types=1);
  * @see \App\Support\WeeklySalesAggregator Aggregates channel rows into the weekly series.
  * @see \App\Support\SalesReportCsv        Formats the aggregate as CSV-ready rows.
  * @see \App\Support\SalesReportHtml       Renders the aggregate as a self-contained HTML page.
+ * @see \App\Support\ReportFileOutput      Output-directory resolution, the outside-the-webroot guard, and file writing.
  */
 
 use App\Core\Database;
 use App\Support\DoorDashSalesCsv;
 use App\Support\QuoteSalesBreakdown;
+use App\Support\ReportFileOutput;
 use App\Support\SalesChannel;
 use App\Support\SalesLineClassifier;
 use App\Support\SalesReportCsv;
@@ -140,37 +142,6 @@ function parseArgs(array $args): array
 }
 
 /**
- * Expand a leading `~/` (or bare `~`) in a path to the user's home directory.
- *
- * Exists because the shell does not expand `~` when it appears after an `=`
- * (e.g. `--out=~/private/flowers-sales`), so this script must do it itself.
- *
- * @param string $path A path that may start with `~`.
- *
- * @return string The path with a leading `~` replaced by the home directory,
- *         or the original path unchanged when it doesn't start with `~`, or
- *         when no home directory can be determined.
- *
- * @example
- *   expandHome('~/private/flowers-sales'); // '/home/owner/private/flowers-sales'
- *   expandHome('/already/absolute');       // '/already/absolute'
- */
-function expandHome(string $path): string
-{
-    if ($path !== '~' && !str_starts_with($path, '~/') && !str_starts_with($path, '~\\')) {
-        return $path;
-    }
-
-    $home = $_SERVER['HOME'] ?? (getenv('HOME') ?: getenv('USERPROFILE'));
-
-    if ($home === false || $home === null || $home === '') {
-        return $path;
-    }
-
-    return $path === '~' ? $home : $home . substr($path, 1);
-}
-
-/**
  * Validate a `--since` value as a real `YYYY-MM-DD` calendar date.
  *
  * @param string $value The candidate date string.
@@ -189,105 +160,6 @@ function isValidIsoDate(string $value): bool
     }
 
     return checkdate((int) $matches[2], (int) $matches[3], (int) $matches[1]);
-}
-
-/**
- * Resolve the output directory from `--out`, the `SALES_REPORT_DIR`
- * environment variable, or the built-in default, in that priority order.
- *
- * The built-in default deliberately lives under the user's home directory
- * rather than anywhere inside the project: this project's root IS the site's
- * public docroot, and `.htaccess` serves any existing file directly, so a
- * report CSV written into the project would be publicly downloadable.
- *
- * @param ?string $outOption The raw `--out` value, or null when not supplied.
- *
- * @return string The resolved, `~`-expanded output directory (not yet
- *         validated to exist or to be outside the project).
- *
- * @throws never Exits the process directly with code 2 when no home
- *         directory can be determined for the default.
- *
- * @example
- *   resolveOutDir('~/reports'); // '/home/owner/reports'
- *   resolveOutDir(null);        // e.g. '/home/owner/private/flowers-sales'
- */
-function resolveOutDir(?string $outOption): string
-{
-    if ($outOption !== null) {
-        return expandHome($outOption);
-    }
-
-    $envDir = getenv('SALES_REPORT_DIR');
-    if ($envDir !== false && $envDir !== '') {
-        return expandHome($envDir);
-    }
-
-    $home = $_SERVER['HOME'] ?? (getenv('HOME') ?: getenv('USERPROFILE'));
-
-    if ($home === false || $home === null || $home === '') {
-        fwrite(STDERR, "Cannot determine a default --out directory: neither SALES_REPORT_DIR nor HOME is set.\n");
-        exit(2);
-    }
-
-    return rtrim($home, '/\\') . '/private/flowers-sales';
-}
-
-/**
- * Refuse an output directory that resolves to inside the project root.
- *
- * This is a real security guard, not a nicety: this project's root is the
- * site's public docroot, and `.htaccess` serves any existing file directly,
- * so a financial CSV written inside it would be silently publicly
- * downloadable. Walks up from `$outDir` to the nearest ancestor that already
- * exists (since `$outDir` itself is typically created later by
- * {@see ensureOutDir()}) and compares its `realpath()` against the project
- * root's `realpath()`.
- *
- * @param string $outDir      The resolved (but not yet created) output directory.
- * @param string $projectRoot The project root to guard against, e.g. `dirname(__DIR__)`.
- *
- * @throws never Exits the process directly with code 2 and an explicit
- *         refusal message when `$outDir` resolves inside `$projectRoot`.
- *
- * @example
- *   assertOutsideProject('/home/owner/private/flowers-sales', '/home/owner/public_html/site');
- *   // returns normally
- *   assertOutsideProject('/home/owner/public_html/site/reports', '/home/owner/public_html/site');
- *   // prints a refusal to STDERR and exits with code 2
- */
-function assertOutsideProject(string $outDir, string $projectRoot): void
-{
-    $projectReal = realpath($projectRoot);
-    if ($projectReal === false) {
-        return;
-    }
-
-    $probe = $outDir;
-    while ($probe !== '' && !is_dir($probe)) {
-        $parent = dirname($probe);
-        if ($parent === $probe) {
-            break;
-        }
-        $probe = $parent;
-    }
-
-    $probeReal = is_dir($probe) ? realpath($probe) : false;
-    $target    = $probeReal !== false
-        ? $probeReal
-        : rtrim(str_replace('\\', '/', $outDir), '/');
-    $project = rtrim(str_replace('\\', '/', $projectReal), '/');
-    $target  = rtrim(str_replace('\\', '/', $target), '/');
-
-    $isInside = $target === $project || str_starts_with($target . '/', $project . '/');
-
-    if ($isInside) {
-        fwrite(STDERR, "Refusing to write to \"{$outDir}\": it resolves inside the project root ({$projectReal}).\n");
-        fwrite(STDERR, "The project root is the site's public docroot and .htaccess serves any existing file\n");
-        fwrite(STDERR, "directly, so a report written there would be publicly downloadable. Choose a directory\n");
-        fwrite(STDERR, "outside the project (see --out in --help).\n");
-        exit(2);
-    }
 }
 
 /**
@@ -625,7 +497,7 @@ function loadExceptions(\PDO $pdo): array
  */
 function loadDoorDashRows(string $path): array
 {
-    $expanded = expandHome($path);
+    $expanded = ReportFileOutput::expandHome($path);
 
     if (!is_file($expanded) || !is_readable($expanded)) {
         fwrite(STDERR, "DoorDash CSV not found or unreadable: {$expanded}\n");
@@ -917,113 +789,6 @@ function renderTerminalSummary(array $aggregate, array $meta): void
 }
 
 /**
- * The last PHP error's message, for turning a suppressed `@`-prefixed
- * filesystem call's failure into an actionable STDERR line.
- *
- * @return string The last error message, or a generic fallback when none was recorded.
- */
-function lastErrorMessage(): string
-{
-    $error = error_get_last();
-
-    return $error['message'] ?? 'unknown error';
-}
-
-/**
- * Create the output directory (mode 0700 — it holds financial data on shared
- * hosting) if it doesn't already exist.
- *
- * @param string $outDir The directory to ensure exists.
- *
- * @throws never Exits the process directly with code 1 and the underlying
- *         reason on STDERR when the directory cannot be created.
- */
-function ensureOutDir(string $outDir): void
-{
-    if (is_dir($outDir)) {
-        return;
-    }
-
-    if (!@mkdir($outDir, 0700, true) && !is_dir($outDir)) {
-        fwrite(STDERR, "Unable to create output directory \"{$outDir}\": " . lastErrorMessage() . "\n");
-        exit(1);
-    }
-
-    @chmod($outDir, 0700);
-}
-
-/**
- * Lock down a just-written report file's permissions to 0600 (owner read/write
- * only), since it holds financial data on a shared host.
- *
- * @param string $path The file to secure.
- */
-function secureFile(string $path): void
-{
-    if (!@chmod($path, 0600)) {
-        fwrite(STDERR, "Warning: could not chmod \"{$path}\" to 0600: " . lastErrorMessage() . "\n");
-    }
-}
-
-/**
- * Write a `list<list<scalar>>` of CSV-ready rows to a file via `fputcsv()`,
- * lock its permissions down, and print its absolute path.
- *
- * @param string $path The destination file path.
- * @param list<list<scalar>> $rows Rows in the shape {@see SalesReportCsv::rows()} returns.
- *
- * @return string The absolute path written.
- *
- * @throws never Exits the process directly with code 1 and the reason on
- *         STDERR when the file cannot be opened for writing.
- */
-function writeCsvFile(string $path, array $rows): string
-{
-    $handle = @fopen($path, 'wb');
-    if ($handle === false) {
-        fwrite(STDERR, "Unable to write \"{$path}\": " . lastErrorMessage() . "\n");
-        exit(1);
-    }
-
-    foreach ($rows as $row) {
-        fputcsv($handle, $row);
-    }
-    fclose($handle);
-
-    secureFile($path);
-    $absolute = realpath($path) ?: $path;
-    fwrite(STDOUT, "Wrote {$absolute}\n");
-
-    return $absolute;
-}
-
-/**
- * Write a text file (the HTML report), lock its permissions down, and print
- * its absolute path.
- *
- * @param string $path     The destination file path.
- * @param string $contents The full file contents to write.
- *
- * @return string The absolute path written.
- *
- * @throws never Exits the process directly with code 1 and the reason on
- *         STDERR when the file cannot be written.
- */
-function writeTextFile(string $path, string $contents): string
-{
-    if (@file_put_contents($path, $contents) === false) {
-        fwrite(STDERR, "Unable to write \"{$path}\": " . lastErrorMessage() . "\n");
-        exit(1);
-    }
-
-    secureFile($path);
-    $absolute = realpath($path) ?: $path;
-    fwrite(STDOUT, "Wrote {$absolute}\n");
-
-    return $absolute;
-}
-
-/**
  * Write the report's CSV, warnings CSV, and (optionally) HTML files to `$outDir`.
  *
  * @param array<string, mixed> $aggregate  The weekly sales aggregate, as consumed
@@ -1031,7 +796,7 @@ function writeTextFile(string $path, string $contents): string
  * @param list<array{source_id: string, week_start: string, description: string,
  *              amount: float, bucket: string, reason: string}> $auditLines
  *        Quote delivery/other-fee lines for the warnings CSV's audit trail.
- * @param string $outDir The output directory (created if absent by {@see ensureOutDir()}).
+ * @param string $outDir The output directory (created if absent by {@see ReportFileOutput::ensureOutDir()}).
  * @param bool $html Whether to also write the HTML report.
  * @param array{doordash_included: bool, doordash_source: ?string} $meta Report metadata,
  *        forwarded into {@see SalesReportHtml::render()}'s `$meta`.
@@ -1040,17 +805,17 @@ function writeTextFile(string $path, string $contents): string
  */
 function writeOutputs(array $aggregate, array $auditLines, string $outDir, bool $html, array $meta): array
 {
-    ensureOutDir($outDir);
+    ReportFileOutput::ensureOutDir($outDir);
 
     $stamp = (new \DateTimeImmutable('now', WeekBucket::businessZone()))->format('Y-m-d');
     $base  = rtrim($outDir, '/\\') . "/weekly-sales-{$stamp}";
 
     $paths   = [];
-    $paths[] = writeCsvFile("{$base}.csv", SalesReportCsv::rows($aggregate));
-    $paths[] = writeCsvFile("{$base}-warnings.csv", SalesReportCsv::warningRows($aggregate, $auditLines));
+    $paths[] = ReportFileOutput::writeCsvFile("{$base}.csv", SalesReportCsv::rows($aggregate));
+    $paths[] = ReportFileOutput::writeCsvFile("{$base}-warnings.csv", SalesReportCsv::warningRows($aggregate, $auditLines));
 
     if ($html) {
-        $paths[] = writeTextFile(
+        $paths[] = ReportFileOutput::writeTextFile(
             "{$base}.html",
             SalesReportHtml::render($aggregate, [
                 'generated_at'      => new \DateTimeImmutable('now'),
@@ -1096,8 +861,8 @@ function main(array $argv): int
         return 2;
     }
 
-    $outDir = resolveOutDir($options['out']);
-    assertOutsideProject($outDir, dirname(__DIR__));
+    $outDir = ReportFileOutput::resolveOutDir($options['out'], 'SALES_REPORT_DIR', 'private/flowers-sales');
+    ReportFileOutput::assertOutsideProject($outDir, dirname(__DIR__));
 
     $doordash = $options['doordash'] !== null ? loadDoorDashRows($options['doordash']) : null;
 

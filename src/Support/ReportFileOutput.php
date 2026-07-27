@@ -15,12 +15,12 @@ namespace App\Support;
  * project even if explicitly told to, and lock down whatever it writes to
  * owner-only permissions. This class exists so that logic is written once.
  *
- * `bin/sales-report.php` predates this class and keeps its own copy of the
- * same logic inline rather than being refactored to depend on it, so its
- * behaviour is guaranteed unchanged; new scripts should use this class
- * instead of copying the logic again.
+ * The guard in {@see self::assertOutsideProject()} is security-critical, so it
+ * deliberately lives here once rather than being copied per script: a fix
+ * applied to one copy and not the other would leave a financial report
+ * publicly downloadable. Every report CLI must call into this class.
  *
- * @see bin/sales-report.php     The original inline implementation this was extracted from the pattern of.
+ * @see bin/sales-report.php     Uses this class for its `--out`/`--html` handling.
  * @see bin/stripe-reconcile.php Uses this class for its `--out`/`--csv` handling.
  */
 final class ReportFileOutput
@@ -235,6 +235,36 @@ final class ReportFileOutput
             fputcsv($handle, $row);
         }
         fclose($handle);
+
+        self::secureFile($path);
+        $absolute = realpath($path) ?: $path;
+        fwrite(STDOUT, "Wrote {$absolute}\n");
+
+        return $absolute;
+    }
+
+    /**
+     * Write a text file (e.g. an HTML report), lock its permissions down, and
+     * print its absolute path.
+     *
+     * @param string $path     The destination file path.
+     * @param string $contents The full file contents to write.
+     *
+     * @return string The absolute path written.
+     *
+     * @throws never Exits the process directly with code 1 and the reason on
+     *         STDERR when the file cannot be written.
+     *
+     * @example
+     *   ReportFileOutput::writeTextFile('/home/owner/private/flowers-sales/report.html', $html);
+     *   // prints "Wrote /home/owner/private/flowers-sales/report.html" and returns that path
+     */
+    public static function writeTextFile(string $path, string $contents): string
+    {
+        if (@file_put_contents($path, $contents) === false) {
+            fwrite(STDERR, "Unable to write \"{$path}\": " . self::lastErrorMessage() . "\n");
+            exit(1);
+        }
 
         self::secureFile($path);
         $absolute = realpath($path) ?: $path;

@@ -51,8 +51,13 @@ each only considering pairs still unmatched by the rule before it:
    PaymentIntent belongs to exactly one charge.
 2. **`session`** — the local record's stored `session_id` names a Checkout
    Session whose `payment_intent` equals the charge's `payment_intent`.
-   Needed because some quotes only ever had a session id written, never a
-   payment intent id (see quote 5 in §5).
+   Covers a quote/order that got a session id written but never a
+   PaymentIntent id — possible because `stripe_checkout_session_id` is
+   written when checkout *starts* and `stripe_payment_intent_id` only when
+   the webhook confirming payment lands. **No live record needs this rule
+   today** (as of the 2026-07-27 run every record either stores a
+   PaymentIntent id or stores neither id), so it is covered by a constructed
+   test case rather than a real one.
 3. **`amount_and_date`** — **last resort**: the local's expected dollar
    amount equals the charge's amount within half a cent, and the charge's
    date falls within `StripeReconciler::MATCH_WINDOW_DAYS` (4 days, by
@@ -139,9 +144,17 @@ are on the same clock.
 ## 5. Known findings (2026-07-27 live reconciliation)
 
 The first full run against the live Stripe account, covering every payment
-since the first sale, produced 11 matches and zero unmatched records on
-either side — but surfaced two real, worth-recording data issues along the
-way:
+since the first sale, produced 11 matches (9 via `payment_intent`, 2 via
+`amount_and_date`) and zero unmatched records on either side, with zero
+refunds and zero disputes across the whole account:
+
+```
+Stripe settled (net of refunds): $1,168.53
+Local expected:                  $1,167.35
+Delta (settled - expected):      $1.18
+```
+
+The entire $1.18 is quote 17, below. Two data issues are worth recording:
 
 - **Quote 17's stored `tax_amount` ($8.18) and `deposit_amount` are stale.**
   They were computed against a $96.00 subtotal that was later edited to
@@ -158,13 +171,21 @@ way:
   exactly the kind of drift `App\Support\StripeReconciler`'s
   `amount_mismatches` section exists to catch.
 
-- **Quote 4's payment never wrote a Stripe id because it was taken through a
-  third-party iPhone card-reader app** (`com.pocketvendor.payment`) rather
-  than the site's own Checkout, so neither a session id nor a PaymentIntent
-  id was ever available to link it — only the `amount_and_date` heuristic
-  could, and did. Expect any future off-site payment (the same card-reader
-  app, a Stripe Dashboard charge, a payment link) to reconcile the same way,
-  and to always carry its heuristic warning.
+- **Quotes 4 and 5 have NULL in both `stripe_checkout_session_id` and
+  `stripe_payment_intent_id`,** so no identity rule can reach them — only
+  `amount_and_date` could, and did, each with its heuristic warning. Quote 4
+  was taken through a third-party iPhone card-reader app
+  (`com.pocketvendor.payment`) rather than the site's own Checkout, which is
+  why nothing was ever written back. Expect any future off-site payment (the
+  same card-reader app, a Stripe Dashboard charge, a payment link) to
+  reconcile the same way. Two heuristic warnings on a clean run is therefore
+  the current expected steady state, and the script exits `1` because of
+  them — not because anything is wrong.
+
+  A caveat worth knowing: both were matched on amount alone within a 4-day
+  window. Quote 4's $81.39 is also the amount of cancelled DEMO quote 2, so
+  if a future duplicate-amount payment lands in the same window the reconciler
+  will report an ambiguity rather than pick one. That is deliberate.
 
 @see docs/weekly-sales-report.md — §9 "Intent, not settled cash" and "No
 refund handling" name exactly the gaps this tool fills.

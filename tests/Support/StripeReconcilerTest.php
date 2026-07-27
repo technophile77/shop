@@ -17,9 +17,9 @@ use PHPUnit\Framework\TestCase;
  * a value recomputed by calling the reconciler itself. Covers: the full
  * fixture closing with zero unmatched on either side; the hand-summed
  * totals; a quote whose stale stored tax/subtotal produces a real amount
- * mismatch while still being a genuine match; a session-only match proving
- * rule 2 is reached (not rule 1 accidentally); a heuristic amount+date
- * match with its warning; rule priority (a stored PaymentIntent id beats a
+ * mismatch while still being a genuine match; a constructed session-only
+ * match proving rule 2 is reachable at all (no live record exercises it);
+ * a heuristic amount+date match with its warning; rule priority (a stored PaymentIntent id beats a
  * same-amount/same-date decoy); one-to-one matching when two locals compete
  * for a single charge; an equidistant ambiguity that is left unmatched
  * rather than guessed; refund and dispute handling; and an unmatched charge
@@ -97,10 +97,12 @@ class StripeReconcilerTest extends TestCase
      * The real, verified 2026-07-27 reconciliation fixture: 11 charges and
      * their 11 matching local records, spanning three matching rules.
      * Quote 17's tax_amount/deposit_amount are stale ($1.18 short — see
-     * docs/stripe-reconciliation.md's known findings). Quote 5 has no
-     * stored payment_intent_id, only a session id. Quote 4 has neither and
-     * was paid through a third-party card-reader app, so only its amount
-     * and date link it to its charge.
+     * docs/stripe-reconciliation.md's known findings). Quotes 4 and 5 have
+     * neither a stored session id nor a payment intent id (both columns are
+     * NULL in the live database), so only their amount and date link them to
+     * their charges. There are therefore no Checkout Sessions in this
+     * fixture: rule 2 does not fire on any real record today, and is covered
+     * separately by {@see self::testSessionOnlyLocalMatchesViaRuleTwo()}.
      *
      * @return array{0: list<array>, 1: list<array>, 2: list<array>} charges, sessions, locals
      */
@@ -120,9 +122,7 @@ class StripeReconcilerTest extends TestCase
             $this->charge('ch_4', '2026-06-04 18:55:20', 81.39, ['payment_intent' => '']),
         ];
 
-        $sessions = [
-            $this->session('cs_5', '2026-06-06 20:37:20', 189.90, ['payment_intent' => 'pi_5']),
-        ];
+        $sessions = [];
 
         $locals = [
             $this->local('order', 13, 'order 13', 107.67, [
@@ -155,12 +155,11 @@ class StripeReconcilerTest extends TestCase
             $this->local('quote', 7, 'quote 7', 92.24, [
                 'recognized_at' => '2026-06-24 00:15:30', 'payment_intent_id' => 'pi_7',
             ]),
-            // Quote 5: no payment_intent_id ever stored, only a Checkout Session id — rule 1 cannot
-            // reach it, only rule 2 (session).
+            // Quotes 4 and 5: both stripe id columns are NULL in the live database, so neither
+            // rule 1 nor rule 2 can reach them — only the amount+date heuristic can.
             $this->local('quote', 5, 'quote 5', 189.90, [
-                'recognized_at' => '2026-06-06 20:40:00', 'session_id' => 'cs_5', 'payment_intent_id' => '',
+                'recognized_at' => '2026-06-06 20:40:00',
             ]),
-            // Quote 4: paid via a third-party iPhone card-reader app — neither id was ever written.
             $this->local('quote', 4, 'quote 4', 81.39, [
                 'recognized_at' => '2026-06-04 22:50:30',
             ]),
@@ -228,25 +227,55 @@ class StripeReconcilerTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // 4. Quote 5: session match, not payment_intent
+    // 4. Rule 2: a session-only local matches, and ONLY rule 2 could have done it
     // -------------------------------------------------------------------------
 
-    public function testQuote5MatchesViaSessionNotPaymentIntent(): void
+    /**
+     * No live record exercises rule 2 today (every quote either stores a
+     * PaymentIntent id or stores neither id), so this case is constructed:
+     * a local with a session id but no PaymentIntent id, whose charge sits
+     * well outside {@see StripeReconciler::MATCH_WINDOW_DAYS} of its
+     * `recognized_at`. Rule 1 cannot see it (no stored intent) and rule 3
+     * cannot reach it (far outside the date window), so a successful match
+     * proves rule 2 fired rather than something else covering for it.
+     */
+    public function testSessionOnlyLocalMatchesViaRuleTwo(): void
+    {
+        $daysApart = StripeReconciler::MATCH_WINDOW_DAYS + 10;
+
+        $charge  = $this->charge('ch_S', '2026-05-01 12:00:00', 189.90, ['payment_intent' => 'pi_S']);
+        $session = $this->session('cs_S', '2026-05-01 11:59:50', 189.90, ['payment_intent' => 'pi_S']);
+        $local   = $this->local('quote', 905, 'quote session-only', 189.90, [
+            'recognized_at'     => '2026-05-' . str_pad((string) (1 + $daysApart), 2, '0', STR_PAD_LEFT) . ' 12:00:00',
+            'session_id'        => 'cs_S',
+            'payment_intent_id' => '',
+        ]);
+
+        $result = StripeReconciler::reconcile([$charge], [$session], [$local]);
+
+        $this->assertCount(1, $result['matched']);
+        $this->assertSame('session', $result['matched'][0]['method']);
+        $this->assertSame('ch_S', $result['matched'][0]['charge']['id']);
+    }
+
+    /**
+     * Both quotes that reconcile heuristically in the live data have NULL in
+     * both stripe id columns, so the fixture must carry no session at all —
+     * a session invented for quote 5 would make rule 2 look like it fires on
+     * real data when it never does.
+     */
+    public function testRealFixtureCarriesNoSessionsAndNoSessionMatches(): void
     {
         [$charges, $sessions, $locals] = $this->realFixture();
 
-        $quote5Local = current(array_filter($locals, static fn (array $l): bool => $l['label'] === 'quote 5'));
-        // Rule 1 structurally cannot reach quote 5: it has no stored payment_intent_id.
-        $this->assertSame('', $quote5Local['payment_intent_id']);
+        $this->assertSame([], $sessions);
 
         $result = StripeReconciler::reconcile($charges, $sessions, $locals);
 
-        $matchedQuote5 = array_values(array_filter(
-            $result['matched'],
-            static fn (array $pair): bool => $pair['local']['label'] === 'quote 5'
-        ));
-        $this->assertCount(1, $matchedQuote5);
-        $this->assertSame('session', $matchedQuote5[0]['method']);
+        $methods = array_map(static fn (array $pair): string => $pair['method'], $result['matched']);
+        $this->assertNotContains('session', $methods);
+        $this->assertSame(9, count(array_filter($methods, static fn (string $m): bool => $m === 'payment_intent')));
+        $this->assertSame(2, count(array_filter($methods, static fn (string $m): bool => $m === 'amount_and_date')));
     }
 
     // -------------------------------------------------------------------------
