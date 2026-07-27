@@ -391,12 +391,14 @@ part of this report:
   notification and the ad-platform conversion event) but never persists it.
   The report therefore reflects `orders.total` and the quote's computed
   total — what was *intended* to be charged — not necessarily the exact
-  amount Stripe settled.
+  amount Stripe settled. See `docs/stripe-reconciliation.md` for a tool that
+  checks the two against each other.
 
 - **No refund handling.** There is no `charge.refunded` or dispute webhook
   anywhere in this codebase, and `payment_status = 'paid'` is never reversed
   once set. Refunds and disputes therefore do not reduce reported sales at
-  all — cross-check the Stripe dashboard directly for those.
+  all — cross-check the Stripe dashboard directly for those, or run
+  `docs/stripe-reconciliation.md`'s reconciliation, which surfaces both.
 
 - **Quote balances are invisible.** Only the deposit's confirmation
   timestamp exists in the schema (`quotes.deposit_confirmed_at`); there is
