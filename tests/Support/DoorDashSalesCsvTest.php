@@ -17,15 +17,19 @@ use PHPUnit\Framework\TestCase;
  * message names the field, an attempted spelling, and the config file;
  * order-independence of column position; alternative accepted header
  * spellings; unmapped vs. ignored extra columns (including that a `Tip`
- * column never contributes to any money figure); every documented money
- * format `parseMoney()` must handle; a malformed row being skipped with a
- * line-numbered warning while other rows still parse; a non-closing net
+ * column never contributes to any money figure); the real 40-column 2026
+ * Marketplace export parsing against the shipped config with nothing
+ * unmapped, including a payout `Adjustment` that credits the merchant and a
+ * DoorDash-funded discount offset by its marketing credit; every documented
+ * money format `parseMoney()` must handle; a malformed row being skipped with
+ * a line-numbered warning while other rows still parse; a non-closing net
  * payout producing a warning without being overwritten or throwing; and the
  * four accepted date/time formats, including the noon-business-time
- * anchoring of a date-only value. A stochastic test then checks the
- * class's invariants (row count, non-negative fees, recognized-sales
- * agreement, order-independence, UTC timestamps) across 150 randomly
- * generated well-formed CSVs.
+ * anchoring of a date-only value. A stochastic test then checks the class's
+ * invariants (row count, fees negating the signed source column in both
+ * directions, identity closure, recognized-sales agreement,
+ * order-independence, UTC timestamps) across 150 randomly generated
+ * well-formed CSVs.
  *
  * @see \App\Support\DoorDashSalesCsv
  */
@@ -242,6 +246,87 @@ class DoorDashSalesCsvTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // 6b. The real Marketplace export shape
+    // -------------------------------------------------------------------------
+
+    /**
+     * The actual 40-column "Financial → Transaction details" export DoorDash
+     * produced in 2026 parses against the shipped config with no unmapped
+     * headers and no warnings. This is the regression guard on
+     * `config/doordash-report-map.php`: every informational column DoorDash
+     * ships is either mapped, summed as a fee, or explicitly ignored, so a
+     * future header change surfaces as a failure here rather than as silently
+     * dropped money.
+     *
+     * The four rows cover the shapes that export actually contains:
+     * commission with tax passed to the merchant; a DoorDash-funded discount
+     * offset by an equal marketing credit; a discount funded by the merchant;
+     * and a standalone `Adjustment` transaction paying the merchant back.
+     */
+    public function testRealMarketplaceExportParsesWithNoUnmappedHeaders(): void
+    {
+        $rows = $this->readFixture('marketplace-2026-transactions.csv');
+        $map  = require DoorDashSalesCsv::defaultMapPath();
+
+        $result = DoorDashSalesCsv::parse($rows, $map);
+
+        $this->assertSame([], $result['unmapped_headers']);
+        $this->assertSame([], $result['warnings']);
+        $this->assertCount(4, $result['rows']);
+
+        // Commission only, with $2.98 of tax passed through to the merchant:
+        // 35.00 + 0.00 + 2.98 - 7.00 = 30.98
+        $this->assertSame(35.00, $result['rows'][0]['merchandise']);
+        $this->assertSame(2.98, $result['rows'][0]['tax']);
+        $this->assertSame(7.00, $result['rows'][0]['fees']);
+        $this->assertSame(30.98, $result['rows'][0]['recognized_sales']);
+
+        // A $10.00 discount funded by DoorDash arrives as a -10.00 discount
+        // line and an equal +10.00 marketing credit, which cancel. The real
+        // cost is commission 15.40 + marketing fees 5.72 = 21.12, so
+        // 77.00 - 21.12 = 55.88. Counting the discount without its credit
+        // would report 31.12 of fees and miss the payout by $10.
+        $this->assertSame(21.12, $result['rows'][1]['fees']);
+        $this->assertSame(55.88, $result['rows'][1]['recognized_sales']);
+
+        // A discount the merchant funded is a real cost and stays in fees:
+        // 31.15 + 0.99 + 26.25 = 58.39, and 182.00 - 58.39 = 123.61
+        $this->assertSame(58.39, $result['rows'][2]['fees']);
+        $this->assertSame(123.61, $result['rows'][2]['recognized_sales']);
+
+        // A standalone Adjustment pays the merchant $92.24 with no
+        // merchandise behind it, so fees is *negative* — it adds to
+        // recognized sales rather than subtracting: 0.00 - (-92.24) = 92.24.
+        $this->assertSame(0.00, $result['rows'][3]['merchandise']);
+        $this->assertSame(-92.24, $result['rows'][3]['fees']);
+        $this->assertSame(92.24, $result['rows'][3]['recognized_sales']);
+    }
+
+    /**
+     * On a Marketplace order DoorDash is the marketplace facilitator: it
+     * charges the customer a delivery fee and remits sales tax itself, and
+     * neither reaches the merchant. The report must therefore show zero
+     * delivery and zero merchant-side tax for such an order rather than
+     * borrowing the customer-facing figures, which would claim revenue the
+     * business never received.
+     */
+    public function testMarketplaceOrderWithNoMerchantDeliveryOrTaxReportsZero(): void
+    {
+        $rows = $this->readFixture('marketplace-2026-transactions.csv');
+        $map  = require DoorDashSalesCsv::defaultMapPath();
+
+        $result = DoorDashSalesCsv::parse($rows, $map);
+
+        // Row 3 carries -13.27 of "tax remitted by DoorDash to tax
+        // authorities" and a 155.75 "subtotal for tax"; neither may leak into
+        // the merchant's figures.
+        $row = $result['rows'][2];
+        $this->assertSame(0.00, $row['delivery']);
+        $this->assertSame(0.00, $row['tax']);
+        $this->assertSame(182.00, $row['merchandise']);
+    }
+
+    // -------------------------------------------------------------------------
     // 7. Money formats
     // -------------------------------------------------------------------------
 
@@ -393,14 +478,27 @@ class DoorDashSalesCsvTest extends TestCase
                 $taxStr         = sprintf('%.2f', mt_rand(0, 3000) / 100);
                 $feeStr         = sprintf('%.2f', mt_rand(0, 5000) / 100);
 
+                // DoorDash signs fee columns from the merchant's point of
+                // view: money withheld from the payout is negative, money paid
+                // back to the merchant (a marketing credit, an Adjustment
+                // transaction) is positive. Generate both directions, so the
+                // fees law covers credits and not just deductions.
+                $isCredit = mt_rand(0, 4) === 0;
+
+                if ($isCredit) {
+                    $feeText     = $feeStr;
+                    $expectedFee = -((float) $feeStr);
+                } else {
+                    // Exercise both negative notations DoorDash uses.
+                    $feeText     = mt_rand(0, 1) === 0 ? "-{$feeStr}" : "({$feeStr})";
+                    $expectedFee = (float) $feeStr;
+                }
+
                 $netPayout    = round(
-                    (float) $merchandiseStr + (float) $deliveryStr + (float) $taxStr - (float) $feeStr,
+                    (float) $merchandiseStr + (float) $deliveryStr + (float) $taxStr - $expectedFee,
                     2
                 );
                 $netPayoutStr = sprintf('%.2f', $netPayout);
-
-                // Exercise both negative notations DoorDash uses.
-                $feeText = mt_rand(0, 1) === 0 ? "-{$feeStr}" : "({$feeStr})";
 
                 $day = mt_rand(1, 27);
 
@@ -414,7 +512,7 @@ class DoorDashSalesCsvTest extends TestCase
                     $netPayoutStr,
                 ];
 
-                $expectedFees[]       = (float) $feeStr;
+                $expectedFees[]       = $expectedFee;
                 $expectedNetPayouts[] = (float) $netPayoutStr;
             }
 
@@ -423,13 +521,26 @@ class DoorDashSalesCsvTest extends TestCase
             $this->assertCount($rowCount, $resultA['rows'], 'law: output row count == input data row count');
 
             foreach ($resultA['rows'] as $index => $row) {
-                $this->assertGreaterThanOrEqual(0.0, $row['fees'], 'law: fees is never negative');
-                $this->assertSame($expectedFees[$index], $row['fees'], 'fees matches the generated magnitude');
+                $this->assertSame(
+                    $expectedFees[$index],
+                    $row['fees'],
+                    'law: fees negates the signed source column, so a credit yields negative fees'
+                );
                 $this->assertEqualsWithDelta(
                     $expectedNetPayouts[$index],
                     $row['recognized_sales'],
                     0.01,
                     'law: recognized_sales agrees with the generated net payout'
+                );
+                $this->assertTrue(
+                    SalesChannel::closes(
+                        $row['merchandise'],
+                        $row['delivery'],
+                        $row['tax'],
+                        $row['fees'],
+                        $row['recognized_sales']
+                    ),
+                    'law: components close against recognized_sales in both fee directions'
                 );
                 $this->assertSame('UTC', $row['recognized_at']->getTimezone()->getName(), 'law: recognized_at is UTC');
             }

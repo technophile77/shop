@@ -37,6 +37,12 @@ Thumbs.db
 *.php~
 /tmp/
 
+# Downloaded platform reports (real sales/payout data) — kept locally for the
+# weekly sales report, never committed. The project root is also the deployed
+# docroot, so anything here would be web-reachable if it were ever uploaded.
+/doordash data/
+/google ads/
+
 # Database dumps / backups (may contain data) — but NOT migrations
 *.sql.gz
 /backup*.sql

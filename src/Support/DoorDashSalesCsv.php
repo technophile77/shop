@@ -23,9 +23,11 @@ namespace App\Support;
  * `config/doordash-report-map.php` in one pass.
  *
  * The recognized sale for DoorDash is the **net payout**: commission and
- * marketing fees are broken out into their own `fees` figure (a positive
- * magnitude, per {@see \App\Support\SalesChannel}) rather than being folded
- * silently into merchandise.
+ * marketing fees are broken out into their own `fees` figure — the amount
+ * {@see \App\Support\SalesChannel::recognize()} subtracts — rather than being
+ * folded silently into merchandise. That figure is normally positive, but it
+ * is signed rather than a magnitude: a marketing credit or a payout
+ * `Adjustment` in the merchant's favour makes it negative.
  *
  * This class takes already-parsed rows, never a file path — no filesystem
  * access, no database access, no side effects. The caller is responsible for
@@ -324,13 +326,19 @@ final class DoorDashSalesCsv
         $recognizedSales = round(self::parseMoney($cell('net_payout'), 'net_payout'), 2);
         $recognizedAt    = self::parseTimestamp($cell('occurred_at'), 'occurred_at');
 
-        // Fees are summed as positive magnitudes: DoorDash reports every one
-        // of these columns as a negative number (money withheld from the
-        // payout), but the ChannelRow contract stores `fees` as the positive
-        // amount that SalesChannel::recognize() then subtracts.
+        // Fee columns are negated, not abs()'d. DoorDash signs these columns
+        // from the merchant's point of view: money withheld from the payout is
+        // negative (commission, marketing fees), and money added to it is
+        // positive (a marketing credit, or an `Adjustment` transaction paying
+        // the merchant back). The ChannelRow contract stores `fees` as the
+        // amount SalesChannel::recognize() subtracts, so negating preserves
+        // both directions — a withheld fee becomes a positive `fees` figure,
+        // and a credit becomes a negative one that adds to recognized sales.
+        // Taking the magnitude instead would turn every credit into a second
+        // deduction and break the identity by twice the credit.
         $fees = 0.00;
         foreach ($columns['fees'] as $name => $index) {
-            $fees += abs(self::parseMoney($row[$index] ?? '', $name));
+            $fees -= self::parseMoney($row[$index] ?? '', $name);
         }
         $fees = round($fees, 2);
 

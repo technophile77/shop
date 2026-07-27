@@ -28,10 +28,11 @@ declare(strict_types=1);
  *     matching header aborts the whole import.
  *
  *   - fee_columns      list<string>  Header spellings for columns that are
- *     summed into the single `fees` figure on each parsed row. DoorDash
- *     reports every one of these as a negative number (money paid out of the
- *     merchant's payout); the importer stores the positive magnitude, per the
- *     accounting identity in App\Support\SalesChannel.
+ *     summed into the single `fees` figure on each parsed row. DoorDash signs
+ *     these from the merchant's point of view — negative when withheld from
+ *     the payout, positive when paid back — and the importer negates them, so
+ *     `fees` is the amount App\Support\SalesChannel::recognize() subtracts and
+ *     goes negative when DoorDash owes the merchant money.
  *
  *   - ignored_columns  list<string>  Headers known to exist in the export and
  *     deliberately excluded from money figures. Listed explicitly so they
@@ -54,17 +55,32 @@ return [
         'occurred_at' => ['Timestamp local date', 'Order date', 'Transaction date', 'Date'],
         'merchandise' => ['Subtotal', 'Food subtotal', 'Item subtotal'],
         'delivery'    => ['Delivery fee', 'Fulfillment fee'],
-        'tax'         => ['Tax subtotal', 'Tax', 'Taxes'],
+        'tax'         => ['Subtotal tax passed to merchant', 'Tax subtotal', 'Tax', 'Taxes'],
         'net_payout'  => ['Net total', 'Net payout', 'Payout', 'Net'],
     ],
 
-    // Every column here is summed into the single `fees` figure. Fees arrive
-    // from DoorDash as negative numbers; the importer stores a positive
-    // magnitude.
+    // Every column here is summed into the single `fees` figure, negated as it
+    // is read: DoorDash signs these from the merchant's point of view, so a
+    // withheld fee is negative and money paid back to the merchant (a
+    // marketing credit, an Adjustment) is positive.
+    //
+    // The marketing block has to be taken as a whole. A discount funded by
+    // DoorDash appears as a negative "customer discounts … (funded by
+    // DoorDash)" and an equal, positive "DoorDash marketing credit"; the same
+    // pairing exists for third-party-funded discounts. Including one side
+    // without the other would overstate fees by the full discount, so every
+    // member of the block is listed even though the pairs normally cancel to
+    // zero. Only the "funded by you" line is a real cost to the business.
     'fee_columns' => [
         'Commission',
+        'Marketing fees | (including any applicable taxes)',
         'Marketing fees',
         'Marketing fee',
+        'Customer discounts from marketing | (funded by you)',
+        'Customer discounts from marketing | (funded by DoorDash)',
+        'Customer discounts from marketing | (funded by a third-party)',
+        'DoorDash marketing credit',
+        'Third-party contribution',
         'Error charges',
         'Adjustments',
         'Merchant tablet fee',
@@ -75,14 +91,48 @@ return [
     // "unmapped headers" warning so real surprises stand out. `Tip` is here
     // because a customer tip passes through to the Dasher and is not
     // merchant flower revenue.
+    //
+    // The tax columns need care. `Subtotal tax passed to merchant` is the only
+    // tax the business actually receives and is mapped to `tax` above. On a
+    // Marketplace order DoorDash is the marketplace facilitator and remits
+    // sales tax itself, so that column reads 0.00 and
+    // `Subtotal tax remitted by DoorDash to tax authorities` carries the tax
+    // instead — that money never reaches the business's bank account and must
+    // stay out of the report's tax column, or the report would claim tax
+    // revenue the business never saw and can't be liable for.
+    //
+    // `Pre-adjusted subtotal`/`Pre-adjusted tax subtotal` are the before-
+    // adjustment values of columns already counted, and `Subtotal for tax` is
+    // the taxable base, not a payment. Counting any of them would double-count.
     'ignored_columns' => [
+        'Timestamp UTC time',
+        'Timestamp UTC date',
+        'Timestamp local time',
+        'Order received local time',
+        'Order pickup local time',
+        'Payout time',
+        'Payout date',
+        'Business ID',
+        'Business name',
         'Store ID',
         'Store name',
-        'Business name',
-        'Timezone',
+        'Merchant store ID',
+        'Transaction type',
+        'Delivery UUID',
+        'DoorDash transaction ID',
+        'Merchant delivery ID',
+        'POS order ID',
+        'Channel',
+        'Description',
+        'Final order status',
         'Order status',
-        'Payout ID',
         'Currency',
+        'Timezone',
+        'Payout ID',
+        'Pre-adjusted subtotal',
+        'Pre-adjusted tax subtotal',
+        'Subtotal for tax',
+        'Subtotal tax remitted by DoorDash to tax authorities',
         'Tip',
         'Customer name',
     ],

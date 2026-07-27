@@ -19,15 +19,22 @@ Every channel row, and every aggregated weekly row, closes on:
 merchandise + delivery + tax − channel_fees = recognized_sales
 ```
 
-`channel_fees` is a positive magnitude that gets *subtracted*. It is only ever
-non-zero for DoorDash — commission and marketing charges withheld from the
-payout. See `App\Support\SalesChannel::recognize()`.
+`channel_fees` is the amount *subtracted*, and it is only ever non-zero for
+DoorDash — commission and marketing charges withheld from the payout. It is
+**signed, not a magnitude**: money DoorDash pays back (a marketing credit, a
+payout adjustment) makes it negative, which correctly adds to recognized
+sales. See `App\Support\SalesChannel::recognize()`.
 
 | Channel  | merchandise                          | delivery                                                  | tax                  | channel_fees                  | recognized_sales                     |
 |----------|---------------------------------------|-------------------------------------------------------------|----------------------|--------------------------------|----------------------------------------|
 | Shop     | `orders.subtotal`                     | `orders.delivery_fee`                                        | `orders.tax_amount`  | 0                              | `orders.total`                         |
 | Quote    | classified merchandise lines          | `quotes.delivery_fee` + classified delivery lines             | `quotes.tax_amount`  | 0                              | subtotal + tax + delivery              |
-| DoorDash | CSV subtotal                          | CSV delivery fee                                              | CSV tax               | commission + marketing + other | net payout                             |
+| DoorDash | CSV subtotal                          | CSV delivery fee (always 0 on Marketplace)                    | CSV merchant tax (0 on Marketplace) | commission + marketing ± adjustments | net payout            |
+
+On a DoorDash Marketplace order both delivery and tax are structurally
+$0.00 to the business: DoorDash keeps the customer's delivery fee and remits
+sales tax itself as marketplace facilitator. That is not a parsing gap — see
+§5.
 
 For quotes, "classified" means every `items_json` line has been run through
 `App\Support\SalesLineClassifier::classify()` and bucketed into merchandise,
@@ -122,11 +129,30 @@ manual, browser-driven export with no code behind it.
 > **2026-05-01** → export **CSV**.
 
 **Use Transaction details, not the Sales report.** Only Transaction details
-itemises delivery fees, taxes, and tips **per order** — that per-order detail
-is what makes the flowers/delivery/tax split in §1 possible at all. DoorDash
-itself warns that the Sales report should not be used to reconcile fees; it's
-a coarser, aggregated view that can't be un-mixed back into merchandise vs.
-delivery vs. tax.
+itemises fees and taxes **per order** — that per-order detail is what makes
+the flowers/delivery/tax split in §1 possible at all. DoorDash itself warns
+that the Sales report should not be used to reconcile fees; it's a coarser,
+aggregated view that can't be un-mixed back into merchandise vs. delivery vs.
+tax.
+
+### Which file inside the download
+
+The export arrives as a **ZIP containing four CSVs**, not a single file. Only
+one of them is the report to import:
+
+| File in the ZIP | Use |
+|---|---|
+| `FINANCIAL_DETAILED_TRANSACTIONS_*.csv` | **This is the one to import.** One row per order (plus one per adjustment), with the full fee breakdown. |
+| `FINANCIAL_SIMPLIFIED_TRANSACTIONS_*.csv` | Same orders, fewer columns. Its headers differ from the detailed file, so it will fail the import. |
+| `FINANCIAL_PAYOUT_SUMMARY_*.csv` | One row per weekly bank deposit. Use it to reconcile (see below), not to import. |
+| `FINANCIAL_ERROR_CHARGES_AND_ADJUSTMENTS_*.csv` | Adjustments only — already included in the detailed file. Importing it too would double-count. |
+
+Unzip and pass the detailed file:
+
+```bash
+php bin/sales-report.php \
+  --doordash=~/private/flowers-sales/doordash/FINANCIAL_DETAILED_TRANSACTIONS_2026-05-01_2026-07-26.csv
+```
 
 Notes on the export itself:
 
@@ -139,8 +165,45 @@ Notes on the export itself:
   7-day window.
 - **Financials → Payouts** in the Merchant Portal is the authority for
   reconciling against the bank deposit. Transaction details is what gets
-  imported here specifically because it carries the merchandise/delivery/tax
-  split that Payouts doesn't.
+  imported here specifically because it carries the merchandise/fee split
+  that Payouts doesn't.
+
+### What DoorDash figures mean for a Marketplace order
+
+These are properties of how DoorDash pays a merchant, not gaps in the import,
+and they explain three things that look wrong at first glance:
+
+- **Delivery is always $0.00 for DoorDash.** The customer pays a delivery fee
+  to DoorDash, and DoorDash pays the Dasher; none of it reaches the business.
+  There is no merchant-side delivery column in the export at all. Delivery
+  revenue in this report is therefore web-store and quote delivery only.
+- **Tax is normally $0.00 for DoorDash.** As a marketplace facilitator
+  DoorDash collects and remits sales tax itself. The export shows this as
+  `Subtotal tax remitted by DoorDash to tax authorities`, which is
+  deliberately ignored — that money never lands in the business's account.
+  Only `Subtotal tax passed to merchant`, which is what the business actually
+  receives, is mapped to the report's tax column.
+- **Fees can be negative.** DoorDash signs these columns from the merchant's
+  point of view: commission and marketing fees are withheld (negative in the
+  file, a positive cost here), while a marketing credit or a payout
+  `Adjustment` pays the business back. A week containing a large adjustment
+  will show a negative fees figure, which correctly *increases* recognized
+  sales for that week.
+
+### Reconciling against the bank
+
+The report's DoorDash total is **recognized sales, not cash received**. It
+includes orders DoorDash has not paid out yet, which have an empty
+`Payout ID`. To tie the report to `FINANCIAL_PAYOUT_SUMMARY_*.csv`:
+
+```
+sum of Net total for rows WITH a Payout ID   = sum of the payout summary
++ sum of Net total for rows WITHOUT one      = not yet deposited
+= the report's DoorDash recognized sales
+```
+
+As of the 2026-07-27 export that was $945.85 paid out + $196.41 pending =
+$1,142.26, matching the report's DoorDash column to the cent.
 
 ### The expected first-run failure
 
@@ -154,8 +217,8 @@ refuses to guess, because silently treating a renamed column as `$0.00` would
 understate revenue without any indication that anything was wrong.
 
 The fix is a one-line config edit to `config/doordash-report-map.php` — add
-the new header spelling to the relevant field's list. Real excerpt of its
-structure:
+the new header spelling to the relevant field's list. Abridged excerpt of its
+structure (the real file lists every header in the current export):
 
 ```php
 return [
@@ -164,23 +227,26 @@ return [
         'occurred_at' => ['Timestamp local date', 'Order date', 'Transaction date', 'Date'],
         'merchandise' => ['Subtotal', 'Food subtotal', 'Item subtotal'],
         'delivery'    => ['Delivery fee', 'Fulfillment fee'],
-        'tax'         => ['Tax subtotal', 'Tax', 'Taxes'],
+        'tax'         => ['Subtotal tax passed to merchant', 'Tax subtotal', 'Tax', 'Taxes'],
         'net_payout'  => ['Net total', 'Net payout', 'Payout', 'Net'],
     ],
 
     'fee_columns' => [
         'Commission',
-        'Marketing fees',
-        'Marketing fee',
+        'Marketing fees | (including any applicable taxes)',
+        'Customer discounts from marketing | (funded by you)',
+        'Customer discounts from marketing | (funded by DoorDash)',
+        'DoorDash marketing credit',
         'Error charges',
         'Adjustments',
-        'Merchant tablet fee',
-        'Other fees',
+        // …plus the third-party-funded pair and older spellings
     ],
 
     'ignored_columns' => [
-        'Store ID', 'Store name', 'Business name', 'Timezone',
-        'Order status', 'Payout ID', 'Currency', 'Tip', 'Customer name',
+        'Payout date', 'Business ID', 'Store name', 'Transaction type',
+        'Subtotal tax remitted by DoorDash to tax authorities',
+        'Pre-adjusted subtotal', 'Subtotal for tax', 'Payout ID', 'Tip',
+        // …plus the remaining timestamp and identifier columns
     ],
 
     'optional_fields' => ['delivery', 'tax'],
@@ -190,6 +256,18 @@ return [
 Add the new spelling to the appropriate list (e.g. a new merchandise-column
 name goes under `fields.merchandise`) and re-run the import. Nothing else
 needs to change.
+
+Two rules when editing this file, both learned from the real export:
+
+- **The marketing block must be added or removed as a whole.** A
+  DoorDash-funded discount is a negative
+  `Customer discounts from marketing | (funded by DoorDash)` paired with an
+  equal positive `DoorDash marketing credit`; the same pairing exists for
+  third-party funding. Listing one side without the other overstates fees by
+  the full discount. Only the `(funded by you)` line is a real cost.
+- **A new tax column is guilty until proven innocent.** Only tax the business
+  actually receives belongs in `fields.tax`. Anything DoorDash remits on the
+  business's behalf goes in `ignored_columns` — see §5.
 
 ## 6. The warnings / audit section
 
@@ -345,19 +423,36 @@ part of this report:
 
 ## 10. Worked verification checklist
 
-Known live figures as of this report's construction, to sanity-check any
-future run against:
+Figures from the first full run against live data (2026-07-27, DoorDash
+export covering 2026-05-01 → 2026-07-26), to sanity-check any future run
+against:
 
-- **2 paid shop orders**, both in 2026-07, totalling **$145.65**
-  (subtotal 125.00 + delivery 10.00 + tax 10.65).
-- **Quotes by `deposit_confirmed_at`:**
-  - 2026-05: 1 quote — subtotal 75.00 / tax 6.39
-  - 2026-06: 4 quotes — subtotal 360.00 / tax 30.66
-  - 2026-07: 5 quotes — subtotal 582.60 / tax 48.44
-- **Grand total recognized (web store only): $1,248.74.**
+| Channel  | Orders | Recognized sales |
+|----------|-------:|-----------------:|
+| Shop     |      2 |         $145.65  |
+| Quote    |      9 |       $1,021.70  |
+| DoorDash |     16 |       $1,142.26  |
+| **Total**|   **27** |   **$2,309.61** |
 
-The sharpest single check: **the delivery column must be non-zero.** Every
-quote currently has `delivery_fee = 0.00` in its own column, yet quote 19
-carries a $15 line classified as delivery inside `items_json`. If a report
-run shows a delivery column of `$0.00`, the line classifier is not firing —
-treat that as a broken report, not a quiet zero week.
+- The 2 paid shop orders are both in 2026-07: subtotal 125.00 + delivery
+  10.00 + tax 10.65 = $145.65.
+- Quotes by `deposit_confirmed_at`: 2026-05 → 1 quote; 2026-06 → 4;
+  2026-07 → 5. **Quote 2 is deliberately excluded** — it carries a
+  `deposit_confirmed_at` but a non-revenue status, and appears in the
+  warnings as a possible refund. It is worth $81.39, which is exactly why
+  the quote total is $1,021.70 rather than $1,103.09.
+- The DoorDash figure ties out as $945.85 across 7 payouts plus $196.41 in
+  three orders not yet paid out (§5).
+
+Two sharp checks on any future run:
+
+- **The delivery column must be non-zero.** Every quote currently has
+  `delivery_fee = 0.00` in its own column, yet quote 19 carries a $15 line
+  classified as delivery inside `items_json`. A delivery column of `$0.00`
+  means the line classifier is not firing — treat that as a broken report,
+  not a quiet zero week.
+- **The DoorDash delivery and tax columns must be zero**, for the opposite
+  reason: on a Marketplace order neither ever reaches the business. A
+  non-zero figure there means either the store started taking non-Marketplace
+  (Storefront/self-delivery) orders — legitimate, but worth knowing — or a
+  tax column was mapped that DoorDash actually remits itself.
