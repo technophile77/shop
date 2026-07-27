@@ -118,11 +118,17 @@ final class SalesReportCsv
      * Row 0 is always the header, even when there is nothing to report — so
      * the file always exists and an empty report is visibly a single-row
      * file rather than an absent one. Two kinds of row follow the header:
-     * one `warning` row per warning string (from `$aggregate['warnings']` and
-     * from each week's own `warnings`), and one `classified_line` row per
-     * entry in `$auditLines` — every line the classifier heuristic assigned
-     * to a bucket, so the assignment can be eyeballed against its dollar
-     * amount.
+     * one `warning` row per warning **occurrence** — carrying `week_start` when
+     * the warning belongs to a week and empty when it is global — and one
+     * `classified_line` row per entry in `$auditLines` — every line the
+     * classifier heuristic assigned to a bucket, so the assignment can be
+     * eyeballed against its dollar amount.
+     *
+     * `$aggregate['warnings']` is a superset of the per-week lists (see
+     * {@see \App\Support\WeeklySalesAggregator::aggregate()}), so it is
+     * deliberately *not* emitted verbatim — only the warnings in it that no
+     * week already accounted for get a row. Otherwise every week-attributable
+     * warning would be listed twice.
      *
      * @param array{weeks: list<array{week_start: string, warnings: list<string>}>,
      *              warnings: list<string>} $aggregate The weekly sales aggregate
@@ -144,13 +150,29 @@ final class SalesReportCsv
     {
         $rows = [['type', 'week_start', 'source_id', 'description', 'amount', 'bucket', 'detail']];
 
+        // The aggregate's top-level `warnings` is a superset of every week's own
+        // list — WeeklySalesAggregator files each row warning under its week AND
+        // in the flat list, so the terminal summary can print all of them from
+        // one place. Emitting both lists verbatim would therefore print every
+        // week-attributable warning twice. Count what the week pass emitted and
+        // let the global pass emit only the surplus, so a warning appears exactly
+        // as many times as it occurred: attributed to its week where there is
+        // one, and with an empty `week_start` where there is not.
+        $emitted = [];
+
         foreach ($aggregate['weeks'] as $week) {
             foreach ($week['warnings'] as $warning) {
-                $rows[] = ['warning', $week['week_start'], '', '', '', '', $warning];
+                $rows[]            = ['warning', $week['week_start'], '', '', '', '', $warning];
+                $emitted[$warning] = ($emitted[$warning] ?? 0) + 1;
             }
         }
 
         foreach ($aggregate['warnings'] as $warning) {
+            if (($emitted[$warning] ?? 0) > 0) {
+                --$emitted[$warning];
+                continue;
+            }
+
             $rows[] = ['warning', '', '', '', '', '', $warning];
         }
 

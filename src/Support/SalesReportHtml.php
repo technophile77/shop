@@ -720,17 +720,23 @@ final class SalesReportHtml
      * present — even an empty report says so explicitly rather than omitting
      * the section.
      *
-     * @param array{weeks: list<array{warnings: list<string>}>, warnings: list<string>} $aggregate
-     *        The aggregate (only the `warnings` keys are read).
+     * Reads the aggregate's top-level `warnings` only, and deliberately does
+     * not merge in each week's own list: WeeklySalesAggregator files every row
+     * warning under its week *and* in the flat top-level list, so that list is
+     * already complete. Merging both would list each week-attributable warning
+     * twice. This section has no week column to justify the per-week copy — the
+     * warning text names its own `source_id`, and the audit CSV from
+     * {@see \App\Support\SalesReportCsv::warningRows()} is where the week
+     * attribution lives.
+     *
+     * @param array{warnings: list<string>} $aggregate The aggregate (only the
+     *        top-level `warnings` is read).
      *
      * @return string A `<section>` listing every warning, or a "no warnings" message.
      */
     private static function renderWarnings(array $aggregate): string
     {
         $warnings = $aggregate['warnings'];
-        foreach ($aggregate['weeks'] as $week) {
-            $warnings = [...$warnings, ...$week['warnings']];
-        }
 
         if ($warnings === []) {
             return '<section class="report-section warnings">' .

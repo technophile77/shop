@@ -96,6 +96,40 @@ class SalesReportHtmlTest extends TestCase
     }
 
     /**
+     * A warning the aggregator filed under both its week and the flat top-level
+     * list is listed once, not twice. The warnings section reads the top-level
+     * list only, precisely because that list is already complete.
+     */
+    public function testWarningIsListedOnceWhenPresentInBothLists(): void
+    {
+        $taxedDelivery = 'quote-19: delivery line "Delivery" ($15.00) was taxed (pre-migration-018 behaviour)';
+
+        // Reproduce what WeeklySalesAggregator emits: the row warning appears in
+        // the week's own list AND in the flat top-level list. A renderer that
+        // merges both lists renders two <li> copies of it.
+        $aggregate = $this->oneWeekAggregate();
+        $aggregate['weeks'][0]['warnings'] = [$taxedDelivery];
+        $aggregate['warnings']             = [$taxedDelivery];
+
+        $html = SalesReportHtml::render($aggregate);
+
+        $this->assertSame(1, substr_count($html, self::escapeForAssertion($taxedDelivery)));
+    }
+
+    /**
+     * HTML-escape a warning string the same way the renderer does, so an
+     * occurrence count can be taken against the rendered markup.
+     *
+     * @param string $warning The raw warning text.
+     *
+     * @return string The text as it appears inside the rendered `<li>`.
+     */
+    private static function escapeForAssertion(string $warning): string
+    {
+        return htmlspecialchars($warning, ENT_QUOTES, 'UTF-8');
+    }
+
+    /**
      * The DoorDash-not-included banner renders when `doordash_included` is false.
      */
     public function testDoorDashBannerRendersWhenNotIncluded(): void

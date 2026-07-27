@@ -223,6 +223,14 @@ None of these stop the report from producing numbers. They are printed
 alongside the totals every run so a human can decide whether a given week's
 figures need a second look.
 
+Each warning is listed **once** per occurrence in each output. The companion
+`-warnings.csv` is the only output that also says *which week* a warning
+belongs to: warnings raised by a sale carry that sale's `week_start`, and
+warnings with no week to attach to — an orphaned quote, a DoorDash header
+problem, a `--through` range notice — carry an empty `week_start`. The
+terminal summary and the HTML report list the same warnings without the week
+column, since every warning names its own `source_id` in its text.
+
 ## 7. Deployment
 
 Follow `CLAUDE.md`'s deployment conventions exactly:

@@ -159,6 +159,58 @@ class SalesReportCsvTest extends TestCase
     }
 
     /**
+     * A row warning reaches warningRows() in both lists — WeeklySalesAggregator
+     * files it under its week *and* in the flat top-level list — and must still
+     * be emitted exactly once, attributed to its week. Only a warning the weeks
+     * never accounted for gets a global (empty `week_start`) row.
+     */
+    public function testWarningRowsDoesNotDuplicateAWarningPresentInBothLists(): void
+    {
+        $taxedDelivery = 'quote-19: delivery line "Delivery" ($15.00) was taxed (pre-migration-018 behaviour)';
+        $orphanedQuote = 'quote-2: status "cancelled" with deposit_confirmed_at is an inconsistent state.';
+
+        $aggregate = $this->oneWeekAggregate();
+        // Exactly what the aggregator produces: the week keeps its own copy and
+        // the top-level list carries every row warning as well.
+        $aggregate['warnings'] = [$taxedDelivery, $orphanedQuote];
+
+        $rows = SalesReportCsv::warningRows($aggregate);
+
+        $this->assertSame([
+            ['type', 'week_start', 'source_id', 'description', 'amount', 'bucket', 'detail'],
+            ['warning', '2026-07-06', '', '', '', '', $taxedDelivery],
+            ['warning', '', '', '', '', '', $orphanedQuote],
+        ], $rows);
+    }
+
+    /**
+     * Dedup is by occurrence count, not by mere presence: the same warning text
+     * raised in two different weeks yields two week rows, and a third
+     * occurrence in the top-level list that no week claimed still yields its own
+     * global row. Suppressing repeats outright would silently hide real events.
+     */
+    public function testWarningRowsPreservesRepeatedOccurrencesOfIdenticalText(): void
+    {
+        $repeated = 'quote-4: delivery line "Delivery" ($10.00) was taxed (pre-migration-018 behaviour)';
+
+        $base      = $this->oneWeekAggregate();
+        $weekOne   = ['week_start' => '2026-06-01', 'iso_week' => '2026-W23', 'warnings' => [$repeated]] + $base['weeks'][0];
+        $weekTwo   = ['week_start' => '2026-06-22', 'iso_week' => '2026-W26', 'warnings' => [$repeated]] + $base['weeks'][0];
+        $aggregate = ['weeks' => [$weekOne, $weekTwo], 'warnings' => [$repeated, $repeated, $repeated]] + $base;
+
+        $rows = SalesReportCsv::warningRows($aggregate);
+
+        // Two week-attributed rows for the two week occurrences, plus one
+        // global row for the third, unclaimed occurrence.
+        $this->assertSame([
+            ['type', 'week_start', 'source_id', 'description', 'amount', 'bucket', 'detail'],
+            ['warning', '2026-06-01', '', '', '', '', $repeated],
+            ['warning', '2026-06-22', '', '', '', '', $repeated],
+            ['warning', '', '', '', '', '', $repeated],
+        ], $rows);
+    }
+
+    /**
      * One week of hand-built ChannelTotals figures, verified to close the
      * SalesChannel identity for every channel and for the combined total.
      *
