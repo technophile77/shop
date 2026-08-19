@@ -38,6 +38,20 @@ $submitLabel  = $submitLabel  ?? 'Generate Quote & Get Link';
 $initialState = $initialState ?? [];
 ?>
 
+<?php if (!empty($_SESSION['flash'])): ?>
+<?php
+    $flashStyle = match ($_SESSION['flash']['type']) {
+        'success' => 'background:#e6f4ea; color:#2e7d32; border:1px solid #a8d5b1',
+        'warning' => 'background:#fff4e5; color:#8a5300; border:1px solid #ffcc80',
+        default   => 'background:#ffebee; color:#b71c1c; border:1px solid #f5c6cb',
+    };
+?>
+<div style="margin-bottom:1.5rem; padding:0.875rem 1.125rem; border-radius:6px; <?= $flashStyle ?>">
+    <?= htmlspecialchars((string) $_SESSION['flash']['message']) ?>
+</div>
+<?php unset($_SESSION['flash']); ?>
+<?php endif; ?>
+
 <form method="POST" action="<?= htmlspecialchars($formAction) ?>">
 
 <div class="admin-card" x-data="quoteBuilder(<?= htmlspecialchars(json_encode($initialState, JSON_THROW_ON_ERROR), ENT_QUOTES) ?>)" style="max-width:900px">
@@ -253,13 +267,13 @@ $initialState = $initialState ?? [];
     <div style="margin-top:2rem; display:flex; gap:1rem; align-items:center">
         <button type="submit"
                 class="btn btn-accent btn-lg"
-                :disabled="items.length === 0 || subtotal === 0">
+                :disabled="!hasValidItem">
             <?= htmlspecialchars($submitLabel) ?>
         </button>
         <a href="/admin/quotes" class="btn btn-outline">Cancel</a>
-        <span x-show="subtotal === 0"
+        <span x-show="!hasValidItem"
               style="font-size:0.875rem; color:var(--color-muted)">
-            Add at least one item with a price to continue.
+            Add at least one item with a description and a price to continue.
         </span>
     </div>
 
@@ -349,6 +363,19 @@ function quoteBuilder(initial) {
          */
         get total() {
             return this.subtotal + this.taxAmount + (Number(this.deliveryFee) || 0);
+        },
+
+        /**
+         * True when at least one item has both a non-blank description and a
+         * unit_price greater than zero. Mirrors QuotesController::buildItems()'s
+         * server-side validation rule so a submission that passes this check can
+         * never come back with zero items server-side.
+         * @returns {boolean}
+         */
+        get hasValidItem() {
+            return this.items.some(function (item) {
+                return String(item.description || '').trim() !== '' && (Number(item.unit_price) || 0) > 0;
+            });
         },
 
         /** Append a blank line item to the table. */

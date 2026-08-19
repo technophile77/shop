@@ -128,17 +128,18 @@ final class QuotesController extends BaseController
     /**
      * Create a new quote and redirect to its detail page.
      *
-     * Parses POST data for customer info, event details, deposit settings, a
-     * delivery fee, and line items. When customer_id is 0 (new customer) and at
-     * least a name or email is supplied, the customer is upserted via
-     * {@see Customer::upsert()}. Items are assembled from parallel arrays
-     * (item_description[], item_qty[], item_unit_price[]). At least one item
-     * with a description and unit_price > 0 is required. delivery_fee is
-     * posted as a single field (not per-item) and is stored separately from
-     * the items — it is an untaxed, deposit-exempt charge; see
-     * {@see Quote::create()}. On success the quote is immediately transitioned
-     * from 'draft' to 'sent' via {@see Quote::markSent()} so the share link is
-     * ready.
+     * Items are assembled first, from parallel arrays (item_description[],
+     * item_qty[], item_unit_price[]). At least one item with a description and
+     * unit_price > 0 is required; when none qualify, the request is rejected
+     * before anything is written to the database. Only once a valid item list
+     * exists is the customer resolved: when customer_id is 0 (new customer)
+     * and at least a name or email is supplied, the customer is upserted via
+     * {@see Customer::upsert()}. This order keeps a rejected submission from
+     * leaving behind an orphan customer row. delivery_fee is posted as a
+     * single field (not per-item) and is stored separately from the items —
+     * it is an untaxed, deposit-exempt charge; see {@see Quote::create()}. On
+     * success the quote is immediately transitioned from 'draft' to 'sent'
+     * via {@see Quote::markSent()} so the share link is ready.
      *
      * The quote saves unconditionally even when event_date falls inside a
      * store closure — the admin may legitimately be scheduling around a
@@ -164,6 +165,14 @@ final class QuotesController extends BaseController
             return $this->redirect('/admin/quotes/new');
         }
 
+        // --- Line items ---
+        $items = $this->buildItems($request);
+
+        if ($items === []) {
+            $this->setFlash('error', 'Please add at least one item with a description and a price greater than zero.');
+            return $this->redirect('/admin/quotes/new');
+        }
+
         // --- Customer resolution ---
         $customerId = $this->resolveCustomerId($request);
 
@@ -173,14 +182,6 @@ final class QuotesController extends BaseController
         $deliveryFee = (float) $request->post('delivery_fee', 0);
         $validDays   = (int) $request->post('valid_days', 14);
         $notes       = trim((string) $request->post('notes', ''));
-
-        // --- Line items ---
-        $items = $this->buildItems($request);
-
-        if ($items === []) {
-            $this->setFlash('error', 'Please add at least one item with a description and a price greater than zero.');
-            return $this->redirect('/admin/quotes/new');
-        }
 
         // --- Persist ---
         $quoteId = Quote::create([
