@@ -373,8 +373,16 @@ final class CheckoutController extends BaseController
             error_log('[CheckoutController] Stripe API error: ' . $e->getMessage());
             $this->setFlash('error', 'Payment service error. Please try again.');
             return $this->redirect('/' . $lang . '/cart');
-        } catch (\Exception $e) {
-            error_log('[CheckoutController] Unexpected error: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            $detail = sprintf(
+                '[CheckoutController] Unexpected error: %s (%s:%d)' . PHP_EOL . '%s',
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine(),
+                $e->getTraceAsString(),
+            );
+            error_log($detail);
+            @file_put_contents(__DIR__ . '/../../logs/php_errors.log', '[' . date('c') . '] ' . $detail . PHP_EOL, FILE_APPEND);
             $this->setFlash('error', 'An unexpected error occurred. Please try again.');
             return $this->redirect('/' . $lang . '/cart');
         }
@@ -450,8 +458,16 @@ final class CheckoutController extends BaseController
                 Destination::clear();
                 $paid = true;
             }
-        } catch (\Exception $e) {
-            error_log('[CheckoutController] Error verifying session ' . $sessionId . ': ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            $detail = sprintf(
+                '[CheckoutController] Error verifying session %s: %s (%s:%d)',
+                $sessionId,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine(),
+            );
+            error_log($detail);
+            @file_put_contents(__DIR__ . '/../../logs/php_errors.log', '[' . date('c') . '] ' . $detail . PHP_EOL, FILE_APPEND);
         }
 
         return $this->renderSuccess($order, $lang, $paid);

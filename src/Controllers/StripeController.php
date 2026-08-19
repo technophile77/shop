@@ -89,8 +89,16 @@ final class StripeController extends BaseController
         } catch (\Stripe\Exception\ApiErrorException $e) {
             error_log('[StripeController] Stripe API error: ' . $e->getMessage());
             return Response::json(['success' => false, 'error' => 'Payment service error. Please try again.'], 502);
-        } catch (\Exception $e) {
-            error_log('[StripeController] Unexpected error: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            $detail = sprintf(
+                '[StripeController] Unexpected error: %s (%s:%d)' . PHP_EOL . '%s',
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine(),
+                $e->getTraceAsString(),
+            );
+            error_log($detail);
+            @file_put_contents(__DIR__ . '/../../logs/php_errors.log', '[' . date('c') . '] ' . $detail . PHP_EOL, FILE_APPEND);
             return Response::json(['success' => false, 'error' => 'An unexpected error occurred.'], 500);
         }
     }
@@ -206,8 +214,16 @@ final class StripeController extends BaseController
                     $lineItems,
                 );
             }
-        } catch (\Exception $e) {
-            error_log('[StripeController] Error verifying session ' . $sessionId . ': ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            $detail = sprintf(
+                '[StripeController] Error verifying session %s: %s (%s:%d)',
+                $sessionId,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine(),
+            );
+            error_log($detail);
+            @file_put_contents(__DIR__ . '/../../logs/php_errors.log', '[' . date('c') . '] ' . $detail . PHP_EOL, FILE_APPEND);
         }
 
         return $this->redirect('/quote/' . $token);
