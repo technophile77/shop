@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\Config;
+use App\Support\CliRelay;
 
 /**
  * Sends SMS messages via the Twilio REST API using PHP's curl extension.
@@ -14,6 +15,12 @@ use App\Core\Config;
  * TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER. When any of those values are
  * absent, every send method returns a failure result immediately and nothing
  * is sent.
+ *
+ * When called from a web request, {@see send()} and {@see sendBulk()} relay
+ * through {@see \App\Support\CliRelay} rather than calling `curl_exec()`
+ * in-process — this host's Apache-SAPI PHP has no cURL SSL backend, so the
+ * direct call would sever the connection instead of returning a failure
+ * array. See docs/stripe-cli-relay.md.
  *
  * All methods are static; this class is never instantiated.
  *
@@ -40,12 +47,26 @@ final class TwilioService
      *         On success: ['success' => true, 'sid' => 'SM…', 'error' => null].
      *         On failure: ['success' => false, 'sid' => null, 'error' => '…'].
      *
+     * Relayed through {@see \App\Support\CliRelay} when called from a web
+     * request — this host's Apache-SAPI PHP has no cURL SSL backend, so the
+     * `curl_exec()` below would otherwise sever the connection instead of
+     * returning a failure array. See docs/stripe-cli-relay.md.
+     *
      * @example
      *   $result = TwilioService::send('7203883496', 'Hello from Perla\'s Flowers!');
      *   if ($result['success']) { echo $result['sid']; }
      */
     public static function send(string $to, string $body): array
     {
+        if (CliRelay::isNeeded()) {
+            try {
+                return CliRelay::run(self::class, 'send', func_get_args());
+            } catch (\Throwable $e) {
+                error_log('[TwilioService] CLI relay failed for send(): ' . $e->getMessage());
+                return ['success' => false, 'sid' => null, 'error' => 'CLI relay failed: ' . $e->getMessage()];
+            }
+        }
+
         if (!self::isConfigured()) {
             return ['success' => false, 'sid' => null, 'error' => 'Twilio not configured'];
         }
@@ -110,6 +131,11 @@ final class TwilioService
      * @return array<int, array{to: string, success: bool, sid: ?string, error: ?string}>
      *         Each element includes the original 'to' number alongside the send result.
      *
+     * Relayed as a single call through {@see \App\Support\CliRelay} when
+     * invoked from a web request — one subprocess handles every recipient,
+     * rather than relaying each {@see send()} call separately. See
+     * docs/stripe-cli-relay.md.
+     *
      * @example
      *   $results = TwilioService::sendBulk(['7203883496', '9185551234'], 'Sale today!');
      *   foreach ($results as $r) {
@@ -118,6 +144,21 @@ final class TwilioService
      */
     public static function sendBulk(array $numbers, string $body): array
     {
+        if (CliRelay::isNeeded()) {
+            try {
+                return CliRelay::run(self::class, 'sendBulk', func_get_args());
+            } catch (\Throwable $e) {
+                error_log('[TwilioService] CLI relay failed for sendBulk(): ' . $e->getMessage());
+                return array_map(
+                    static fn (string $number): array => [
+                        'to' => $number, 'success' => false, 'sid' => null,
+                        'error' => 'CLI relay failed: ' . $e->getMessage(),
+                    ],
+                    $numbers,
+                );
+            }
+        }
+
         $results = [];
 
         foreach ($numbers as $index => $number) {

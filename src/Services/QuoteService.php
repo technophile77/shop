@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\Config;
+use App\Support\CliRelay;
 
 /**
  * Stateless utility methods for working with quote data and notifications.
@@ -170,6 +171,13 @@ final class QuoteService
      * errors are also logged and swallowed so a failed SMS never breaks the
      * customer-facing flow.
      *
+     * Relayed through {@see \App\Support\CliRelay} when called from a web
+     * request — this host's Apache-SAPI PHP has no cURL SSL backend, so the
+     * `curl_exec()` below would otherwise sever the connection instead of
+     * failing gracefully (this is how a real quote's payment-confirmation
+     * owner email went missing: this SMS call crashed the request before the
+     * email step ever ran). See docs/stripe-cli-relay.md.
+     *
      * @param string $message The SMS body to send to the owner.
      *
      * @return void
@@ -179,6 +187,15 @@ final class QuoteService
      */
     public static function notifyOwner(string $message): void
     {
+        if (CliRelay::isNeeded()) {
+            try {
+                CliRelay::run(self::class, 'notifyOwner', func_get_args());
+            } catch (\Throwable $e) {
+                error_log('[QuoteService] CLI relay failed for notifyOwner(): ' . $e->getMessage());
+            }
+            return;
+        }
+
         $sid   = (string) Config::get('TWILIO_ACCOUNT_SID',  '');
         $token = (string) Config::get('TWILIO_AUTH_TOKEN',   '');
         $from  = (string) Config::get('TWILIO_FROM_NUMBER',  '');
