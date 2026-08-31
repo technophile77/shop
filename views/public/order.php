@@ -205,6 +205,20 @@ $addonsJson = json_encode(
                     </div>
                 </div>
 
+                <!-- SMS/email consent — shown once the matching contact field is
+                     filled in, and unchecked by default (Twilio A2P 10DLC requires
+                     opt-in to never be pre-checked). -->
+                <div style="display:flex; flex-wrap:wrap; gap:1rem 2rem; margin-bottom:1rem">
+                    <label class="form-check" x-show="form.email !== ''">
+                        <input type="checkbox" x-model="form.opted_in_email">
+                        <?= htmlspecialchars(__t('signup.email_consent')) ?>
+                    </label>
+                    <label class="form-check" x-show="form.phone !== ''">
+                        <input type="checkbox" x-model="form.opted_in_sms">
+                        <?= htmlspecialchars(__t('signup.sms_consent')) ?>
+                    </label>
+                </div>
+
                 <!-- Occasion -->
                 <div class="form-group">
                     <label><?= htmlspecialchars(__t('order.occasion')) ?></label>
@@ -402,6 +416,8 @@ function orderForm(availableAddons = []) {
             delivery_address:  '',
             delivery_fee:      null,
             addons:            [],
+            opted_in_email:    false,
+            opted_in_sms:      false,
             _csrf_token:       '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>'
         },
 

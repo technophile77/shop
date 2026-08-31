@@ -164,11 +164,11 @@ use App\Core\Settings;
 
             <div style="display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; margin-bottom:1.5rem">
                 <label class="form-check" style="color:rgba(255,255,255,0.7)">
-                    <input type="checkbox" name="opted_in_email" value="1" checked>
+                    <input type="checkbox" name="opted_in_email" value="1">
                     <?= htmlspecialchars(__t('signup.email_consent')) ?>
                 </label>
                 <label class="form-check" style="color:rgba(255,255,255,0.7)">
-                    <input type="checkbox" name="opted_in_sms" value="1" checked>
+                    <input type="checkbox" name="opted_in_sms" value="1">
                     <?= htmlspecialchars(__t('signup.sms_consent')) ?>
                 </label>
             </div>

@@ -4,9 +4,9 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\Config;
+use App\Support\CliRelay;
 use App\Support\StripeLineItems;
 use Stripe\StripeClient;
-use Stripe\Checkout\Session;
 use Stripe\Event;
 use Stripe\Webhook;
 
@@ -77,6 +77,8 @@ final class StripeService
      * @return array{id: string, url: string}
      *
      * @throws \Stripe\Exception\ApiErrorException On Stripe API failure.
+     * @throws \RuntimeException When called from a web request and the CLI
+     *         relay (see {@see \App\Support\CliRelay::run()}) could not be reached.
      *
      * @see \App\Support\StripeLineItems::fromQuoteItems()  Pure line-item builder (unit-tested).
      *
@@ -95,6 +97,10 @@ final class StripeService
         string $customerEmail = '',
         float  $deliveryFee = 0.00,
     ): array {
+        if (PHP_SAPI !== 'cli') {
+            return CliRelay::run(self::class, 'createQuoteCheckoutSession', func_get_args());
+        }
+
         $appUrl = rtrim((string) Config::get('APP_URL', ''), '/');
 
         $lineItems = StripeLineItems::fromQuoteItems(
@@ -151,6 +157,8 @@ final class StripeService
      * @return array{id: string, url: string}
      *
      * @throws \Stripe\Exception\ApiErrorException On Stripe API failure.
+     * @throws \RuntimeException When called from a web request and the CLI
+     *         relay (see {@see \App\Support\CliRelay::run()}) could not be reached.
      *
      * @see \App\Support\StripeLineItems::fromCart()
      *
@@ -166,6 +174,10 @@ final class StripeService
         string $customerEmail = '',
         array  $extraMetadata = [],
     ): array {
+        if (PHP_SAPI !== 'cli') {
+            return CliRelay::run(self::class, 'createCartCheckoutSession', func_get_args());
+        }
+
         $appUrl = rtrim((string) Config::get('APP_URL', ''), '/');
 
         $params = [
@@ -199,10 +211,30 @@ final class StripeService
      * The caller should check $session->payment_status === 'paid' before
      * treating the payment as confirmed.
      *
+     * Called from a web request, this relays through
+     * {@see \App\Support\CliRelay::run()} and its JSON round-trip means the return value
+     * is a plain \stdClass with the same field names as the Stripe API's
+     * session object (metadata, payment_status, payment_intent,
+     * amount_total, …), not a true {@see \Stripe\Checkout\Session} instance
+     * — property access behaves identically for every field this codebase
+     * reads, but SDK methods on Session are not available on the result.
+     * Called directly under CLI (including from within the relay
+     * subprocess itself), the real Session instance is returned unchanged.
+     *
+     * @return object Stripe Checkout Session data — a real
+     *         {@see \Stripe\Checkout\Session} when called under CLI, or an
+     *         equivalent \stdClass when relayed from a web request.
+     *
      * @throws \Stripe\Exception\ApiErrorException On Stripe API failure.
+     * @throws \RuntimeException When called from a web request and the CLI
+     *         relay (see {@see \App\Support\CliRelay::run()}) could not be reached.
      */
-    public static function retrieveCheckoutSession(string $sessionId): Session
+    public static function retrieveCheckoutSession(string $sessionId): object
     {
+        if (PHP_SAPI !== 'cli') {
+            return CliRelay::run(self::class, 'retrieveCheckoutSession', func_get_args(), resultIsObject: true);
+        }
+
         return self::client()->checkout->sessions->retrieve($sessionId);
     }
 

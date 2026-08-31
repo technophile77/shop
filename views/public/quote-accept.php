@@ -220,6 +220,16 @@ use App\Core\Config;
                      autocomplete="tel"
                      style="background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.2); color:#fff; text-align:center">
             </div>
+            <div style="display:flex; flex-wrap:wrap; gap:0.5rem 1.5rem; justify-content:center; margin-bottom:1.5rem">
+                <label class="form-check" style="color:rgba(255,255,255,0.7)" x-show="customerEmail !== ''">
+                    <input type="checkbox" x-model="optedInEmail">
+                    <?= htmlspecialchars(__t('signup.email_consent')) ?>
+                </label>
+                <label class="form-check" style="color:rgba(255,255,255,0.7)" x-show="customerPhone !== ''">
+                    <input type="checkbox" x-model="optedInSms">
+                    <?= htmlspecialchars(__t('signup.sms_consent')) ?>
+                </label>
+            </div>
             <button type="submit" class="btn btn-accent btn-lg" style="width:100%" :disabled="accepting">
               <span x-show="!accepting"><?= htmlspecialchars(__t('quote.accept_button')) ?></span>
               <span x-show="accepting"><?= htmlspecialchars(__t('general.loading')) ?></span>
@@ -379,6 +389,8 @@ function quoteApp() {
     customerName:  '',
     customerEmail: '',
     customerPhone: '',
+    optedInEmail:  false,
+    optedInSms:    false,
 
     /** True while the accept POST is in flight. */
     accepting:   false,
@@ -420,10 +432,12 @@ function quoteApp() {
             'X-CSRF-Token': this.csrf,
           },
           body: JSON.stringify({
-            name:         this.customerName,
-            email:        this.customerEmail,
-            phone:        this.customerPhone,
-            _csrf_token:  this.csrf,
+            name:            this.customerName,
+            email:           this.customerEmail,
+            phone:           this.customerPhone,
+            opted_in_email:  this.optedInEmail,
+            opted_in_sms:    this.optedInSms,
+            _csrf_token:     this.csrf,
           }),
         });
 

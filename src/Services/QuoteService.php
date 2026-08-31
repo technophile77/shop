@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\Config;
+use App\Support\CliRelay;
 
 /**
  * Stateless utility methods for working with quote data and notifications.
@@ -160,17 +161,36 @@ final class QuoteService
     }
 
     /**
-     * Sends an SMS notification to the shop owner via the Twilio REST API.
+     * Notifies the shop owner of quote/order activity by SMS and by a TTS
+     * phone call reading the same message, via the Twilio REST API.
      *
      * Reads TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER from
      * the environment. If any of those values are absent, the notification is
      * silently skipped and a message is written to the PHP error log.
      *
-     * The recipient number is WHATSAPP_PHONE prefixed with '+1'. Twilio HTTP
-     * errors are also logged and swallowed so a failed SMS never breaks the
+     * The SMS goes to WHATSAPP_PHONE only, formatted to E.164 via
+     * {@see TwilioService::formatNumber()}. Twilio HTTP errors are also
+     * logged and swallowed so a failed SMS or call never breaks the
      * customer-facing flow.
      *
-     * @param string $message The SMS body to send to the owner.
+     * In addition to the SMS, this also places a voice call that reads
+     * $message aloud via Twilio's TwiML `<Say>` verb — to WHATSAPP_PHONE, and
+     * additionally to WHATSAPP_PHONE_2 when that's configured (e.g. a second
+     * staff member's phone); leave WHATSAPP_PHONE_2 unset to call only the
+     * primary number. Voice calls are exempt from A2P 10DLC campaign
+     * registration (that approval process only governs SMS sent from a
+     * 10DLC long code), so the call channel keeps working even while the SMS
+     * campaign is pending approval — the two channels are independent and
+     * both are expected to fire once SMS is also approved.
+     *
+     * Relayed through {@see \App\Support\CliRelay} when called from a web
+     * request — this host's Apache-SAPI PHP has no cURL SSL backend, so the
+     * `curl_exec()` below would otherwise sever the connection instead of
+     * failing gracefully (this is how a real quote's payment-confirmation
+     * owner email went missing: this SMS call crashed the request before the
+     * email step ever ran). See docs/stripe-cli-relay.md.
+     *
+     * @param string $message The message to send by SMS and read aloud on the call.
      *
      * @return void
      *
@@ -179,6 +199,15 @@ final class QuoteService
      */
     public static function notifyOwner(string $message): void
     {
+        if (CliRelay::isNeeded()) {
+            try {
+                CliRelay::run(self::class, 'notifyOwner', func_get_args());
+            } catch (\Throwable $e) {
+                error_log('[QuoteService] CLI relay failed for notifyOwner(): ' . $e->getMessage());
+            }
+            return;
+        }
+
         $sid   = (string) Config::get('TWILIO_ACCOUNT_SID',  '');
         $token = (string) Config::get('TWILIO_AUTH_TOKEN',   '');
         $from  = (string) Config::get('TWILIO_FROM_NUMBER',  '');
@@ -189,7 +218,7 @@ final class QuoteService
         }
 
         $rawPhone = (string) Config::get('WHATSAPP_PHONE', '');
-        $to       = '+1' . $rawPhone;
+        $to       = TwilioService::formatNumber($rawPhone);
 
         $url     = "https://api.twilio.com/2010-04-01/Accounts/{$sid}/Messages.json";
         $payload = http_build_query(['From' => $from, 'To' => $to, 'Body' => $message]);
@@ -214,6 +243,72 @@ final class QuoteService
             error_log(
                 "[QuoteService] Twilio SMS failed (HTTP {$httpCode}): "
                 . (is_string($response) ? $response : '(no body)')
+            );
+        }
+
+        // Also place a TTS phone call reading the same message, to every
+        // configured recipient (WHATSAPP_PHONE, plus WHATSAPP_PHONE_2 when
+        // set). Voice calls are exempt from A2P 10DLC campaign registration
+        // (that system only governs SMS from a 10DLC long code), so this
+        // channel keeps working even while the SMS campaign is pending
+        // approval.
+        $twiml = '<Response><Pause length="1"/><Say voice="Polly.Joanna" language="en-US">'
+            . htmlspecialchars($message)
+            . '</Say></Response>';
+
+        $callRecipients = [$to];
+
+        $secondaryRaw = (string) Config::get('WHATSAPP_PHONE_2', '');
+        if ($secondaryRaw !== '') {
+            $callRecipients[] = TwilioService::formatNumber($secondaryRaw);
+        }
+
+        foreach ($callRecipients as $callTo) {
+            self::placeOwnerCall($sid, $token, $from, $callTo, $twiml);
+        }
+    }
+
+    /**
+     * Places one TTS phone call via Twilio's Calls API, reading $twiml aloud.
+     *
+     * Split out from {@see notifyOwner()} so the same call-placing logic can
+     * run once per configured recipient without duplicating the cURL setup.
+     * Failures are logged and swallowed, matching notifyOwner()'s contract —
+     * one recipient's failure never blocks the call to another.
+     *
+     * @param string $sid   Twilio Account SID.
+     * @param string $token Twilio Auth Token.
+     * @param string $from  Caller ID — the Twilio number placing the call (E.164).
+     * @param string $to    Recipient number (E.164).
+     * @param string $twiml TwiML markup Twilio should execute for the call.
+     *
+     * @return void
+     */
+    private static function placeOwnerCall(string $sid, string $token, string $from, string $to, string $twiml): void
+    {
+        $callUrl     = "https://api.twilio.com/2010-04-01/Accounts/{$sid}/Calls.json";
+        $callPayload = http_build_query(['From' => $from, 'To' => $to, 'Twiml' => $twiml]);
+
+        $callCh = curl_init($callUrl);
+        if ($callCh === false) {
+            error_log("[QuoteService] curl_init failed — cannot place owner notification call to {$to}.");
+            return;
+        }
+
+        curl_setopt($callCh, CURLOPT_POST,           true);
+        curl_setopt($callCh, CURLOPT_POSTFIELDS,     $callPayload);
+        curl_setopt($callCh, CURLOPT_USERPWD,        "{$sid}:{$token}");
+        curl_setopt($callCh, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($callCh, CURLOPT_TIMEOUT,        10);
+
+        $callResponse = curl_exec($callCh);
+        $callHttpCode = (int) curl_getinfo($callCh, CURLINFO_HTTP_CODE);
+        curl_close($callCh);
+
+        if ($callHttpCode < 200 || $callHttpCode >= 300) {
+            error_log(
+                "[QuoteService] Twilio voice call to {$to} failed (HTTP {$callHttpCode}): "
+                . (is_string($callResponse) ? $callResponse : '(no body)')
             );
         }
     }

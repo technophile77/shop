@@ -17,6 +17,7 @@ use App\Models\PageView;
 use App\Models\PaperColor;
 use App\Models\StoreClosure;
 use App\Services\MailService;
+use App\Services\QuoteService;
 use App\Services\StripeService;
 use App\Support\Analytics;
 use App\Support\CartPricing;
@@ -238,6 +239,8 @@ final class CheckoutController extends BaseController
         $fulfillType  = $request->post('delivery_type', 'delivery') === 'pickup' ? 'pickup' : 'delivery';
         $fulfillDate  = trim((string) $request->post('fulfill_date', ''));
         $fulfillTime  = trim((string) $request->post('fulfill_time', ''));
+        $optedInEmail = $request->post('opted_in_email') ? 1 : 0;
+        $optedInSms   = $request->post('opted_in_sms')   ? 1 : 0;
 
         if ($name === '' || $email === '') {
             $this->setFlash('error', 'Please provide your name and email.');
@@ -329,8 +332,8 @@ final class CheckoutController extends BaseController
             'email'          => $email,
             'phone'          => $phone,
             'source'         => CustomerSource::resolve($_SESSION['utm'] ?? [], 'shop_checkout'),
-            'opted_in_email' => 0,
-            'opted_in_sms'   => 0,
+            'opted_in_email' => $optedInEmail,
+            'opted_in_sms'   => $optedInSms,
         ]);
 
         $orderId = Order::createShopOrder([
@@ -373,8 +376,16 @@ final class CheckoutController extends BaseController
             error_log('[CheckoutController] Stripe API error: ' . $e->getMessage());
             $this->setFlash('error', 'Payment service error. Please try again.');
             return $this->redirect('/' . $lang . '/cart');
-        } catch (\Exception $e) {
-            error_log('[CheckoutController] Unexpected error: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            $detail = sprintf(
+                '[CheckoutController] Unexpected error: %s (%s:%d)' . PHP_EOL . '%s',
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine(),
+                $e->getTraceAsString(),
+            );
+            error_log($detail);
+            @file_put_contents(__DIR__ . '/../../logs/php_errors.log', '[' . date('c') . '] ' . $detail . PHP_EOL, FILE_APPEND);
             $this->setFlash('error', 'An unexpected error occurred. Please try again.');
             return $this->redirect('/' . $lang . '/cart');
         }
@@ -389,8 +400,9 @@ final class CheckoutController extends BaseController
      *
      * Idempotent: when the order is already paid the cart/destination are simply
      * cleared and the thank-you page is shown without re-notifying. The owner is
-     * notified once, on the first transition to paid (the webhook also confirms
-     * the order as a backstop).
+     * notified once, on the first transition to paid, by both email
+     * ({@see notifyOwner()}) and SMS ({@see \App\Services\QuoteService::notifyOwner()})
+     * (the webhook also confirms the order as a backstop).
      *
      * On the first transition to paid, the order row is re-read after
      * {@see \App\Models\Order::markPaid()} so {@see renderSuccess()} receives the
@@ -439,6 +451,11 @@ final class CheckoutController extends BaseController
 
                 Order::markPaid((int) $order['id'], $paymentIntentId);
                 $this->notifyOwner($order);
+                QuoteService::notifyOwner(
+                    'Shop order paid — ' . (string) ($order['customer_name'] ?? 'Customer')
+                    . ' — $' . number_format((float) ($order['total'] ?? 0), 2)
+                    . ' — Order #' . (int) $order['id']
+                );
 
                 // Re-read so renderSuccess() gets the post-markPaid row (payment_status
                 // = 'paid' and any other fields markPaid() touched) instead of the stale
@@ -450,8 +467,16 @@ final class CheckoutController extends BaseController
                 Destination::clear();
                 $paid = true;
             }
-        } catch (\Exception $e) {
-            error_log('[CheckoutController] Error verifying session ' . $sessionId . ': ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            $detail = sprintf(
+                '[CheckoutController] Error verifying session %s: %s (%s:%d)',
+                $sessionId,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine(),
+            );
+            error_log($detail);
+            @file_put_contents(__DIR__ . '/../../logs/php_errors.log', '[' . date('c') . '] ' . $detail . PHP_EOL, FILE_APPEND);
         }
 
         return $this->renderSuccess($order, $lang, $paid);

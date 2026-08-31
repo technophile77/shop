@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Core\Config;
 use App\Core\Lang;
 use App\Core\Request;
 use App\Core\Response;
 use App\Models\Customer;
 use App\Models\PageView;
 use App\Models\Quote;
+use App\Services\MailService;
 use App\Services\QuoteService;
 use App\Support\CustomerSource;
+use App\Support\QuotePaymentEmail;
 
 /**
  * Handles the customer-facing quote acceptance flow.
@@ -89,8 +92,9 @@ final class QuoteController extends BaseController
      * Accepts the quote on behalf of the customer.
      *
      * Validates the CSRF token, then verifies the quote is in `sent` status.
-     * Upserts the customer from the posted name / email / phone (source
-     * resolved from the session's UTM attribution, falling back to
+     * Upserts the customer from the posted name / email / phone and the
+     * posted `opted_in_email` / `opted_in_sms` A2P 10DLC consent flags
+     * (source resolved from the session's UTM attribution, falling back to
      * 'quote_accept'), links the customer to the quote if not already linked,
      * and transitions the quote to `accepted`, marking the visitor's ad
      * session as converted. Returns JSON so the Alpine.js component can
@@ -103,7 +107,8 @@ final class QuoteController extends BaseController
      *         success, or `success: false` and `error: string` on failure.
      *
      * @example
-     *   // POST /quote/abc123def456… — body: {name, email, phone, _csrf_token}
+     *   // POST /quote/abc123def456… — body: {name, email, phone,
+     *   //   opted_in_email, opted_in_sms, _csrf_token}
      *   // → {"success":true,"step":"payment"}
      */
     public function accept(Request $request, array $params = []): Response
@@ -129,13 +134,16 @@ final class QuoteController extends BaseController
         $email = trim((string) $request->post('email', ''));
         $phone = trim((string) $request->post('phone', ''));
 
+        $optedInEmail = $request->post('opted_in_email') ? 1 : 0;
+        $optedInSms   = $request->post('opted_in_sms')   ? 1 : 0;
+
         $customerId = Customer::upsert([
             'name'           => $name  !== '' ? $name  : null,
             'email'          => $email !== '' ? $email : null,
             'phone'          => $phone !== '' ? $phone : null,
             'source'         => CustomerSource::resolve($_SESSION['utm'] ?? [], 'quote_accept'),
-            'opted_in_email' => 0,
-            'opted_in_sms'   => 0,
+            'opted_in_email' => $optedInEmail,
+            'opted_in_sms'   => $optedInSms,
         ]);
 
         // Link customer to the quote only if it has none yet.
@@ -157,9 +165,10 @@ final class QuoteController extends BaseController
      * Records that the customer has sent the deposit.
      *
      * Validates CSRF, verifies the quote is in `accepted` status, transitions
-     * it to `deposit_confirmed`, and fires an SMS notification to the shop
-     * owner. Returns JSON so the Alpine.js component can advance to the
-     * confirmation step.
+     * it to `deposit_confirmed`, and notifies the shop owner by SMS/voice call
+     * ({@see \App\Services\QuoteService::notifyOwner()}) and, additively, by
+     * email ({@see notifyOwnerDepositEmail()}). Returns JSON so the Alpine.js
+     * component can advance to the confirmation step.
      *
      * @param Request              $request HTTP request (JSON or form POST).
      * @param array<string, mixed> $params  Route parameters; must contain 'token'.
@@ -200,6 +209,61 @@ final class QuoteController extends BaseController
             "Deposit confirmed — {$customerName} — {$eventDate} — \${$depositAmount}"
         );
 
+        $this->notifyOwnerDepositEmail($quote, (float) $quote['deposit_amount']);
+
         return Response::json(['success' => true]);
+    }
+
+    /**
+     * Emails the shop owner when a manually-confirmed (non-Stripe) deposit is
+     * recorded — additive to the SMS/voice notification already sent by
+     * {@see \App\Services\QuoteService::notifyOwner()} in {@see confirmDeposit()},
+     * mirroring how {@see \App\Controllers\StripeController::notifyOwnerQuotePayment()}
+     * pairs with its own SMS/voice call for a Stripe payment.
+     *
+     * Reuses {@see \App\Support\QuotePaymentEmail::bodyHtml()} for the rich
+     * body — it's payment-method-agnostic despite living in a class named
+     * after Stripe payments; the Stripe PaymentIntent row is simply omitted
+     * here since $paymentIntentId is passed as ''. The subject line is built
+     * locally rather than via {@see \App\Support\QuotePaymentEmail::subject()},
+     * which hardcodes "Stripe Payment Received" — this deposit was reported
+     * by the customer as sent via Zelle, CashApp, or similar, not charged
+     * through Stripe, so that wording would misrepresent how it was paid.
+     *
+     * Failures are logged and swallowed so a mail problem never blocks the
+     * deposit-confirmation flow.
+     *
+     * @param array<string, mixed> $quote         The quote row from {@see \App\Models\Quote::findByToken()}.
+     * @param float                $depositAmount The confirmed deposit amount, in dollars.
+     *
+     * @see \App\Support\QuotePaymentEmail
+     */
+    private function notifyOwnerDepositEmail(array $quote, float $depositAmount): void
+    {
+        $to = (string) Config::get('BUSINESS_EMAIL', '');
+        if ($to === '' || !MailService::canSend()) {
+            return;
+        }
+
+        try {
+            $items = QuoteService::decodeItems((string) ($quote['items_json'] ?? ''));
+        } catch (\JsonException $e) {
+            error_log('[QuoteController] Failed to decode quote items for deposit email: ' . $e->getMessage());
+            $items = [];
+        }
+
+        $customerName = !empty($quote['customer_name']) ? (string) $quote['customer_name'] : 'Customer';
+        $appUrl       = rtrim((string) Config::get('APP_URL', ''), '/');
+        $subject      = 'Deposit Confirmed — Quote #' . (int) ($quote['id'] ?? 0)
+            . " — {$customerName} — $" . number_format($depositAmount, 2);
+        $html         = MailService::buildHtml(
+            QuotePaymentEmail::bodyHtml($quote, $items, $depositAmount, '', $appUrl)
+        );
+
+        $result = MailService::send($to, '', $subject, $html);
+
+        if (!$result['success']) {
+            error_log('[QuoteController] Deposit confirmation email failed: ' . ($result['error'] ?? 'unknown'));
+        }
     }
 }
