@@ -203,12 +203,15 @@ final class TwilioService
      *
      * @return string E.164-formatted number, e.g. '+17203883496'.
      *
+     * Public so other services (e.g. {@see \App\Services\QuoteService::notifyOwner()})
+     * can reuse the same correct formatting instead of re-deriving it.
+     *
      * @example
      *   TwilioService::formatNumber('7203883496');   // '+17203883496'
      *   TwilioService::formatNumber('17203883496');  // '+17203883496'
      *   TwilioService::formatNumber('(720) 388-3496'); // '+17203883496'
      */
-    private static function formatNumber(string $number): string
+    public static function formatNumber(string $number): string
     {
         $digits = preg_replace('/\D/', '', $number) ?? '';
 

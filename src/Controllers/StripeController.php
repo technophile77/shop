@@ -357,10 +357,10 @@ final class StripeController extends BaseController
      * Handles checkout.session.completed for a shop-cart order session.
      *
      * Idempotent: skips the update when the order is already marked paid.
-     * Notifies the owner by email after marking the order paid, and marks the
-     * ad session tracked on the order (if any) as converted — webhooks carry
-     * no customer session of their own, so the token stored on the order at
-     * creation time is used instead.
+     * Notifies the owner by email and SMS after marking the order paid, and
+     * marks the ad session tracked on the order (if any) as converted —
+     * webhooks carry no customer session of their own, so the token stored
+     * on the order at creation time is used instead.
      *
      * @param \Stripe\Checkout\Session $session     The Stripe Session object.
      * @param int                      $shopOrderId The order ID from metadata.
@@ -399,6 +399,9 @@ final class StripeController extends BaseController
             $customerName = (string) ($order['customer_name'] ?? 'Customer');
             $total        = '$' . number_format((float) ($order['total'] ?? 0), 2);
             $this->notifyOwnerShopOrder($order, $customerName, $total);
+            QuoteService::notifyOwner(
+                "Shop order paid — {$customerName} — {$total} — Order #{$shopOrderId}"
+            );
         } catch (\Exception $e) {
             error_log('[StripeController] Failed to mark shop order paid from webhook: ' . $e->getMessage());
         }
