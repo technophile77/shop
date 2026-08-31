@@ -223,4 +223,126 @@ final class StripeService
         $secret = (string) Config::get('STRIPE_WEBHOOK_SECRET', '');
         return Webhook::constructEvent($payload, $sigHeader, $secret);
     }
+
+    /**
+     * Lists every Charge on the account, normalized to plain arrays of
+     * dollar amounts so {@see \App\Support\StripeReconciler} stays DB- and
+     * SDK-free.
+     *
+     * Uses {@see \Stripe\Collection::autoPagingIterator()} rather than a bare
+     * `limit`, which silently truncates at 100 results and would drop older
+     * charges — for a reconciliation tool that is exactly the kind of silent
+     * under-report this codebase refuses to produce.
+     *
+     * @param int $createdGte Unix timestamp; when > 0, only charges created
+     *        on or after this instant are returned (passed as Stripe's
+     *        `created[gte]` filter). 0 means no lower bound.
+     *
+     * @return list<array{id: string, created_utc: string, status: string,
+     *              paid: bool, amount: float, amount_refunded: float,
+     *              refunded: bool, disputed: bool, payment_intent: string,
+     *              billing_name: string, description: string,
+     *              metadata: array<string, string>}>
+     *         One entry per charge, oldest-filter-bound through newest, with
+     *         `amount`/`amount_refunded` converted from Stripe's integer
+     *         cents to decimal dollars and `created_utc` formatted
+     *         `'Y-m-d H:i:s'` in UTC.
+     *
+     * @throws \Stripe\Exception\ApiErrorException On Stripe API failure.
+     *
+     * @example
+     *   $charges = StripeService::listCharges(strtotime('2026-05-01 00:00:00 UTC'));
+     *   // [['id' => 'ch_123', 'created_utc' => '2026-07-24 00:13:55', 'status' => 'succeeded',
+     *   //   'paid' => true, 'amount' => 107.67, 'amount_refunded' => 0.00, 'refunded' => false,
+     *   //   'disputed' => false, 'payment_intent' => 'pi_123', 'billing_name' => 'Jane Doe',
+     *   //   'description' => '', 'metadata' => []], ...]
+     *
+     * @see \App\Support\StripeReconciler Consumes this list to match charges to local quotes/orders.
+     */
+    public static function listCharges(int $createdGte = 0): array
+    {
+        $params = ['limit' => 100];
+        if ($createdGte > 0) {
+            $params['created'] = ['gte' => $createdGte];
+        }
+
+        $charges = [];
+        foreach (self::client()->charges->all($params)->autoPagingIterator() as $charge) {
+            $charges[] = [
+                'id'              => $charge->id,
+                'created_utc'     => gmdate('Y-m-d H:i:s', $charge->created),
+                'status'          => $charge->status,
+                'paid'            => (bool) $charge->paid,
+                'amount'          => round($charge->amount / 100, 2),
+                'amount_refunded' => round($charge->amount_refunded / 100, 2),
+                'refunded'        => (bool) $charge->refunded,
+                'disputed'        => (bool) $charge->disputed,
+                'payment_intent'  => (string) ($charge->payment_intent ?? ''),
+                'billing_name'    => (string) ($charge->billing_details?->name ?? ''),
+                'description'     => (string) ($charge->description ?? ''),
+                'metadata'        => $charge->metadata->toArray(),
+            ];
+        }
+
+        return $charges;
+    }
+
+    /**
+     * Lists every Checkout Session on the account, normalized to plain
+     * arrays of dollar amounts so {@see \App\Support\StripeReconciler} stays
+     * DB- and SDK-free.
+     *
+     * Uses {@see \Stripe\Collection::autoPagingIterator()} rather than a bare
+     * `limit`, which silently truncates at 100 results and would drop older
+     * sessions — the same reason {@see self::listCharges()} does.
+     *
+     * @param int $createdGte Unix timestamp; when > 0, only sessions created
+     *        on or after this instant are returned (passed as Stripe's
+     *        `created[gte]` filter). 0 means no lower bound.
+     *
+     * @return list<array{id: string, created_utc: string, status: string,
+     *              payment_status: string, amount_total: float,
+     *              amount_subtotal: float, amount_tax: float,
+     *              payment_intent: string, metadata: array<string, string>,
+     *              email: string}>
+     *         One entry per Checkout Session, with every money field
+     *         converted from Stripe's integer cents to decimal dollars and
+     *         `created_utc` formatted `'Y-m-d H:i:s'` in UTC.
+     *
+     * @throws \Stripe\Exception\ApiErrorException On Stripe API failure.
+     *
+     * @example
+     *   $sessions = StripeService::listCheckoutSessions(strtotime('2026-05-01 00:00:00 UTC'));
+     *   // [['id' => 'cs_123', 'created_utc' => '2026-06-06 20:37:20', 'status' => 'complete',
+     *   //   'payment_status' => 'paid', 'amount_total' => 189.90, 'amount_subtotal' => 175.00,
+     *   //   'amount_tax' => 14.90, 'payment_intent' => 'pi_456', 'metadata' => [],
+     *   //   'email' => 'jane@example.com'], ...]
+     *
+     * @see \App\Support\StripeReconciler Matches quote 5 to its charge via this list (rule 2, 'session').
+     */
+    public static function listCheckoutSessions(int $createdGte = 0): array
+    {
+        $params = ['limit' => 100];
+        if ($createdGte > 0) {
+            $params['created'] = ['gte' => $createdGte];
+        }
+
+        $sessions = [];
+        foreach (self::client()->checkout->sessions->all($params)->autoPagingIterator() as $session) {
+            $sessions[] = [
+                'id'               => $session->id,
+                'created_utc'      => gmdate('Y-m-d H:i:s', $session->created),
+                'status'           => (string) ($session->status ?? ''),
+                'payment_status'   => (string) $session->payment_status,
+                'amount_total'     => round(($session->amount_total ?? 0) / 100, 2),
+                'amount_subtotal'  => round(($session->amount_subtotal ?? 0) / 100, 2),
+                'amount_tax'       => round(($session->total_details?->amount_tax ?? 0) / 100, 2),
+                'payment_intent'   => (string) ($session->payment_intent ?? ''),
+                'metadata'         => $session->metadata->toArray(),
+                'email'            => (string) ($session->customer_email ?? ($session->customer_details?->email ?? '')),
+            ];
+        }
+
+        return $sessions;
+    }
 }
