@@ -18,6 +18,8 @@ return [
     'nav.about'       => 'About',
     'nav.contact'     => 'Contact',
     'nav.returns'     => 'Returns',
+    'nav.privacy'     => 'Privacy',
+    'nav.terms'       => 'Terms',
     'nav.areas'       => 'Delivery Areas',
     'nav.lang_switch' => 'Español',
 
@@ -36,7 +38,7 @@ return [
     'signup.email_label'  => 'Email Address',
     'signup.phone_label'  => 'Phone Number',
     'signup.email_consent' => 'Yes, send me email promotions',
-    'signup.sms_consent'  => 'Yes, send me text message promotions',
+    'signup.sms_consent'  => 'Yes, send me text message promotions (up to 4 msgs/month, msg & data rates may apply, reply STOP to opt out)',
     'signup.submit'       => 'Sign Me Up!',
     'signup.success'      => "You're signed up! We'll be in touch.",
 

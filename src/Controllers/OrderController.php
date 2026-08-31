@@ -16,6 +16,7 @@ use App\Models\PageView;
 use App\Models\Quote;
 use App\Models\StoreClosure;
 use App\Services\MailService;
+use App\Services\QuoteService;
 use App\Support\Closures;
 use App\Support\CustomerSource;
 use App\Support\QuoteDraft;
@@ -149,6 +150,8 @@ final class OrderController extends BaseController
                               : 'pickup';
         $deliveryAddress    = trim((string) $request->post('delivery_address', ''));
         $deliveryFee        = $request->post('delivery_fee') !== null ? (float) $request->post('delivery_fee') : null;
+        $optedInEmail       = $request->post('opted_in_email') ? 1 : 0;
+        $optedInSms         = $request->post('opted_in_sms')   ? 1 : 0;
 
         // Sanitise add-ons selection — the client sends form.addons as a JSON array
         // of {id, name_en, name_es} snapshots, already decoded by Request::jsonBody().
@@ -200,8 +203,8 @@ final class OrderController extends BaseController
             'email'          => $email,
             'phone'          => $phone,
             'source'         => CustomerSource::resolve($_SESSION['utm'] ?? [], 'order_form'),
-            'opted_in_email' => 0,
-            'opted_in_sms'   => 0,
+            'opted_in_email' => $optedInEmail,
+            'opted_in_sms'   => $optedInSms,
         ]);
 
         // Create the order.
@@ -364,8 +367,11 @@ final class OrderController extends BaseController
     /**
      * Send a new bouquet request notification to the business owner.
      *
-     * Fires after the order and customer records are persisted. Failures are
-     * silently logged so a mail misconfiguration never breaks the form submit.
+     * Fires after the order and customer records are persisted, via two
+     * channels: a detailed email (failures are silently logged so a mail
+     * misconfiguration never breaks the form submit) and a short SMS via
+     * {@see \App\Services\QuoteService::notifyOwner()}, which is already
+     * safe to call unconditionally.
      *
      * @param string      $deliveryType    'pickup' or 'delivery'.
      * @param string      $deliveryAddress Customer delivery address; empty for pickup orders.
@@ -469,5 +475,11 @@ final class OrderController extends BaseController
         if (!$result['success']) {
             error_log('[OrderController] Notification email failed: ' . ($result['error'] ?? 'unknown'));
         }
+
+        QuoteService::notifyOwner(
+            'New bouquet request — ' . ($name !== '' ? $name : 'Anonymous')
+            . ($eventDate !== '' ? ' — ' . $eventDate : '')
+            . ($phone !== '' ? ' — ' . $phone : ($email !== '' ? ' — ' . $email : ''))
+        );
     }
 }

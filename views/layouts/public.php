@@ -470,6 +470,8 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
                     <li><a href="/<?= $lang ?>/about"><?= htmlspecialchars(__t('nav.about')) ?></a></li>
                     <li><a href="/<?= $lang ?>/contact"><?= htmlspecialchars(__t('nav.contact')) ?></a></li>
                     <li><a href="/<?= $lang ?>/returns"><?= htmlspecialchars(__t('nav.returns')) ?></a></li>
+                    <li><a href="/<?= $lang ?>/privacy"><?= htmlspecialchars(__t('nav.privacy')) ?></a></li>
+                    <li><a href="/<?= $lang ?>/terms"><?= htmlspecialchars(__t('nav.terms')) ?></a></li>
                     <li><a href="/<?= $lang ?>/delivery-areas"><?= htmlspecialchars(__t('nav.areas')) ?></a></li>
                     <?php if (\App\Core\Settings::get('show_doordash_button', '1') === '1' && \App\Core\Config::get('DOORDASH_STORE_URL')): ?>
                     <li>

@@ -79,13 +79,13 @@ $prefillAddress = $destination['venue_address'] ?? '';
           </div>
           <div class="form-group">
             <label><?= htmlspecialchars(__t('order.phone')) ?></label>
-            <input type="tel" name="phone" autocomplete="tel">
+            <input type="tel" name="phone" x-model="phone" autocomplete="tel">
           </div>
         </div>
 
         <div class="form-group">
           <label><?= htmlspecialchars(__t('order.email')) ?> <span style="color:var(--color-accent)">*</span></label>
-          <input type="email" name="email" autocomplete="email" required>
+          <input type="email" name="email" x-model="email" autocomplete="email" required>
         </div>
 
         <div class="form-group">
@@ -199,6 +199,17 @@ $prefillAddress = $destination['venue_address'] ?? '';
           </div>
         </div>
 
+        <div style="display:flex; flex-wrap:wrap; gap:1rem 2rem; margin-bottom:1rem">
+            <label class="form-check" x-show="email !== ''">
+                <input type="checkbox" name="opted_in_email" value="1">
+                <?= htmlspecialchars(__t('signup.email_consent')) ?>
+            </label>
+            <label class="form-check" x-show="phone !== ''">
+                <input type="checkbox" name="opted_in_sms" value="1">
+                <?= htmlspecialchars(__t('signup.sms_consent')) ?>
+            </label>
+        </div>
+
         <button type="submit" class="btn btn-accent btn-lg" style="width:100%; justify-content:center"
                 :disabled="submitting">
           <span x-show="!submitting"><?= htmlspecialchars(__t('checkout.pay_button')) ?></span>
@@ -225,6 +236,8 @@ $prefillAddress = $destination['venue_address'] ?? '';
 function checkoutForm() {
     return {
         name: '',
+        phone: '',
+        email: '',
         fulfillType: 'delivery',
         fulfillDate: '',
         fulfillTime: '',

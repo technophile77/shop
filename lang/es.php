@@ -18,6 +18,8 @@ return [
     'nav.about'       => 'Nosotros',
     'nav.contact'     => 'Contacto',
     'nav.returns'     => 'Devoluciones',
+    'nav.privacy'     => 'Privacidad',
+    'nav.terms'       => 'Términos',
     'nav.areas'       => 'Áreas de Entrega',
     'nav.lang_switch' => 'English',
 
@@ -36,7 +38,7 @@ return [
     'signup.email_label'   => 'Correo Electrónico',
     'signup.phone_label'   => 'Número de Teléfono',
     'signup.email_consent' => 'Sí, envíame promociones por correo',
-    'signup.sms_consent'   => 'Sí, envíame promociones por mensaje de texto',
+    'signup.sms_consent'   => 'Sí, envíame promociones por mensaje de texto (hasta 4 msj/mes, pueden aplicar tarifas de mensajes y datos, responde STOP para cancelar)',
     'signup.submit'        => '¡Regístrame!',
     'signup.success'       => '¡Te registraste! Estaremos en contacto.',
 
