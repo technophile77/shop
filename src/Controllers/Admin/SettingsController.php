@@ -12,9 +12,11 @@ use App\Core\Settings;
 /**
  * Admin controller for the Site Settings page.
  *
- * Exposes a single-page form that bulk-updates all known site_settings keys.
+ * Exposes a single-page form that bulk-updates the known site_settings keys.
  * Only keys from the explicit allow-list are written; arbitrary POST keys are
- * ignored to prevent mass-assignment of unexpected database rows.
+ * ignored to prevent mass-assignment of unexpected database rows. A text key
+ * the form does not submit keeps its stored value, so settings without an
+ * input on the form are never wiped by a save (see {@see valuesFromPost()}).
  *
  * Flash messages are stored in $_SESSION['flash'] and read by the view.
  *
@@ -77,6 +79,19 @@ final class SettingsController extends BaseController
         'vip_spend_threshold',
     ];
 
+    /**
+     * Keys from KNOWN_KEYS that are rendered as HTML checkboxes.
+     *
+     * Unchecked checkboxes send no POST field at all, so presence in POST maps
+     * to '1' and absence to '0' instead of leaving the stored value alone.
+     *
+     * @var list<string>
+     */
+    private const CHECKBOX_KEYS = [
+        'show_doordash_button',
+        'show_whatsapp_button',
+    ];
+
     // -------------------------------------------------------------------------
     // GET /admin/settings
     // -------------------------------------------------------------------------
@@ -90,7 +105,7 @@ final class SettingsController extends BaseController
      * by the template since it only renders the keys in KNOWN_KEYS.
      *
      * @param Request              $request HTTP request (unused for GET).
-     * @param array<string,string> $params  Route parameters (none for this route).
+     * @param array<string,string> $_params Route parameters (none for this route).
      *
      * @return Response Rendered HTML for admin/settings/index.
      *
@@ -116,22 +131,29 @@ final class SettingsController extends BaseController
     // -------------------------------------------------------------------------
 
     /**
-     * Persist all submitted setting values.
+     * Persist the submitted setting values.
      *
-     * Iterates over KNOWN_KEYS and calls Settings::set() for each key that
-     * appears in the POST body. Checkbox keys (show_doordash_button,
-     * show_whatsapp_button) are treated as present=1 / absent=0 because
-     * unchecked HTML checkboxes send no POST field at all.
+     * Rejects the request with an error flash when the CSRF token is invalid.
+     * Otherwise reads every KNOWN_KEYS field through Request::post() (so
+     * string values arrive trimmed), lets valuesFromPost() decide which keys to
+     * write, and saves each pair with Settings::set(). Text fields that were
+     * not submitted are not written, so their stored values survive the save;
+     * this is what protects settings the form has no input for. Checkbox keys
+     * (show_doordash_button, show_whatsapp_button) are written as present=1 /
+     * absent=0 because unchecked HTML checkboxes send no POST field at all.
      * After the batch write, Settings::reload() refreshes the in-request cache
      * so subsequent reads within the same request reflect the saved values.
      *
      * @param Request              $request HTTP request containing POST data.
-     * @param array<string,string> $params  Route parameters (none for this route).
+     * @param array<string,string> $_params Route parameters (none for this route).
      *
-     * @return Response Redirect to /admin/settings.
+     * @return Response Redirect to /admin/settings, carrying a flash message
+     *                  that reports either the invalid token or the success.
      *
      * @example
      *   (new SettingsController())->update($request, []);
+     *
+     * @see self::valuesFromPost() Decides which keys are written, and with what.
      */
     public function update(Request $request, array $_params = []): Response
     {
@@ -140,18 +162,13 @@ final class SettingsController extends BaseController
             return $this->redirect('/admin/settings');
         }
 
-        /** Keys whose presence in POST maps to 1, absence to 0 (HTML checkboxes). */
-        $checkboxKeys = ['show_doordash_button', 'show_whatsapp_button'];
-
+        // post() yields null for every field the form did not send.
+        $post = [];
         foreach (self::KNOWN_KEYS as $key) {
-            if (in_array($key, $checkboxKeys, true)) {
-                // Unchecked boxes are absent from POST — treat missing as '0'.
-                $value = $request->post($key) !== null ? '1' : '0';
-            } else {
-                $raw   = $request->post($key);
-                $value = $raw !== null ? (string) $raw : '';
-            }
+            $post[$key] = $request->post($key);
+        }
 
+        foreach (self::valuesFromPost($post) as $key => $value) {
             Settings::set($key, $value);
         }
 
@@ -159,5 +176,68 @@ final class SettingsController extends BaseController
 
         $_SESSION['flash'] = ['type' => 'success', 'message' => 'Settings saved successfully.'];
         return $this->redirect('/admin/settings');
+    }
+
+    // -------------------------------------------------------------------------
+    // POST → values mapping (pure)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Map a submitted form to the setting values that should be persisted.
+     *
+     * Pure function — no I/O, no superglobals — so the save rules can be tested
+     * without a database. Only KNOWN_KEYS can appear in the result; any other
+     * field in $post is ignored (mass-assignment protection).
+     *
+     *  - Text keys are included only when submitted as a string. A key missing
+     *    from the form is omitted, which leaves its stored row unchanged: the
+     *    home_page_title_*, about_meta_desc_* and products_meta_desc_* SEO
+     *    strings have no input on the admin form, so they must survive a save.
+     *    A submitted empty string is included as '' because the owner cleared
+     *    the field on purpose; Settings::get() then falls back to its default.
+     *  - Checkbox keys (CHECKBOX_KEYS) are always included: '1' when submitted,
+     *    '0' when absent, because unchecked HTML checkboxes send nothing.
+     *
+     * @param array<string,mixed> $post Submitted fields keyed by field name,
+     *                                  e.g. from Request::post(). A null value
+     *                                  counts as absent. A non-string value for
+     *                                  a text key (such as an array posted as
+     *                                  field[]) is ignored.
+     *
+     * @return array<string,string> Setting key => value to hand to
+     *                              Settings::set(), in KNOWN_KEYS order.
+     *
+     * @example
+     *   SettingsController::valuesFromPost([
+     *       'about_text_en'        => 'Meet Perla.',
+     *       'hero_subtext_en'      => '',
+     *       'show_whatsapp_button' => '1',
+     *       'rogue_key'            => 'ignored',
+     *   ]);
+     *   // [
+     *   //     'hero_subtext_en'      => '',
+     *   //     'show_doordash_button' => '0',
+     *   //     'show_whatsapp_button' => '1',
+     *   //     'about_text_en'        => 'Meet Perla.',
+     *   // ]
+     *
+     * @see self::update() Calls this and writes each returned pair.
+     */
+    public static function valuesFromPost(array $post): array
+    {
+        $values = [];
+
+        foreach (self::KNOWN_KEYS as $key) {
+            $raw = $post[$key] ?? null;
+
+            if (in_array($key, self::CHECKBOX_KEYS, true)) {
+                // Unchecked boxes are absent from POST — treat missing as '0'.
+                $values[$key] = $raw !== null ? '1' : '0';
+            } elseif (is_string($raw)) {
+                $values[$key] = $raw;
+            }
+        }
+
+        return $values;
     }
 }
