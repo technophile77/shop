@@ -13,20 +13,26 @@ use Random\Randomizer;
  * Unit tests for the pure POST -> values mapping in SettingsController.
  *
  * valuesFromPost() decides which site_settings rows an admin save writes. It
- * exists because every save used to write '' for each setting the form has no
- * input for (home_page_title_*, about_meta_desc_*, products_meta_desc_*),
- * silently wiping them. update() itself needs a session and a database, so the
- * save-and-redirect flow is verified against the live host instead — see
- * CLAUDE.md's deployment notes. Key names are hard-coded here on purpose: the
- * controller's KNOWN_KEYS is private, and an independent list means removing a
- * key from it fails these tests. Includes one fixed-seed stochastic sweep (this
- * repo keeps stochastic sweeps inline in the unit suite — see StockCheckTest).
- * It draws from its own seeded Random\Randomizer rather than mt_srand(), so the
- * global mt_rand() stream that other tests (e.g. LocalAreasIntegrityTest) rely
- * on is untouched.
+ * exists because update() used to write '' for every managed key missing from
+ * POST. The form then had no inputs for home_page_title_*, about_meta_desc_*
+ * and products_meta_desc_*, so every save silently wiped them. The form has an
+ * input for every managed key now (AdminSettingsFormTest keeps it that way),
+ * but a submission can still omit managed fields: a stale copy of the form that
+ * a browser cached before those inputs existed, a form left open across a
+ * deploy, a hand-made POST. The rule pinned down here is that an omitted text
+ * field is never written, so its stored row survives the save. update() itself
+ * needs a session and a database, so the save-and-redirect flow is verified
+ * against the live host instead — see CLAUDE.md's deployment notes. Key names
+ * are hard-coded here on purpose: the controller's KNOWN_KEYS is private, and
+ * an independent list means removing a key from it fails these tests. Includes
+ * one fixed-seed stochastic sweep (this repo keeps stochastic sweeps inline in
+ * the unit suite — see StockCheckTest). It draws from its own seeded
+ * Random\Randomizer rather than mt_srand(), so the global mt_rand() stream that
+ * other tests (e.g. LocalAreasIntegrityTest) rely on is untouched.
  *
  * @see \App\Controllers\Admin\SettingsController::valuesFromPost()
  * @see \App\Core\Settings::get() Falls back to the caller's default for the '' values this mapping can persist.
+ * @see \App\Tests\Views\AdminSettingsFormTest Checks the current form against the controller's managed keys.
  */
 final class SettingsControllerTest extends TestCase
 {
@@ -40,10 +46,11 @@ final class SettingsControllerTest extends TestCase
     private const CHECKBOX_KEYS = ['show_doordash_button', 'show_whatsapp_button'];
 
     /**
-     * Text inputs that exist on views/admin/settings/index.php, i.e. the text
-     * fields a form submission actually carries.
+     * Text fields that a stale copy of the admin form still submits: every text
+     * field on views/admin/settings/index.php except the six listed in
+     * FIELDS_MISSING_FROM_STALE_FORM, whose inputs were added later.
      */
-    private const FORM_TEXT_FIELDS = [
+    private const STALE_FORM_TEXT_FIELDS = [
         'hero_headline_en',
         'hero_headline_es',
         'hero_subtext_en',
@@ -70,10 +77,12 @@ final class SettingsControllerTest extends TestCase
     ];
 
     /**
-     * Managed settings with no input on the admin form. A save must leave their
-     * stored rows alone; before the fix it overwrote each one with ''.
+     * Managed text settings whose inputs the form gained after saves had
+     * already been wiping them, so a stale copy of the form does not submit
+     * them. A save from such a form must leave their stored rows alone; before
+     * the fix it overwrote each one with ''.
      */
-    private const KEYS_WITHOUT_FORM_INPUT = [
+    private const FIELDS_MISSING_FROM_STALE_FORM = [
         'home_page_title_en',
         'home_page_title_es',
         'about_meta_desc_en',
@@ -82,8 +91,8 @@ final class SettingsControllerTest extends TestCase
         'products_meta_desc_es',
     ];
 
-    /** Every managed text key: the form's inputs plus the ones without an input. */
-    private const TEXT_KEYS = [...self::FORM_TEXT_FIELDS, ...self::KEYS_WITHOUT_FORM_INPUT];
+    /** Every managed text key: what the current form submits, minus the two checkboxes. */
+    private const TEXT_KEYS = [...self::STALE_FORM_TEXT_FIELDS, ...self::FIELDS_MISSING_FROM_STALE_FORM];
 
     /** Characters for random field values: whitespace, markup, quotes, multi-byte text. */
     private const ALPHABET = [
@@ -303,15 +312,16 @@ final class SettingsControllerTest extends TestCase
     // -------------------------------------------------------------------------
 
     /**
-     * A full submission of the admin form writes every field it carried, and
-     * none of the settings it has no input for — the six SEO strings that every
-     * save used to wipe.
+     * A stale copy of the form (cached by a browser before the later inputs
+     * existed) submits every field it knows and none of the six added since.
+     * Saving it writes the fields it carried and leaves those six alone: they
+     * are the settings that every save used to wipe.
      */
-    public function testFormSubmissionNeverWritesKeysItHasNoInputFor(): void
+    public function testStaleFormSubmissionNeverWritesTheFieldsItOmits(): void
     {
         $post     = ['_csrf_token' => 'token'];
         $expected = [];
-        foreach (self::FORM_TEXT_FIELDS as $key) {
+        foreach (self::STALE_FORM_TEXT_FIELDS as $key) {
             $post[$key]     = "value of {$key}";
             $expected[$key] = "value of {$key}";
         }
@@ -322,10 +332,35 @@ final class SettingsControllerTest extends TestCase
 
         $result = SettingsController::valuesFromPost($post);
 
-        foreach (self::KEYS_WITHOUT_FORM_INPUT as $key) {
-            self::assertArrayNotHasKey($key, $result, "{$key} must survive an admin save");
+        foreach (self::FIELDS_MISSING_FROM_STALE_FORM as $key) {
+            self::assertArrayNotHasKey($key, $result, "{$key} must survive a save from a stale form");
         }
         self::assertSame(self::sorted($expected), self::sorted($result));
+    }
+
+    /**
+     * The current form has an input for every managed key, so submitting it
+     * writes all of them, the six later-added fields included, each exactly as
+     * submitted. This is the other half of the rule above: a field is skipped
+     * only when it is missing from the submission, never because of its name.
+     */
+    public function testCurrentFormSubmissionWritesEveryManagedKey(): void
+    {
+        $post     = ['_csrf_token' => 'token'];
+        $expected = [];
+        foreach (self::TEXT_KEYS as $key) {
+            $post[$key]     = "value of {$key}";
+            $expected[$key] = "value of {$key}";
+        }
+        foreach (self::CHECKBOX_KEYS as $key) {
+            $post[$key]     = '1';
+            $expected[$key] = '1';
+        }
+
+        self::assertSame(
+            self::sorted($expected),
+            self::sorted(SettingsController::valuesFromPost($post))
+        );
     }
 
     // -------------------------------------------------------------------------

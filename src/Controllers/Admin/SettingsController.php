@@ -15,8 +15,8 @@ use App\Core\Settings;
  * Exposes a single-page form that bulk-updates the known site_settings keys.
  * Only keys from the explicit allow-list are written; arbitrary POST keys are
  * ignored to prevent mass-assignment of unexpected database rows. A text key
- * the form does not submit keeps its stored value, so settings without an
- * input on the form are never wiped by a save (see {@see valuesFromPost()}).
+ * missing from a submission keeps its stored value, so a save never wipes a
+ * setting the submitted form did not carry (see {@see valuesFromPost()}).
  *
  * Flash messages are stored in $_SESSION['flash'] and read by the view.
  *
@@ -138,7 +138,8 @@ final class SettingsController extends BaseController
      * string values arrive trimmed), lets valuesFromPost() decide which keys to
      * write, and saves each pair with Settings::set(). Text fields that were
      * not submitted are not written, so their stored values survive the save;
-     * this is what protects settings the form has no input for. Checkbox keys
+     * this is what protects the settings a stale copy of the form (cached by a
+     * browser before some inputs existed) leaves out. Checkbox keys
      * (show_doordash_button, show_whatsapp_button) are written as present=1 /
      * absent=0 because unchecked HTML checkboxes send no POST field at all.
      * After the batch write, Settings::reload() refreshes the in-request cache
@@ -190,9 +191,10 @@ final class SettingsController extends BaseController
      * field in $post is ignored (mass-assignment protection).
      *
      *  - Text keys are included only when submitted as a string. A key missing
-     *    from the form is omitted, which leaves its stored row unchanged: the
-     *    home_page_title_*, about_meta_desc_* and products_meta_desc_* SEO
-     *    strings have no input on the admin form, so they must survive a save.
+     *    from the submission is omitted, which leaves its stored row unchanged:
+     *    a stale copy of the admin form, cached by a browser before the
+     *    home_page_title_*, about_meta_desc_* and products_meta_desc_* inputs
+     *    existed, must not wipe those settings.
      *    A submitted empty string is included as '' because the owner cleared
      *    the field on purpose; Settings::get() then falls back to its default.
      *  - Checkbox keys (CHECKBOX_KEYS) are always included: '1' when submitted,
