@@ -48,7 +48,9 @@ final class ShopController extends BaseController
      * Looks up the occasion by slug and returns 404 for unknown or inactive
      * occasions. Loads all products tagged with that occasion, builds JSON-LD
      * ItemList structured data, derives per-language occasion copy, and renders
-     * the occasion view.
+     * the occasion view. The copy heading is the page title, passed as raw
+     * (unescaped) text: the layout escapes it for HTML and json_encode for the
+     * JSON-LD name, so a heading like "Mother's Day" is escaped exactly once.
      *
      * @param Request              $request The current HTTP request.
      * @param array<string, mixed> $params  Route parameters; expects $params['slug'].
@@ -131,7 +133,9 @@ final class ShopController extends BaseController
             ];
         }
 
-        $pageTitle = htmlspecialchars($copy['heading']);
+        // Raw text on purpose: the public layout HTML-escapes pageTitle itself, and
+        // json_encode escapes the JSON-LD name.
+        $pageTitle = $copy['heading'];
         $jsonLd    = [
             '@context'        => 'https://schema.org',
             '@type'           => 'ItemList',
