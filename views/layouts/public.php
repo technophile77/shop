@@ -12,7 +12,11 @@
  *   array<string,string>  $settings   All site_settings rows.
  *   Closure               $config     fn(string $key, mixed $default = null): mixed
  *   Closure               $t          fn(string $key): string
- *   string                $pageTitle  Page-specific title (falls back to BUSINESS_NAME).
+ *   string                $pageTitle  Page-specific title (falls back to BUSINESS_NAME). Shown in
+ *                                     <title>, og:title and twitter:title as
+ *                                     "{pageTitle} | {BUSINESS_NAME}", except that the site name
+ *                                     is not repeated when the title is blank or already equals it
+ *                                     (see \App\Support\PageTitle::compose()).
  *   string                $metaDesc   Page meta description.
  *   string                $bodyClass  Optional CSS class(es) for <body>.
  *   string                $content    Rendered inner view HTML.
@@ -26,6 +30,7 @@
  * common `'error'` type).
  *
  * @see \App\Controllers\BaseController::render()
+ * @see \App\Support\PageTitle::compose()
  */
 
 // Expose CSRF token via <meta> for Alpine.js fetch() components.
@@ -36,7 +41,12 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?></title>
+    <?php
+    // "{page title} | {site name}" for <title>, og:title and twitter:title, without
+    // repeating the site name when the page title is blank or already equals it.
+    $_seoTitle = \App\Support\PageTitle::compose((string) $pageTitle, (string) \App\Core\Config::get('BUSINESS_NAME', ''));
+    ?>
+    <title><?= htmlspecialchars($_seoTitle) ?></title>
     <meta name="description" content="<?= htmlspecialchars($metaDesc) ?>">
     <?php
     // LANG_STRIPPED_PATH is set by index.php after removing the /en/ or /es/ prefix.
@@ -53,14 +63,14 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     <!-- Open Graph -->
     <meta property="og:type"        content="website">
     <meta property="og:site_name"   content="<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
-    <meta property="og:title"       content="<?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
+    <meta property="og:title"       content="<?= htmlspecialchars($_seoTitle) ?>">
     <meta property="og:description" content="<?= htmlspecialchars($metaDesc ?: ($lang === 'es' ? 'Arreglos florales y ramos personalizados en Tulsa, OK.' : 'Custom bouquets and fresh flowers in Tulsa, OK.')) ?>">
     <meta property="og:url"         content="<?= htmlspecialchars($_seoPageUrl) ?>">
     <meta property="og:image"       content="<?= htmlspecialchars($ogImage ?? ($_seoAppUrl . '/public/assets/images/header.jpg')) ?>">
 
     <!-- Twitter Card -->
     <meta name="twitter:card"        content="summary_large_image">
-    <meta name="twitter:title"       content="<?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
+    <meta name="twitter:title"       content="<?= htmlspecialchars($_seoTitle) ?>">
     <meta name="twitter:description" content="<?= htmlspecialchars($metaDesc ?: ($lang === 'es' ? 'Arreglos florales y ramos personalizados en Tulsa, OK.' : 'Custom bouquets and fresh flowers in Tulsa, OK.')) ?>">
     <meta name="twitter:image"       content="<?= htmlspecialchars($ogImage ?? ($_seoAppUrl . '/public/assets/images/header.jpg')) ?>">
 
