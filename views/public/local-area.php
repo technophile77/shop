@@ -46,7 +46,7 @@ $fmtFee = static fn (float $f): string => '$' . (fmod($f, 1.0) === 0.0 ? number_
 <!-- schema.org structured data (Service + venue Places + FAQPage) -->
 <?php if (!empty($jsonLd)): ?>
 <script type="application/ld+json">
-<?= json_encode($jsonLd, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) ?>
+<?= json_encode($jsonLd, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_HEX_TAG) ?>
 </script>
 <?php endif; ?>
 

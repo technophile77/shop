@@ -12,7 +12,11 @@
  *   array<string,string>  $settings   All site_settings rows.
  *   Closure               $config     fn(string $key, mixed $default = null): mixed
  *   Closure               $t          fn(string $key): string
- *   string                $pageTitle  Page-specific title (falls back to BUSINESS_NAME).
+ *   string                $pageTitle  Page-specific title (falls back to BUSINESS_NAME). Shown in
+ *                                     <title>, og:title and twitter:title as
+ *                                     "{pageTitle} | {BUSINESS_NAME}", except that the site name
+ *                                     is not repeated when the title is blank or already equals it
+ *                                     (see \App\Support\PageTitle::compose()).
  *   string                $metaDesc   Page meta description.
  *   string                $bodyClass  Optional CSS class(es) for <body>.
  *   string                $content    Rendered inner view HTML.
@@ -26,6 +30,8 @@
  * common `'error'` type).
  *
  * @see \App\Controllers\BaseController::render()
+ * @see \App\Support\PageTitle::compose()
+ * @see \App\Support\FloristSchema::build() Builds the Florist JSON-LD printed in <head>.
  */
 
 // Expose CSRF token via <meta> for Alpine.js fetch() components.
@@ -36,7 +42,12 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?></title>
+    <?php
+    // "{page title} | {site name}" for <title>, og:title and twitter:title, without
+    // repeating the site name when the page title is blank or already equals it.
+    $_seoTitle = \App\Support\PageTitle::compose((string) $pageTitle, (string) \App\Core\Config::get('BUSINESS_NAME', ''));
+    ?>
+    <title><?= htmlspecialchars($_seoTitle) ?></title>
     <meta name="description" content="<?= htmlspecialchars($metaDesc) ?>">
     <?php
     // LANG_STRIPPED_PATH is set by index.php after removing the /en/ or /es/ prefix.
@@ -53,14 +64,14 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     <!-- Open Graph -->
     <meta property="og:type"        content="website">
     <meta property="og:site_name"   content="<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
-    <meta property="og:title"       content="<?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
+    <meta property="og:title"       content="<?= htmlspecialchars($_seoTitle) ?>">
     <meta property="og:description" content="<?= htmlspecialchars($metaDesc ?: ($lang === 'es' ? 'Arreglos florales y ramos personalizados en Tulsa, OK.' : 'Custom bouquets and fresh flowers in Tulsa, OK.')) ?>">
     <meta property="og:url"         content="<?= htmlspecialchars($_seoPageUrl) ?>">
     <meta property="og:image"       content="<?= htmlspecialchars($ogImage ?? ($_seoAppUrl . '/public/assets/images/header.jpg')) ?>">
 
     <!-- Twitter Card -->
     <meta name="twitter:card"        content="summary_large_image">
-    <meta name="twitter:title"       content="<?= htmlspecialchars($pageTitle) ?> | <?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', '')) ?>">
+    <meta name="twitter:title"       content="<?= htmlspecialchars($_seoTitle) ?>">
     <meta name="twitter:description" content="<?= htmlspecialchars($metaDesc ?: ($lang === 'es' ? 'Arreglos florales y ramos personalizados en Tulsa, OK.' : 'Custom bouquets and fresh flowers in Tulsa, OK.')) ?>">
     <meta name="twitter:image"       content="<?= htmlspecialchars($ogImage ?? ($_seoAppUrl . '/public/assets/images/header.jpg')) ?>">
 
@@ -199,60 +210,15 @@ $_layoutCsrfToken = (new \App\Core\Request())->csrfToken();
     </script>
     <?php endif; ?>
 
+    <?php
+    // Florist structured data. FloristSchema returns raw values and json_encode() escapes
+    // them for JSON; writing the JSON by hand with htmlspecialchars() put HTML entities in
+    // it ("Perla&#039;s Flowers"), which the browser does not decode inside a <script> block.
+    $_floristSchema = \App\Support\FloristSchema::build(\App\Core\Config::get(...), \App\Core\Settings::get(...));
+    ?>
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "Florist",
-      "name": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_NAME', ''), ENT_QUOTES) ?>",
-      "url": "<?= htmlspecialchars(\App\Core\Config::get('APP_URL', ''), ENT_QUOTES) ?>",
-      "telephone": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_PHONE', ''), ENT_QUOTES) ?>",
-      "address": {
-        "@type": "PostalAddress",
-        "streetAddress": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_STREET_ADDRESS', ''), ENT_QUOTES) ?>",
-        "addressLocality": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_CITY', 'Tulsa'), ENT_QUOTES) ?>",
-        "addressRegion": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_STATE', 'OK'), ENT_QUOTES) ?>",
-        "postalCode": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_POSTAL_CODE', ''), ENT_QUOTES) ?>",
-        "addressCountry": "US"
-      },
-      "geo": {
-        "@type": "GeoCoordinates",
-        "latitude": <?= (float) \App\Core\Config::get('BUSINESS_LAT', 36.0814) ?>,
-        "longitude": <?= (float) \App\Core\Config::get('BUSINESS_LNG', -95.9987) ?>
-      },
-      "sameAs": [
-        <?php
-        $_schemaLinks = array_values(array_filter([
-            \App\Core\Config::get('FACEBOOK_URL'),
-            \App\Core\Config::get('INSTAGRAM_URL',
-                'https://www.instagram.com/' . \App\Core\Config::get('INSTAGRAM_HANDLE', '')),
-        ]));
-        echo implode(",\n        ", array_map(
-            fn($u) => '"' . htmlspecialchars((string) $u, ENT_QUOTES) . '"',
-            $_schemaLinks
-        ));
-        ?>
-      ],
-      "priceRange": "<?= htmlspecialchars(\App\Core\Config::get('BUSINESS_PRICE_RANGE', '$$'), ENT_QUOTES) ?>"
-      <?php
-      // Emit openingHoursSpecification only when at least one day is configured.
-      $_days = ['Mo','Tu','We','Th','Fr','Sa','Su'];
-      $_dayNames = ['mon','tue','wed','thu','fri','sat','sun'];
-      $_hoursEntries = [];
-      foreach ($_days as $_i => $_dayCode):
-          $_opens  = \App\Core\Settings::get('business_hours_' . $_dayNames[$_i] . '_open');
-          $_closes = \App\Core\Settings::get('business_hours_' . $_dayNames[$_i] . '_close');
-          if ($_opens && $_closes):
-              $_hoursEntries[] = '{"@type":"OpeningHoursSpecification","dayOfWeek":"https://schema.org/' . $_dayCode . '","opens":"' . htmlspecialchars($_opens, ENT_QUOTES) . '","closes":"' . htmlspecialchars($_closes, ENT_QUOTES) . '"}';
-          endif;
-      endforeach;
-      if (!empty($_hoursEntries)):
-      ?>,
-      "openingHoursSpecification": [
-        <?= implode(",\n        ", $_hoursEntries) ?>
+<?= json_encode($_floristSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_HEX_TAG) ?>
 
-      ]
-      <?php endif; ?>
-    }
     </script>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">

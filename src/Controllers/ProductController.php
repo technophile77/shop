@@ -130,6 +130,10 @@ final class ProductController extends BaseController
      * not match any active category. Loads all active categories (for the
      * filter bar tabs) and only the products belonging to the matched category.
      *
+     * The page title is the category name in the active language, passed as raw
+     * (unescaped) text: the layout escapes it and appends the site name, so
+     * /en/products/events is titled "Events & Arrangements | Perla's Flowers".
+     *
      * @param Request $request The current HTTP request.
      * @param array   $params  Route parameters; expects $params['slug'].
      *
@@ -152,9 +156,10 @@ final class ProductController extends BaseController
         $categories = ProductCategory::allActive();
         $products   = Product::byCategory((int) $category['id']);
 
+        // Raw text on purpose: the public layout HTML-escapes pageTitle itself (and
+        // appends the site name), and json_encode escapes the JSON-LD name.
         $categoryName = $category['name_' . $lang] ?? $category['name_en'];
-        $siteTitle    = Settings::get('shop_name', "Perla's Flowers");
-        $pageTitle    = htmlspecialchars($categoryName) . ' — ' . htmlspecialchars($siteTitle);
+        $pageTitle    = $categoryName;
 
         $metaDesc = Settings::get('products_meta_desc_' . $lang)
             ?? Settings::get('products_meta_desc_en')

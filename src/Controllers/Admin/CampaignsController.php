@@ -245,7 +245,8 @@ final class CampaignsController extends BaseController
      * When fb_ad_id is set, fetches fresh insights from the Facebook API and
      * updates the database before rendering. If this campaign is part of an
      * A/B pair, the partner campaign is loaded and passed for side-by-side
-     * comparison.
+     * comparison. The campaign name is the page title, passed as raw
+     * (unescaped) text because the admin layout escapes it.
      *
      * @param Request              $request HTTP request.
      * @param array<string,string> $params  Route parameters; expects 'id'.
@@ -321,7 +322,8 @@ final class CampaignsController extends BaseController
                 'cpm'        => $cpm,
                 'isWinner'   => $isWinner,
                 'csrfToken'  => $csrfToken,
-                'pageTitle'  => htmlspecialchars($campaign['name'] ?? 'Campaign'),
+                // Raw text on purpose: the admin layout HTML-escapes pageTitle itself.
+                'pageTitle'  => $campaign['name'] ?? 'Campaign',
             ], 'admin')
         );
     }

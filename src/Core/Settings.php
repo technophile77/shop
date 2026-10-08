@@ -14,6 +14,11 @@ namespace App\Core;
  * remainder of the request to avoid repeated database round-trips. Call
  * {@see reload()} after a batch update to refresh the cache.
  *
+ * A row whose value is blank (empty, whitespace-only, or NULL) is treated by
+ * {@see get()} exactly like a missing row, so clearing a field in the admin UI
+ * hands control back to the caller's fallback instead of shadowing it with an
+ * empty string. {@see all()} is unaffected and returns the stored rows as-is.
+ *
  * Expected table schema:
  * ```sql
  * CREATE TABLE site_settings (
@@ -52,23 +57,49 @@ final class Settings
     private function __construct() {}
 
     /**
-     * Return the value of a setting, or $default when the key is absent.
+     * Return the value of a setting, or $default when it is absent or blank.
      *
      * Triggers a lazy load of all settings on the first call.
      *
-     * @param string $key     The setting key, e.g. 'shop_name'.
-     * @param mixed  $default Returned when the key has no row in the database.
+     * A stored value is blank when it is the empty string, consists only of
+     * whitespace (as PHP's trim() defines it: spaces, tabs, newlines, carriage
+     * returns, NUL and vertical tabs), or is NULL (migration 001 declares the
+     * column nullable). Blank values never shadow the caller's fallback,
+     * because an owner who empties a field in the admin UI means "use the
+     * default", not "show nothing". Any other value is returned exactly as
+     * stored, without trimming. The string '0' is a real value, not a blank
+     * one: checkbox settings store '0' / '1'.
      *
-     * @return mixed The stored string value, or $default.
+     * @param string $key     The setting key, e.g. 'shop_name'.
+     * @param mixed  $default Returned when the key has no row, or its stored
+     *                        value is blank. Returned as-is, so it may be any
+     *                        type; null when omitted.
+     *
+     * @return mixed The stored string value, untouched, or $default when the
+     *               setting is absent or blank.
      *
      * @example
-     *   $name = Settings::get('shop_name', "Perla's Flowers");
+     *   // 'shop_name' holds "Rosa's Blooms".
+     *   $name = Settings::get('shop_name', "Perla's Flowers"); // "Rosa's Blooms"
+     *
+     * @example
+     *   // The owner cleared 'about_text_en', leaving an empty row behind. The
+     *   // caller's fallback is used instead of rendering nothing.
+     *   $about = Settings::get('about_text_en', Config::get('BUSINESS_ABOUT_EN', ''));
+     *
+     * @see all() Returns the stored rows as they are, blank values included.
      */
     public static function get(string $key, mixed $default = null): mixed
     {
         self::loadIfNeeded();
 
-        return self::$cache[$key] ?? $default;
+        $value = self::$cache[$key] ?? null;
+
+        if ($value === null || trim($value) === '') {
+            return $default;
+        }
+
+        return $value;
     }
 
     /**

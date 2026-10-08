@@ -27,6 +27,13 @@
  */
 $val = static fn (string $key): string =>
     htmlspecialchars($settings[$key] ?? '');
+
+/**
+ * Business name from .env, trimmed as App\Support\PageTitle::compose() trims it.
+ * The public layout appends it to every page title, which the Home Page hint
+ * below tells the owner; '' when BUSINESS_NAME is not configured.
+ */
+$businessName = trim((string) \App\Core\Config::get('BUSINESS_NAME', ''));
 ?>
 
 <form method="POST" action="/admin/settings">
@@ -198,12 +205,32 @@ $val = static fn (string $key): string =>
     </div>
 
     <!-- ================================================================
-         5. BUSINESS — page titles + VIP threshold
+         5. BUSINESS — page titles, meta descriptions + VIP threshold
          ================================================================ -->
     <div class="admin-card" style="margin-bottom:1.5rem">
         <div class="admin-card-header">
             <p class="admin-card-title">Business</p>
         </div>
+
+        <!-- Home page -->
+        <p style="font-size:0.75rem; font-family:'Montserrat',sans-serif; text-transform:uppercase; letter-spacing:0.06em; color:#aaa; margin-bottom:0.75rem">Home Page</p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem">
+            <div class="admin-form-group" style="margin-bottom:0">
+                <label for="home_page_title_en">Page Title (English)</label>
+                <input type="text" id="home_page_title_en" name="home_page_title_en"
+                       value="<?= $val('home_page_title_en') ?>"
+                       placeholder="Local Florist &amp; Flower Delivery in Tulsa, OK">
+            </div>
+            <div class="admin-form-group" style="margin-bottom:0">
+                <label for="home_page_title_es">Page Title (Spanish)</label>
+                <input type="text" id="home_page_title_es" name="home_page_title_es"
+                       value="<?= $val('home_page_title_es') ?>"
+                       placeholder="Florista Local y Entrega de Flores en Tulsa, OK">
+            </div>
+        </div>
+        <p style="font-size:0.78rem; color:#999; margin-top:0.35rem; margin-bottom:1.25rem">
+            Shown in the browser tab and in search results.<?php if ($businessName !== ''): ?> &ldquo; | <?= htmlspecialchars($businessName) ?>&rdquo; is added automatically.<?php endif; ?>
+        </p>
 
         <!-- Products page -->
         <p style="font-size:0.75rem; font-family:'Montserrat',sans-serif; text-transform:uppercase; letter-spacing:0.06em; color:#aaa; margin-bottom:0.75rem">Products Page</p>
@@ -221,6 +248,21 @@ $val = static fn (string $key): string =>
                        placeholder="Nuestras Flores">
             </div>
         </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem">
+            <div class="admin-form-group" style="margin-bottom:0">
+                <label for="products_meta_desc_en">Meta Description (English)</label>
+                <textarea id="products_meta_desc_en" name="products_meta_desc_en" rows="3"
+                          placeholder="Describe your flower gallery in one or two sentences…"><?= $val('products_meta_desc_en') ?></textarea>
+            </div>
+            <div class="admin-form-group" style="margin-bottom:0">
+                <label for="products_meta_desc_es">Meta Description (Spanish)</label>
+                <textarea id="products_meta_desc_es" name="products_meta_desc_es" rows="3"
+                          placeholder="Describa su galería de flores en una o dos frases…"><?= $val('products_meta_desc_es') ?></textarea>
+            </div>
+        </div>
+        <p style="font-size:0.78rem; color:#999; margin-top:0.35rem; margin-bottom:1.25rem">
+            Shown under the page title in search results. Aim for roughly 150&ndash;160 characters.
+        </p>
 
         <!-- Order page -->
         <p style="font-size:0.75rem; font-family:'Montserrat',sans-serif; text-transform:uppercase; letter-spacing:0.06em; color:#aaa; margin-bottom:0.75rem">Order Page</p>
@@ -255,6 +297,21 @@ $val = static fn (string $key): string =>
                        placeholder="Sobre Nosotros">
             </div>
         </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem">
+            <div class="admin-form-group" style="margin-bottom:0">
+                <label for="about_meta_desc_en">Meta Description (English)</label>
+                <textarea id="about_meta_desc_en" name="about_meta_desc_en" rows="3"
+                          placeholder="Describe your story in one or two sentences…"><?= $val('about_meta_desc_en') ?></textarea>
+            </div>
+            <div class="admin-form-group" style="margin-bottom:0">
+                <label for="about_meta_desc_es">Meta Description (Spanish)</label>
+                <textarea id="about_meta_desc_es" name="about_meta_desc_es" rows="3"
+                          placeholder="Describa su historia en una o dos frases…"><?= $val('about_meta_desc_es') ?></textarea>
+            </div>
+        </div>
+        <p style="font-size:0.78rem; color:#999; margin-top:0.35rem; margin-bottom:1.25rem">
+            Shown under the page title in search results. Aim for roughly 150&ndash;160 characters.
+        </p>
 
         <!-- Contact page -->
         <p style="font-size:0.75rem; font-family:'Montserrat',sans-serif; text-transform:uppercase; letter-spacing:0.06em; color:#aaa; margin-bottom:0.75rem">Contact Page</p>
